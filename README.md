@@ -1,6 +1,8 @@
 # ☁️ Cloud Shakes – Open Source Cloud Management Platform
 
 Cloud Shakes is a modern, scalable solution for file storage, management, and sharing, designed to offer a seamless, secure, and highly customizable experience.
+![Cloud-Shakes Logo](assets/cloudshakes.png)
+
 
 🌐 **Website:** [shakes.es](https://shakes.es)  
 📚 **Documentation:** [docs.shakes.es](https://docs.shakes.es)
