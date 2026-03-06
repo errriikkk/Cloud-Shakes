@@ -94,7 +94,6 @@ npm run dev
 cloud-shakes/
 ├── frontend/          # Next.js Application
 ├── backend/           # Express REST API
-├── Aplicaciones/      # Desktop Applications
 └── assets/           # Images and resources
 ```
 
