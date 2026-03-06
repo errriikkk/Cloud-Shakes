@@ -1,0 +1,167 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(uuid())
+  username     String   @unique
+  password     String
+  displayName  String   @default("User")
+  avatar       String?  // URL or file ID for profile picture
+  isAdmin      Boolean  @default(false)
+  storageLimit BigInt   @default(53687091200) // 50 GB in bytes
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  files        File[]
+  folders      Folder[]
+  links        Link[]
+  documents    Document[]
+  notes        Note[]
+  calendarEvents CalendarEvent[]
+  apiFlows     ApiFlow[]
+  activities   Activity[]
+}
+
+model Folder {
+  id        String   @id @default(uuid())
+  name      String
+  ownerId   String
+  owner     User     @relation(fields: [ownerId], references: [id])
+  parentId  String?
+  parent    Folder?  @relation("SubFolders", fields: [parentId], references: [id], onDelete: Cascade)
+  children  Folder[] @relation("SubFolders")
+  links     Link[]
+  files     File[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model File {
+  id           String   @id @default(uuid())
+  originalName String
+  storedName   String   @unique // Name in MinIO
+  mimeType     String
+  size         BigInt
+  ownerId      String
+  owner        User     @relation(fields: [ownerId], references: [id])
+  folderId     String?
+  folder       Folder?  @relation(fields: [folderId], references: [id], onDelete: Cascade)
+  hideFromRecent Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  links        Link[]
+}
+
+model Link {
+  id           String    @id @default(nanoid(10)) // Short code
+  fileId       String?
+  file         File?     @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  folderId     String?
+  folder       Folder?   @relation(fields: [folderId], references: [id], onDelete: Cascade)
+  documentId   String?
+  document     Document? @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  type         String    @default("file") // "file", "folder", or "document"
+  password     String? // Optional hashed password
+  expiresAt    DateTime?
+  directDownload Boolean   @default(false)
+  isEmbed        Boolean   @default(false)
+  customSlug   String?   @unique // Custom URL slug
+  views        Int       @default(0)
+  createdAt    DateTime  @default(now())
+  creatorId    String
+  creator      User      @relation(fields: [creatorId], references: [id])
+}
+
+// ── Phase 2: Documents ───────────────────────────────────────────────
+model Document {
+  id        String   @id @default(uuid())
+  title     String   @default("Sin título")
+  content   Json     @default("{}") // Rich text content (JSON)
+  ownerId   String
+  owner     User     @relation(fields: [ownerId], references: [id])
+  folderId  String?  // Optional: organize docs in folders
+  links     Link[]   // Links that share this document
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([ownerId])
+}
+
+// ── Phase 3: Notes ───────────────────────────────────────────────────
+model Note {
+  id        String   @id @default(uuid())
+  title     String   @default("")
+  content   String   @default("")
+  color     String   @default("default") // default, blue, green, yellow, red, purple
+  pinned    Boolean  @default(false)
+  ownerId   String
+  owner     User     @relation(fields: [ownerId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([ownerId])
+}
+
+// ── Phase 4: Calendar ────────────────────────────────────────────────
+model CalendarEvent {
+  id             String    @id @default(uuid())
+  title          String
+  description    String?
+  startDate      DateTime
+  endDate        DateTime?
+  allDay         Boolean   @default(false)
+  pinned         Boolean   @default(false)
+  color          String    @default("primary") // primary, blue, green, yellow, red, purple
+  reminderMinutes Int?     // Minutes before event to show reminder (null = no reminder)
+  reminderSent   Boolean   @default(false) // Track if reminder was sent
+  ownerId        String
+  owner          User      @relation(fields: [ownerId], references: [id])
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([ownerId, startDate])
+  @@index([startDate, reminderSent])
+}
+
+// ── Phase 5: API Flows ────────────────────────────────────────────────
+model ApiFlow {
+  id            String   @id @default(uuid())
+  name          String
+  description   String   @default("")
+  blocks        Json     @default("[]") // Array of ApiBlock objects
+  endpoint      String?
+  method        String?  @default("GET") // GET, POST, PUT, DELETE
+  deployed      Boolean  @default(false)
+  apiKey        String?  @unique
+  apiUrl        String?
+  policies      Json     @default("{}") // ApiPolicy object
+  selectedFiles Json     @default("[]") // Array of file IDs
+  ownerId       String
+  owner         User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([ownerId])
+  @@index([apiKey])
+}
+
+// ── Activity Log (Nextcloud-like feature) ────────────────────────────────
+model Activity {
+  id          String   @id @default(uuid())
+  type        String   // 'file_upload', 'file_delete', 'file_download', 'folder_create', 'folder_delete', 'link_create', 'document_create', 'note_create', etc.
+  action      String   // Human-readable action description
+  resourceId  String?  // ID of the resource (file, folder, etc.)
+  resourceType String? // 'file', 'folder', 'document', 'note', 'link', etc.
+  resourceName String? // Name of the resource
+  ownerId     String
+  owner       User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  metadata    Json?   // Additional metadata (JSON)
+  createdAt   DateTime @default(now())
+
+  @@index([ownerId, createdAt])
+  @@index([createdAt])
+}
