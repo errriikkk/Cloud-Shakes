@@ -1,67 +1,67 @@
-# ☁️ Cloud Shakes – Plataforma de Gestión en la Nube Open Source
+# ☁️ Cloud Shakes – Open Source Cloud Management Platform
 
-Cloud Shakes es una solución moderna y escalable para almacenamiento, gestión y compartición de archivos, diseñada para ofrecer una experiencia fluida, segura y altamente personalizable.
+Cloud Shakes is a modern, scalable solution for file storage, management, and sharing, designed to offer a seamless, secure, and highly customizable experience.
 
-🌐 **Sitio Web:** [shakes.es](https://shakes.es)  
-📚 **Documentación:** [docs.shakes.es](https://docs.shakes.es)
+🌐 **Website:** [shakes.es](https://shakes.es)  
+📚 **Documentation:** [docs.shakes.es](https://docs.shakes.es)
 
-##  Características
+## Features
 
-- **Almacenamiento en la nube** con interfaz intuitiva
-- **Gestión de archivos y carpetas** con drag & drop
-- **Vista previa de archivos** integrada
-- **Sistema de enlaces compartidos** seguro
-- **Interfaz responsive** para todos los dispositivos
-- **Subida progresiva** con indicadores visuales
-- **Búsqueda avanzada** de archivos
-- **Gestión de documentos** y notas
-- **Calendario integrado**
-- **Estadísticas de uso**
-- **Seguridad mejorada** con validación y auditoría
+- **Cloud Storage** with an intuitive interface
+- **File & Folder Management** with drag & drop support
+- **Integrated File Preview**
+- **Secure Shared Links** system
+- **Responsive Interface** for all devices
+- **Progressive Uploads** with visual indicators
+- **Advanced Search** functionality
+- **Document & Note Management**
+- **Integrated Calendar**
+- **Usage Statistics**
+- **Enhanced Security** with validation and auditing
 
-## Stack Tecnológico
+## 🛠️ Tech Stack
 
 ### Frontend
-- **Next.js 15** con App Router
-- **TypeScript** para tipado seguro
-- **Tailwind CSS** para estilos modernos
-- **Framer Motion** para animaciones fluidas
-- **Lucide React** para iconos
-- **Axios** para peticiones HTTP
+- **Next.js 15** with App Router
+- **TypeScript** for type safety
+- **Tailwind CSS** for modern styling
+- **Framer Motion** for fluid animations
+- **Lucide React** for icons
+- **Axios** for HTTP requests
 
 ### Backend
-- **Node.js** con Express 4
+- **Node.js** with Express 4
 - **TypeScript**
-- **Prisma** como ORM
-- **PostgreSQL** como base de datos
-- **JWT** para autenticación
-- **Multer** para manejo de archivos
-- **Helmet** para seguridad
-- **Rate Limiting** para protección
+- **Prisma** as the ORM
+- **PostgreSQL** as the database
+- **JWT** for authentication
+- **Multer** for file handling
+- **Helmet** for security headers
+- **Rate Limiting** for protection
 
-## 📦 Instalación
+## 📦 Installation
 
-### Prerrequisitos
+### Prerequisites
 - Node.js 18+
 - PostgreSQL 13+
-- npm o yarn
+- npm or yarn
 
-### Configuración del Backend
+### Backend Setup
 
-1. Clona el repositorio:
+1. Clone the repository:
 ```bash
-git clone https://github.com/CloudShakes/cloud-shakes.git
-cd cloud-shakes
+git clone https://github.com/errriikkk/Cloud-Shakes.git
+cd Cloud-Shakes
 ```
 
-2. Configura las variables de entorno:
+2. Configure environment variables:
 ```bash
 cd backend
 cp .env.example .env
-# Edita .env con tus credenciales
+# Edit .env with your credentials
 ```
 
-3. Instala dependencias y ejecuta migraciones:
+3. Install dependencies and run migrations:
 ```bash
 npm install
 npm run db:generate
@@ -69,199 +69,97 @@ npm run db:migrate
 npm run dev
 ```
 
-### Configuración del Frontend
+### Frontend Setup
 
-1. En una nueva terminal:
+1. In a new terminal:
 ```bash
 cd frontend
 cp .env.example .env.local
-# Edita .env.local con la URL del backend
+# Edit .env.local with the backend URL
 ```
 
-2. Instala dependencias y ejecuta:
+2. Install dependencies and start the app:
 ```bash
 npm install
 npm run dev
 ```
 
-## �️ Estructura del Proyecto
+## 📂 Project Structure
 
 ```
 cloud-shakes/
-├── frontend/          # Aplicación Next.js
-│   ├── src/
-│   │   ├── app/      # Páginas y layouts
-│   │   ├── components/ # Componentes reutilizables
-│   │   ├── context/   # Contextos de React
-│   │   ├── hooks/     # Hooks personalizados
-│   │   └── lib/       # Utilidades y configuración
-│   └── public/       # Archivos estáticos
-├── backend/           # API REST con Express
-│   ├── src/
-│   │   ├── routes/    # Endpoints de la API
-│   │   ├── middleware/ # Middleware de autenticación y seguridad
-│   │   ├── utils/     # Utilidades del servidor
-│   │   ├── types/     # Tipos TypeScript
-│   │   └── config/    # Configuración de la base de datos
-│   └── prisma/        # Schema y migraciones
-├── Aplicaciones/      # Aplicaciones de escritorio
-│   ├── cloud-talks-desktop/
-│   └── desktop-sync/
-└── assets/           # Imágenes y recursos
+├── frontend/          # Next.js Application
+├── backend/           # Express REST API
+├── Aplicaciones/      # Desktop Applications
+└── assets/           # Images and resources
 ```
 
-## � Variables de Entorno
+## ⚙️ Environment Variables
 
 ### Backend (.env)
-```env
-# Base de datos
-DATABASE_URL="postgresql://usuario:password@localhost:5432/cloud_shakes"
-
-# JWT
-JWT_SECRET="tu-secreto-jwt-muy-seguro"
-JWT_EXPIRES_IN="7d"
-
-# Archivos
-UPLOAD_DIR="./uploads"
-MAX_FILE_SIZE="100MB"
-
-# Servidor
-PORT=5000
-NODE_ENV="production"
-
-# CORS
-ALLOWED_ORIGINS="https://yourdomain.com,https://app.yourdomain.com"
-
-# Seguridad
-BCRYPT_ROUNDS="12"
-CSRF_SECRET="tu-secreto-csrf"
-```
+- `DATABASE_URL`: PostgreSQL connection string.
+- `JWT_SECRET`: Secret key for JWT signing.
+- `UPLOAD_DIR`: Directory for file storage.
+- `ALLOWED_ORIGINS`: CORS configuration.
 
 ### Frontend (.env.local)
-```env
-NEXT_PUBLIC_API_URL="https://api.yourdomain.com"
-NEXT_PUBLIC_APP_NAME="Cloud Shakes"
-```
+- `NEXT_PUBLIC_API_URL`: Backend API endpoint.
 
-## � API Endpoints
+## 🔒 Security
 
-### Autenticación
-- `POST /api/auth/register` - Registro de usuarios
-- `POST /api/auth/login` - Inicio de sesión
-- `POST /api/auth/logout` - Cierre de sesión
+Implemented security features:
+- **Input Validation** with Zod
+- **Rate Limiting** on critical endpoints
+- **Strict CORS** configuration
+- **CSP with Helmet**
+- **Filename Sanitization**
+- **File Type Validation**
+- **Audit Logs** for administrative actions
+- **CSRF Protection**
 
-### Archivos
-- `GET /api/files` - Listar archivos
-- `POST /api/files` - Subir archivo
-- `GET /api/files/:id/download` - Descargar archivo
-- `DELETE /api/files/:id` - Eliminar archivo
-- `PATCH /api/files/:id/move` - Mover archivo
-
-### Carpetas
-- `GET /api/folders` - Listar carpetas
-- `POST /api/folders` - Crear carpeta
-- `DELETE /api/folders/:id` - Eliminar carpeta
-
-## 🔒 Seguridad
-
-### Características de Seguridad Implementadas
-- **Validación de entrada** con Zod
-- **Rate limiting** en endpoints críticos
-- **CORS configurado** correctamente
-- **CSP con Helmet**
-- **Sanitización de nombres de archivo**
-- **Validación de tipos de archivo**
-- **Auditoría de acciones de administrador**
-- **Protección CSRF**
-- **Headers de seguridad**
-
-### Buenas Prácticas
-- Sin contraseñas en código
-- Variables de entorno configuradas
-- Dependencias actualizadas
-- Logs de auditoría
-- Validación estricta de tipos
-
-## Personalización
-
-La aplicación utiliza Tailwind CSS con un diseño personalizado. Puedes modificar:
-
-- **Colores**: Edita `tailwind.config.js`
-- **Componentes**: Modifica los archivos en `frontend/src/components/`
-- **Layout**: Ajusta `frontend/src/app/layout.tsx`
-
-## Despliegue
+## 🚀 Deployment
 
 ### Docker
 ```bash
 docker-compose up -d
 ```
 
-### Producción
+### Production
+Build and start the services manually:
 ```bash
 # Backend
-cd backend
-npm run build
-npm start
+cd backend && npm run build && npm start
 
 # Frontend
-cd frontend
-npm run build
-npm start
+cd frontend && npm run build && npm start
 ```
 
-## 🤝 Contribuir
+## 🤝 Contributing
 
-¡Las contribuciones son bienvenidas! Por favor:
+Contributions are welcome!
+1. Fork the project
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
-1. Fork el proyecto
-2. Crea una rama (`git checkout -b feature/nueva-funcionalidad`)
-3. Commit tus cambios (`git commit -am 'Añadir nueva funcionalidad'`)
-4. Push a la rama (`git push origin feature/nueva-funcionalidad`)
-5. Abre un Pull Request
+## 📄 License
 
-### Guía de Estilo
-- Usa TypeScript para todo el código nuevo
-- Sigue las convenciones de ESLint
-- Añade tests para nuevas funcionalidades
-- Documenta los cambios relevantes
+This project is licensed under the MIT License with commercial restrictions. See the [LICENSE](LICENSE) file for details.
 
-## 📄 Licencia
+### Important Restrictions
+- ✅ Personal and internal organizational use.
+- ❌ Reselling or redistributing as a standalone product.
+- ✅ Modifying for internal use.
+- ❌ Removing copyright notices.
 
-Este proyecto está bajo la Licencia MIT con restricciones comerciales. Ver el archivo [LICENSE](LICENSE) para más detalles.
+## 💖 Acknowledgments
 
-### Restricciones Importantes
-- ✅ Uso personal y comercial dentro de tu organización
-- ❌ Revender o redistribuir como producto independiente
-- ✅ Modificar para uso interno
-- ❌ Eliminar avisos de copyright o licencia
-
-## � Agradecimientos
-
-- Next.js团队 por el excelente framework
-- Tailwind CSS por las utilidades de diseño
-- Prisma por el ORM moderno
-- Lucide por los hermosos iconos
-
-## � Soporte
-
-Si tienes algún problema o sugerencia:
-
-- Abre un [Issue](https://github.com/CloudShakes/cloud-shakes/issues)
-- Contacta a través de [discussions](https://github.com/CloudShakes/cloud-shakes/discussions)
-
-## 🔍 Auditoría de Seguridad
-
-Este proyecto incluye:
-- Validación de entrada con Zod
-- Rate limiting configurable
-- Auditoría de acciones administrativas
-- Sanitización de archivos
-- Headers de seguridad con Helmet
-- Protección contra XSS y CSRF
-
-Para reportes de seguridad, contacta: security@yourdomain.com
+- Next.js team
+- Tailwind CSS team
+- Prisma team
+- Lucide icons
 
 ---
 
-**Hecho con ❤️ por la comunidad de código abierto** ❤️
+**Made with ❤️ by the open-source community**
