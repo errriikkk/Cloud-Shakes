@@ -10,7 +10,7 @@ Cloud Shakes is a modern, scalable solution for file storage, management, and sh
 
 📚 **Documentation:** [docs.shakes.es](https://docs.shakes.es)
 
-📹 **Video:** [youtube.es](https://youtu.be/q5rOE5Qmwqs?si=JSmPzq3ONtJ1DZ9t)
+📹 **Video:** [Presentation](https://youtu.be/q5rOE5Qmwqs?si=JSmPzq3ONtJ1DZ9t)
 
 ## Features
 
