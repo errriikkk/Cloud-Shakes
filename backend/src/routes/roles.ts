@@ -44,39 +44,53 @@ router.get('/', protect, requirePermission('manage_roles'), async (req: AuthRequ
 router.post('/', protect, requirePermission('manage_roles'), async (req: AuthRequest, res, next) => {
     try {
         const data = roleSchema.parse(req.body);
+        const permissionKeys = data.permissions || [];
 
-        const permissions = await (prisma as any).permission.findMany({
-            where: {
-                key: { in: data.permissions || [] },
-            },
-        });
-
-        const role = await (prisma as any).role.create({
-            data: {
-                name: data.name,
-                description: data.description,
-                isSystem: data.isSystem ?? false,
-                permissions: permissions
-                    ? {
-                          create: permissions.map((p: any) => ({
-                              permissionId: p.id,
-                          })),
-                      }
-                    : undefined,
-            },
-            include: {
-                permissions: {
-                    include: { permission: true },
+        const created = await prisma.$transaction(async (tx: any) => {
+            // 1. Create role
+            const role = await tx.role.create({
+                data: {
+                    name: data.name,
+                    description: data.description,
+                    isSystem: data.isSystem ?? false,
                 },
-            },
+            });
+
+            // 2. Ensure Permission rows exist for all keys and link them
+            if (permissionKeys.length > 0) {
+                const permissionRecords: any[] = [];
+                for (const key of permissionKeys) {
+                    const perm = await tx.permission.upsert({
+                        where: { key },
+                        update: {},
+                        create: { key },
+                    });
+                    permissionRecords.push(perm);
+                }
+
+                await tx.rolePermission.createMany({
+                    data: permissionRecords.map((p: any) => ({
+                        roleId: role.id,
+                        permissionId: p.id,
+                    })),
+                });
+            }
+
+            // 3. Return role with permissions
+            return tx.role.findUnique({
+                where: { id: role.id },
+                include: {
+                    permissions: { include: { permission: true } },
+                },
+            });
         });
 
         res.status(201).json({
-            id: role.id,
-            name: role.name,
-            description: role.description,
-            isSystem: role.isSystem,
-            permissions: role.permissions.map((rp: any) => rp.permission.key),
+            id: created.id,
+            name: created.name,
+            description: created.description,
+            isSystem: created.isSystem,
+            permissions: created.permissions.map((rp: any) => rp.permission.key),
         });
     } catch (err) {
         if (err instanceof z.ZodError) {
@@ -105,15 +119,10 @@ router.patch('/:id', protect, requirePermission('manage_roles'), async (req: Aut
             return res.status(400).json({ message: 'Cannot change system flag of system role' });
         }
 
-        const permissions = data.permissions
-            ? await (prisma as any).permission.findMany({
-                  where: { key: { in: data.permissions } },
-              })
-            : null;
-
+        const permissionKeys = data.permissions ?? null;
         let updated;
 
-        if (permissions !== null) {
+        if (permissionKeys !== null) {
             // Update role and replace all permissions using a transaction
             updated = await prisma.$transaction(async (tx: any) => {
                 // 1. Update basic role info
@@ -130,10 +139,20 @@ router.patch('/:id', protect, requirePermission('manage_roles'), async (req: Aut
                     where: { roleId: id },
                 });
 
-                // 3. Create new permissions
-                if (permissions.length > 0) {
+                // 3. Ensure Permission rows and recreate links
+                if (permissionKeys.length > 0) {
+                    const permissionRecords: any[] = [];
+                    for (const key of permissionKeys) {
+                        const perm = await tx.permission.upsert({
+                            where: { key },
+                            update: {},
+                            create: { key },
+                        });
+                        permissionRecords.push(perm);
+                    }
+
                     await tx.rolePermission.createMany({
-                        data: permissions.map((p: any) => ({
+                        data: permissionRecords.map((p: any) => ({
                             roleId: id,
                             permissionId: p.id,
                         })),
