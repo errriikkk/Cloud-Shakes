@@ -23,8 +23,8 @@ const updateNoteSchema = z.object({
 // @access  Private
 router.get('/', protect, async (req: AuthRequest, res, next) => {
     try {
+        // Shared within instance: list all notes
         const notes = await prisma.note.findMany({
-            where: { ownerId: req.user.id },
             orderBy: [
                 { pinned: 'desc' },
                 { updatedAt: 'desc' },

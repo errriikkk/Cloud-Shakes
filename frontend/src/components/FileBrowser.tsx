@@ -6,7 +6,7 @@ import axios from "axios";
 import {
     File as FileIcon, Trash2, Link as LinkIcon, FileText,
     Image as ImageIcon, Video, Music, Download, Copy,
-    CheckCircle, Search
+    CheckCircle, Search, Clock
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
@@ -36,6 +36,16 @@ interface FileItem {
     mimeType: string;
     createdAt: string;
     folderId?: string;
+}
+
+interface ActivityItem {
+    id: string;
+    type: string;
+    action: string;
+    resourceId: string | null;
+    resourceType: string | null;
+    resourceName: string | null;
+    createdAt: string;
 }
 
 interface FolderItem {
@@ -92,6 +102,8 @@ export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserPro
     const [globalDragActive, setGlobalDragActive] = useState(false);
     const [selectedItems, setSelectedItems] = useState<{ id: string, type: 'file' | 'folder' }[]>([]);
     const [mounted, setMounted] = useState(false);
+    const [activities, setActivities] = useState<Record<string, ActivityItem[]>>({});
+    const [hoverActivityId, setHoverActivityId] = useState<string | null>(null);
 
     // Limpiar el estado de drag cuando se abre/cierra el modal de subida
     useEffect(() => {
@@ -132,6 +144,26 @@ export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserPro
             ]);
             setFiles(filesRes.data);
             setFolders(foldersRes.data);
+            // After files load, fetch activities for these resources
+            const ids = filesRes.data.map((f: any) => f.id);
+            if (ids.length > 0) {
+                try {
+                    const actRes = await axios.get(`${API}/api/activity`, {
+                        params: { limit: 200 },
+                        withCredentials: true
+                    });
+                    const byResource: Record<string, ActivityItem[]> = {};
+                    (actRes.data as ActivityItem[]).forEach((a) => {
+                        if (a.resourceId) {
+                            if (!byResource[a.resourceId]) byResource[a.resourceId] = [];
+                            byResource[a.resourceId].push(a);
+                        }
+                    });
+                    setActivities(byResource);
+                } catch (e) {
+                    // ignore activity errors
+                }
+            }
         } catch (err) {
             console.error(err);
         } finally {
@@ -850,7 +882,33 @@ export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserPro
                                             )}
                                             <span className="text-sm text-foreground truncate font-semibold">{file.originalName}</span>
                                         </div>
-                                        <span className="hidden sm:block text-[11px] text-muted-foreground font-bold uppercase tracking-wider">{formatSize(file.size)}</span>
+                                        <span className="hidden sm:flex items-center gap-2 text-[11px] text-muted-foreground font-bold uppercase tracking-wider">
+                                            {formatSize(file.size)}
+                                            {activities[file.id]?.length ? (
+                                                <div
+                                                    className="relative inline-flex items-center"
+                                                    onMouseEnter={() => setHoverActivityId(file.id)}
+                                                    onMouseLeave={() => setHoverActivityId((prev) => (prev === file.id ? null : prev))}
+                                                >
+                                                    <Clock className="w-3.5 h-3.5 text-muted-foreground/70" />
+                                                    {hoverActivityId === file.id && (
+                                                        <div className="absolute left-0 top-5 z-30 w-64 rounded-lg bg-background border border-border/60 shadow-xl p-3 text-[11px] text-foreground">
+                                                            <div className="font-semibold mb-1">Actividad reciente</div>
+                                                            <div className="space-y-1 max-h-40 overflow-y-auto">
+                                                                {activities[file.id]!.slice(0, 5).map((a) => (
+                                                                    <div key={a.id} className="flex flex-col">
+                                                                        <span className="font-medium">{a.action}</span>
+                                                                        <span className="text-[10px] text-muted-foreground">
+                                                                            {new Date(a.createdAt).toLocaleString()}
+                                                                        </span>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            ) : null}
+                                        </span>
                                         <span className="hidden lg:block text-[11px] text-muted-foreground font-medium uppercase tracking-tight">{new Date(file.createdAt).toLocaleDateString()}</span>
                                         <div className="flex items-center justify-end gap-0.5 sm:gap-1.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                                             <button onClick={(e) => { e.stopPropagation(); handleDownload(file.id); }} className="p-2 sm:p-2.5 glass-subtle rounded-xl text-foreground hover:bg-muted transition-all shrink-0" title="Download">

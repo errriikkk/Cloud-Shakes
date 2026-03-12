@@ -5,7 +5,7 @@ import { protect, AuthRequest } from '../middleware/authMiddleware';
 const router = express.Router();
 
 // @route   GET /api/activity
-// @desc    Get recent activity for current user
+// @desc    Get recent activity for the whole workspace (instance)
 // @access  Private
 router.get('/', protect, async (req: AuthRequest, res, next) => {
     try {
@@ -13,7 +13,6 @@ router.get('/', protect, async (req: AuthRequest, res, next) => {
         const offset = parseInt(req.query.offset as string) || 0;
 
         const activities = await prisma.activity.findMany({
-            where: { ownerId: req.user.id },
             orderBy: { createdAt: 'desc' },
             take: limit,
             skip: offset,

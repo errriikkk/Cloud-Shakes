@@ -15,6 +15,7 @@ const router = express.Router();
 router.get('/usage', protect, async (req: AuthRequest, res, next) => {
     try {
         const result = await prisma.file.aggregate({
+            // Storage limit is still per user (owner)
             where: { ownerId: req.user.id },
             _sum: { size: true },
         });
@@ -121,7 +122,7 @@ router.get('/', protect, async (req: AuthRequest, res, next) => {
         const { folderId } = req.query;
         const files = await prisma.file.findMany({
             where: {
-                ownerId: req.user.id,
+                // Shared within instance: no owner filter for listing
                 folderId: folderId ? (folderId as string) : null,
             },
             orderBy: { createdAt: 'desc' },

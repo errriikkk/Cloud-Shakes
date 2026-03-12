@@ -80,7 +80,7 @@ router.get('/', protect, async (req: AuthRequest, res, next) => {
 
         const events = await prisma.calendarEvent.findMany({
             where: {
-                ownerId: req.user.id,
+                // Shared within instance: all events in range
                 startDate: {
                     gte: rangeStart,
                     lte: rangeEnd,

@@ -22,8 +22,8 @@ const updateDocumentSchema = z.object({
 // @access  Private
 router.get('/', protect, async (req: AuthRequest, res, next) => {
     try {
+        // Shared within instance: list all documents, regardless of owner
         const documents = await prisma.document.findMany({
-            where: { ownerId: req.user.id },
             orderBy: { updatedAt: 'desc' },
             select: {
                 id: true,
@@ -76,10 +76,6 @@ router.get('/:id', protect, async (req: AuthRequest, res, next) => {
 
         if (!doc) {
             return res.status(404).json({ message: 'Documento no encontrado' });
-        }
-
-        if (doc.ownerId !== req.user.id && !req.user.isAdmin) {
-            return res.status(403).json({ message: 'No autorizado' });
         }
 
         res.json(doc);
