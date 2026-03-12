@@ -214,7 +214,7 @@ router.get('/:id/preview', protect, async (req: AuthRequest, res, next) => {
 
         if (!file) return res.status(404).json({ message: 'File not found' });
 
-        if (file.ownerId !== req.user.id && !req.user.isAdmin) {
+        if (file.ownerId !== req.user.id && !req.user.isAdmin && !(req.user.permissions || []).includes('view_files')) {
             return res.status(401).json({ message: 'Not authorized' });
         }
 
@@ -236,7 +236,7 @@ router.get('/:id/download', protect, async (req: AuthRequest, res, next) => {
 
         if (!file) return res.status(404).json({ message: 'File not found' });
 
-        if (file.ownerId !== req.user.id && !req.user.isAdmin) {
+        if (file.ownerId !== req.user.id && !req.user.isAdmin && !(req.user.permissions || []).includes('view_files')) {
             return res.status(401).json({ message: 'Not authorized' });
         }
 
@@ -308,7 +308,7 @@ router.delete('/:id', protect, async (req: AuthRequest, res, next) => {
 
         if (!file) return res.status(404).json({ message: 'File not found' });
 
-        if (file.ownerId !== req.user.id && !req.user.isAdmin) {
+        if (file.ownerId !== req.user.id && !req.user.isAdmin && !(req.user.permissions || []).includes('view_files')) {
             return res.status(401).json({ message: 'Not authorized' });
         }
 
@@ -339,7 +339,7 @@ router.patch('/:id/move', protect, async (req: AuthRequest, res, next) => {
             return res.status(404).json({ message: 'File not found' });
         }
 
-        if (file.ownerId !== req.user.id && !req.user.isAdmin) {
+        if (file.ownerId !== req.user.id && !req.user.isAdmin && !(req.user.permissions || []).includes('view_files')) {
             return res.status(401).json({ message: 'Not authorized' });
         }
 

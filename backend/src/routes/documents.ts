@@ -99,7 +99,7 @@ router.put('/:id', protect, async (req: AuthRequest, res, next) => {
             return res.status(404).json({ message: 'Documento no encontrado' });
         }
 
-        if (existing.ownerId !== req.user.id && !req.user.isAdmin) {
+        if (existing.ownerId !== req.user.id && !req.user.isAdmin && !(req.user.permissions || []).includes('view_documents')) {
             return res.status(403).json({ message: 'No autorizado' });
         }
 
@@ -135,7 +135,7 @@ router.delete('/:id', protect, async (req: AuthRequest, res, next) => {
             return res.status(404).json({ message: 'Documento no encontrado' });
         }
 
-        if (doc.ownerId !== req.user.id && !req.user.isAdmin) {
+        if (doc.ownerId !== req.user.id && !req.user.isAdmin && !(req.user.permissions || []).includes('view_documents')) {
             return res.status(403).json({ message: 'No autorizado' });
         }
 

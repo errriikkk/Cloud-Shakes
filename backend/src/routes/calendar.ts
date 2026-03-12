@@ -143,7 +143,7 @@ router.put('/:id', protect, async (req: AuthRequest, res, next) => {
             return res.status(404).json({ message: 'Evento no encontrado' });
         }
 
-        if (existing.ownerId !== req.user.id && !req.user.isAdmin) {
+        if (existing.ownerId !== req.user.id && !req.user.isAdmin && !(req.user.permissions || []).includes('view_calendar')) {
             return res.status(403).json({ message: 'No autorizado' });
         }
 
@@ -193,7 +193,7 @@ router.delete('/:id', protect, async (req: AuthRequest, res, next) => {
             return res.status(404).json({ message: 'Evento no encontrado' });
         }
 
-        if (event.ownerId !== req.user.id && !req.user.isAdmin) {
+        if (event.ownerId !== req.user.id && !req.user.isAdmin && !(req.user.permissions || []).includes('view_calendar')) {
             return res.status(403).json({ message: 'No autorizado' });
         }
 
