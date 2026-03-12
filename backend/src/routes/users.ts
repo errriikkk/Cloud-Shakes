@@ -14,7 +14,7 @@ const updateUserSchema = z.object({
 // GET /api/users - list users with roles
 router.get('/', protect, requirePermission('manage_users'), async (req: AuthRequest, res, next) => {
     try {
-        const users = await prisma.user.findMany({
+        const users = await (prisma as any).user.findMany({
             orderBy: { createdAt: 'asc' },
             include: {
                 roles: {
@@ -25,7 +25,7 @@ router.get('/', protect, requirePermission('manage_users'), async (req: AuthRequ
             },
         });
 
-        const result = users.map((u) => ({
+        const result = users.map((u: any) => ({
             id: u.id,
             username: u.username,
             email: u.email,
@@ -33,7 +33,7 @@ router.get('/', protect, requirePermission('manage_users'), async (req: AuthRequ
             isAdmin: u.isAdmin,
             isActive: u.isActive,
             createdAt: u.createdAt,
-            roles: u.roles.map((ur) => ({
+            roles: u.roles.map((ur: any) => ({
                 id: ur.role.id,
                 name: ur.role.name,
             })),
@@ -48,10 +48,10 @@ router.get('/', protect, requirePermission('manage_users'), async (req: AuthRequ
 // PATCH /api/users/:id - update user (status, displayName, roles)
 router.patch('/:id', protect, requirePermission('manage_users'), async (req: AuthRequest, res, next) => {
     try {
-        const { id } = req.params;
+        const id = req.params.id as string;
         const data = updateUserSchema.parse(req.body);
 
-        const user = await prisma.user.findUnique({
+        const user = await (prisma as any).user.findUnique({
             where: { id },
             include: { roles: true },
         });
@@ -69,23 +69,24 @@ router.patch('/:id', protect, requirePermission('manage_users'), async (req: Aut
         }
 
         const rolesToAssign = data.roles
-            ? await prisma.role.findMany({
+            ? await (prisma as any).role.findMany({
                   where: { id: { in: data.roles } },
               })
             : null;
 
-        const updated = await prisma.user.update({
+        const updated = await (prisma as any).user.update({
             where: { id },
             data: {
                 ...updateData,
-                roles: rolesToAssign
-                    ? {
-                          deleteMany: {},
-                          create: rolesToAssign.map((r) => ({
-                              roleId: r.id,
-                          })),
-                      }
-                    : undefined,
+                roles:
+                    rolesToAssign && rolesToAssign.length
+                        ? {
+                              deleteMany: {},
+                              create: rolesToAssign.map((r: any) => ({
+                                  roleId: r.id,
+                              })),
+                          }
+                        : undefined,
             },
             include: {
                 roles: { include: { role: true } },
@@ -93,14 +94,14 @@ router.patch('/:id', protect, requirePermission('manage_users'), async (req: Aut
         });
 
         res.json({
-            id: updated.id,
-            username: updated.username,
-            email: updated.email,
-            displayName: updated.displayName,
-            isAdmin: updated.isAdmin,
-            isActive: updated.isActive,
-            createdAt: updated.createdAt,
-            roles: updated.roles.map((ur) => ({
+            id: (updated as any).id,
+            username: (updated as any).username,
+            email: (updated as any).email,
+            displayName: (updated as any).displayName,
+            isAdmin: (updated as any).isAdmin,
+            isActive: (updated as any).isActive,
+            createdAt: (updated as any).createdAt,
+            roles: (updated as any).roles.map((ur: any) => ({
                 id: ur.role.id,
                 name: ur.role.name,
             })),
