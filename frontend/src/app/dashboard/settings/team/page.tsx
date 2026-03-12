@@ -93,7 +93,7 @@ export default function TeamRolesSettingsPage() {
             }
         };
 
-        if (user?.isAdmin) {
+        if (user && (user.isAdmin || user.permissions?.includes("manage_users") || user.permissions?.includes("manage_roles"))) {
             fetchAll();
         }
     }, [user]);
@@ -190,8 +190,18 @@ export default function TeamRolesSettingsPage() {
         } catch (err) { }
     };
 
-    if (!user?.isAdmin) {
-        return <div className="min-h-[300px] flex items-center justify-center text-sm text-muted-foreground">Solo el administrador puede gestionar la seguridad y el equipo.</div>;
+    const canManageSecurity =
+        !!user &&
+        (user.isAdmin ||
+            user.permissions?.includes("manage_users") ||
+            user.permissions?.includes("manage_roles"));
+
+    if (!canManageSecurity) {
+        return (
+            <div className="min-h-[300px] flex items-center justify-center text-sm text-muted-foreground">
+                No tienes permisos para gestionar la seguridad y el equipo.
+            </div>
+        );
     }
 
     return (

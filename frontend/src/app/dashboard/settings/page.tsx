@@ -290,8 +290,8 @@ export default function SettingsPage() {
                     </div>
                 </motion.div>
 
-                {/* Team & Roles shortcuts (only for admin) */}
-                {user?.isAdmin && (
+                {/* Team & Roles shortcuts (roles/permissions based) */}
+                {user && (user.isAdmin || user.permissions?.includes("manage_users") || user.permissions?.includes("manage_roles")) && (
                     <motion.div
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}

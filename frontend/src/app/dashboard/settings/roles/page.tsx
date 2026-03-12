@@ -108,10 +108,14 @@ export default function RolesSettingsPage() {
         }
     };
 
-    if (!user?.isAdmin) {
+    const canManageRoles =
+        !!user &&
+        (user.isAdmin || user.permissions?.includes("manage_roles"));
+
+    if (!canManageRoles) {
         return (
             <div className="min-h-[300px] flex items-center justify-center text-sm text-muted-foreground">
-                Solo el administrador puede gestionar roles y permisos.
+                No tienes permisos para gestionar roles y permisos.
             </div>
         );
     }
