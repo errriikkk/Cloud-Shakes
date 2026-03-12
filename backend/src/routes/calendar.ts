@@ -86,6 +86,10 @@ router.get('/', protect, async (req: AuthRequest, res, next) => {
                     lte: rangeEnd,
                 },
             },
+            include: {
+                owner: { select: { id: true, username: true, displayName: true } },
+                lastModifiedBy: { select: { id: true, username: true, displayName: true } },
+            },
             orderBy: { startDate: 'asc' },
         });
 
@@ -165,6 +169,7 @@ router.put('/:id', protect, async (req: AuthRequest, res, next) => {
             updateData.reminderSent = false;
         }
         if (data.reminderSent !== undefined) updateData.reminderSent = data.reminderSent;
+        updateData.lastModifiedById = req.user.id;
 
         const updated = await prisma.calendarEvent.update({
             where: { id: req.params.id as string },

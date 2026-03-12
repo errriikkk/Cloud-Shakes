@@ -7,6 +7,7 @@ import axios from "axios";
 import { cn } from "@/lib/utils";
 import { useRouter } from "next/navigation";
 import { API_ENDPOINTS } from "@/lib/api";
+import { ActivityAvatar } from "@/components/ActivityAvatar";
 
 interface SearchResult {
     id: string;
@@ -19,6 +20,7 @@ interface SearchResult {
     parent?: { id: string, name: string };
     description?: string;
     startDate?: string;
+    owner?: { id: string; username: string; displayName: string };
 }
 
 interface SearchModalProps {
@@ -366,6 +368,12 @@ export function SearchModal({ isOpen, onClose }: SearchModalProps) {
                                                     )}
                                                 </div>
                                             </div>
+
+                                            <ActivityAvatar
+                                                user={item.owner}
+                                                resourceId={item.id}
+                                                resourceType={item.type}
+                                            />
 
                                             {(item.type === 'file' || item.type === 'document') && (
                                                 <button

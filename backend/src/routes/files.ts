@@ -125,6 +125,10 @@ router.get('/', protect, async (req: AuthRequest, res, next) => {
                 // Shared within instance: no owner filter for listing
                 folderId: folderId ? (folderId as string) : null,
             },
+            include: {
+                owner: { select: { id: true, username: true, displayName: true } },
+                lastModifiedBy: { select: { id: true, username: true, displayName: true } },
+            },
             orderBy: { createdAt: 'desc' },
         });
         res.json(files.map(f => ({ ...f, size: f.size.toString() })));

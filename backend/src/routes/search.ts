@@ -18,7 +18,6 @@ router.get('/', protect, async (req: AuthRequest, res, next) => {
         const [files, folders, documents, notes, calendarEvents] = await Promise.all([
             prisma.file.findMany({
                 where: {
-                    ownerId: req.user.id,
                     originalName: {
                         contains: query,
                         mode: 'insensitive',
@@ -30,14 +29,16 @@ router.get('/', protect, async (req: AuthRequest, res, next) => {
                             id: true,
                             name: true,
                         }
-                    }
+                    },
+                    owner: {
+                        select: { id: true, username: true, displayName: true }
+                    },
                 },
                 take: 10,
                 orderBy: { createdAt: 'desc' },
             }),
             prisma.folder.findMany({
                 where: {
-                    ownerId: req.user.id,
                     name: {
                         contains: query,
                         mode: 'insensitive',
@@ -49,17 +50,24 @@ router.get('/', protect, async (req: AuthRequest, res, next) => {
                             id: true,
                             name: true,
                         }
-                    }
+                    },
+                    owner: {
+                        select: { id: true, username: true, displayName: true }
+                    },
                 },
                 take: 10,
                 orderBy: { createdAt: 'desc' },
             }),
             prisma.document.findMany({
                 where: {
-                    ownerId: req.user.id,
                     title: {
                         contains: query,
                         mode: 'insensitive',
+                    },
+                },
+                include: {
+                    owner: {
+                        select: { id: true, username: true, displayName: true }
                     },
                 },
                 take: 10,
@@ -67,22 +75,30 @@ router.get('/', protect, async (req: AuthRequest, res, next) => {
             }),
             prisma.note.findMany({
                 where: {
-                    ownerId: req.user.id,
                     OR: [
                         { title: { contains: query, mode: 'insensitive' } },
                         { content: { contains: query, mode: 'insensitive' } },
                     ],
+                },
+                include: {
+                    owner: {
+                        select: { id: true, username: true, displayName: true }
+                    },
                 },
                 take: 10,
                 orderBy: { updatedAt: 'desc' },
             }),
             prisma.calendarEvent.findMany({
                 where: {
-                    ownerId: req.user.id,
                     OR: [
                         { title: { contains: query, mode: 'insensitive' } },
                         { description: { contains: query, mode: 'insensitive' } },
                     ],
+                },
+                include: {
+                    owner: {
+                        select: { id: true, username: true, displayName: true }
+                    },
                 },
                 take: 10,
                 orderBy: { startDate: 'asc' },

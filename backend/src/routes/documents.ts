@@ -31,7 +31,8 @@ router.get('/', protect, async (req: AuthRequest, res, next) => {
                 folderId: true,
                 createdAt: true,
                 updatedAt: true,
-                // Don't include full content in list view for performance
+                owner: { select: { id: true, username: true, displayName: true } },
+                lastModifiedBy: { select: { id: true, username: true, displayName: true } },
             },
         });
         res.json(documents);
@@ -107,6 +108,7 @@ router.put('/:id', protect, async (req: AuthRequest, res, next) => {
         if (title !== undefined) updateData.title = title;
         if (content !== undefined) updateData.content = content;
         if (folderId !== undefined) updateData.folderId = folderId;
+        updateData.lastModifiedById = req.user.id;
 
         const updated = await prisma.document.update({
             where: { id: req.params.id as string },

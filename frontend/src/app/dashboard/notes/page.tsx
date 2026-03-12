@@ -9,6 +9,7 @@ import axios from "axios";
 import { API_ENDPOINTS } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { useModal } from "@/hooks/useModal";
+import { ActivityAvatar } from "@/components/ActivityAvatar";
 
 interface Note {
     id: string;
@@ -17,6 +18,8 @@ interface Note {
     color: string;
     pinned: boolean;
     updatedAt: string;
+    owner?: { id: string; username: string; displayName: string };
+    lastModifiedBy?: { id: string; username: string; displayName: string } | null;
 }
 
 const COLORS = [
@@ -214,6 +217,11 @@ function NoteCard({ note, onUpdate, onDelete }: { note: Note, onUpdate: (id: str
 
             <div className="flex items-center justify-between mt-3">
                 <div className="flex items-center gap-2">
+                    <ActivityAvatar
+                        user={note.lastModifiedBy || note.owner}
+                        resourceId={note.id}
+                        resourceType="note"
+                    />
                     <span className="text-[9px] font-bold uppercase tracking-widest opacity-30">
                         {isSyncing ? "Sincronizando..." : lastSynced ? "Sincronizado" : ""}
                     </span>

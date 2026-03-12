@@ -13,6 +13,7 @@ import { EventModal } from "@/components/EventModal";
 import { useModal } from "@/hooks/useModal";
 import { useNotifications } from "@/hooks/useNotifications";
 import { motion, AnimatePresence } from "framer-motion";
+import { ActivityAvatar } from "@/components/ActivityAvatar";
 
 interface CalendarEvent {
     id: string;
@@ -24,6 +25,8 @@ interface CalendarEvent {
     pinned: boolean;
     color: string;
     reminderMinutes?: number | null;
+    owner?: { id: string; username: string; displayName: string };
+    lastModifiedBy?: { id: string; username: string; displayName: string } | null;
 }
 
 const COLOR_MAP: Record<string, string> = {
@@ -400,14 +403,21 @@ export default function CalendarPage() {
                                         COLOR_MAP[event.color] || COLOR_MAP.primary
                                     )}
                                 >
-                                    <div className="flex items-start justify-between mb-2">
-                                        <h3 className="font-bold text-foreground flex-1 group-hover:text-primary transition-colors">
-                                            {event.title}
-                                        </h3>
-                                        {event.pinned && (
-                                            <Pin className="w-4 h-4 text-primary shrink-0" />
-                                        )}
-                                    </div>
+                                        <div className="flex items-start justify-between mb-2">
+                                            <h3 className="font-bold text-foreground flex-1 group-hover:text-primary transition-colors">
+                                                {event.title}
+                                            </h3>
+                                            <div className="flex items-center gap-2 shrink-0">
+                                                <ActivityAvatar
+                                                    user={event.lastModifiedBy || event.owner}
+                                                    resourceId={event.id}
+                                                    resourceType="calendar"
+                                                />
+                                                {event.pinned && (
+                                                    <Pin className="w-4 h-4 text-primary" />
+                                                )}
+                                            </div>
+                                        </div>
                                     <div className="space-y-1 text-xs text-muted-foreground">
                                         <p className="flex items-center gap-1">
                                             <CalIcon className="w-3 h-3" />

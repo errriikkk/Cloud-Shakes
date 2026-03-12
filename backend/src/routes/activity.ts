@@ -11,11 +11,21 @@ router.get('/', protect, async (req: AuthRequest, res, next) => {
     try {
         const limit = parseInt(req.query.limit as string) || 50;
         const offset = parseInt(req.query.offset as string) || 0;
+        const resourceId = req.query.resourceId as string | undefined;
+        const resourceType = req.query.resourceType as string | undefined;
+
+        const where: any = {};
+        if (resourceId) where.resourceId = resourceId;
+        if (resourceType) where.resourceType = resourceType;
 
         const activities = await prisma.activity.findMany({
+            where,
             orderBy: { createdAt: 'desc' },
             take: limit,
             skip: offset,
+            include: {
+                owner: { select: { id: true, username: true, displayName: true } },
+            },
         });
 
         res.json(activities);

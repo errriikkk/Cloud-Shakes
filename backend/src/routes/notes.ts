@@ -29,6 +29,10 @@ router.get('/', protect, async (req: AuthRequest, res, next) => {
                 { pinned: 'desc' },
                 { updatedAt: 'desc' },
             ],
+            include: {
+                owner: { select: { id: true, username: true, displayName: true } },
+                lastModifiedBy: { select: { id: true, username: true, displayName: true } },
+            },
         });
         res.json(notes);
     } catch (err) {
@@ -85,6 +89,7 @@ router.put('/:id', protect, async (req: AuthRequest, res, next) => {
         if (content !== undefined) updateData.content = content;
         if (color !== undefined) updateData.color = color;
         if (pinned !== undefined) updateData.pinned = pinned;
+        updateData.lastModifiedById = req.user.id;
 
         const updated = await prisma.note.update({
             where: { id: req.params.id as string },

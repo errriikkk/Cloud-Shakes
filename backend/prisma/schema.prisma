@@ -29,6 +29,10 @@ model User {
   activities     Activity[]
   roles          UserRole[]
   invitesCreated Invite[]    @relation("InvitesCreated")
+  modifiedFiles          File[]          @relation("FileLastModifiedBy")
+  modifiedDocuments      Document[]      @relation("DocumentLastModifiedBy")
+  modifiedNotes          Note[]          @relation("NoteLastModifiedBy")
+  modifiedCalendarEvents CalendarEvent[] @relation("CalendarEventLastModifiedBy")
 }
 
 model Folder {
@@ -46,18 +50,20 @@ model Folder {
 }
 
 model File {
-  id           String   @id @default(uuid())
-  originalName String
-  storedName   String   @unique // Name in MinIO
-  mimeType     String
-  size         BigInt
-  ownerId      String
-  owner        User     @relation(fields: [ownerId], references: [id])
-  folderId     String?
-  folder       Folder?  @relation(fields: [folderId], references: [id], onDelete: Cascade)
-  hideFromRecent Boolean  @default(false)
-  createdAt    DateTime @default(now())
-  links        Link[]
+  id               String   @id @default(uuid())
+  originalName     String
+  storedName       String   @unique // Name in MinIO
+  mimeType         String
+  size             BigInt
+  ownerId          String
+  owner            User     @relation(fields: [ownerId], references: [id])
+  folderId         String?
+  folder           Folder?  @relation(fields: [folderId], references: [id], onDelete: Cascade)
+  hideFromRecent   Boolean  @default(false)
+  lastModifiedById String?
+  lastModifiedBy   User?    @relation("FileLastModifiedBy", fields: [lastModifiedById], references: [id])
+  createdAt        DateTime @default(now())
+  links            Link[]
 }
 
 model Link {
@@ -82,50 +88,56 @@ model Link {
 
 // ── Phase 2: Documents ───────────────────────────────────────────────
 model Document {
-  id        String   @id @default(uuid())
-  title     String   @default("Sin título")
-  content   Json     @default("{}") // Rich text content (JSON)
-  ownerId   String
-  owner     User     @relation(fields: [ownerId], references: [id])
-  folderId  String?  // Optional: organize docs in folders
-  links     Link[]   // Links that share this document
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id               String   @id @default(uuid())
+  title            String   @default("Sin título")
+  content          Json     @default("{}") // Rich text content (JSON)
+  ownerId          String
+  owner            User     @relation(fields: [ownerId], references: [id])
+  folderId         String?  // Optional: organize docs in folders
+  lastModifiedById String?
+  lastModifiedBy   User?    @relation("DocumentLastModifiedBy", fields: [lastModifiedById], references: [id])
+  links            Link[]   // Links that share this document
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   @@index([ownerId])
 }
 
 // ── Phase 3: Notes ───────────────────────────────────────────────────
 model Note {
-  id        String   @id @default(uuid())
-  title     String   @default("")
-  content   String   @default("")
-  color     String   @default("default") // default, blue, green, yellow, red, purple
-  pinned    Boolean  @default(false)
-  ownerId   String
-  owner     User     @relation(fields: [ownerId], references: [id])
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id               String   @id @default(uuid())
+  title            String   @default("")
+  content          String   @default("")
+  color            String   @default("default") // default, blue, green, yellow, red, purple
+  pinned           Boolean  @default(false)
+  ownerId          String
+  owner            User     @relation(fields: [ownerId], references: [id])
+  lastModifiedById String?
+  lastModifiedBy   User?    @relation("NoteLastModifiedBy", fields: [lastModifiedById], references: [id])
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   @@index([ownerId])
 }
 
 // ── Phase 4: Calendar ────────────────────────────────────────────────
 model CalendarEvent {
-  id             String    @id @default(uuid())
-  title          String
-  description    String?
-  startDate      DateTime
-  endDate        DateTime?
-  allDay         Boolean   @default(false)
-  pinned         Boolean   @default(false)
-  color          String    @default("primary") // primary, blue, green, yellow, red, purple
-  reminderMinutes Int?     // Minutes before event to show reminder (null = no reminder)
-  reminderSent   Boolean   @default(false) // Track if reminder was sent
-  ownerId        String
-  owner          User      @relation(fields: [ownerId], references: [id])
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  id               String    @id @default(uuid())
+  title            String
+  description      String?
+  startDate        DateTime
+  endDate          DateTime?
+  allDay           Boolean   @default(false)
+  pinned           Boolean   @default(false)
+  color            String    @default("primary") // primary, blue, green, yellow, red, purple
+  reminderMinutes  Int?      // Minutes before event to show reminder (null = no reminder)
+  reminderSent     Boolean   @default(false) // Track if reminder was sent
+  ownerId          String
+  owner            User      @relation(fields: [ownerId], references: [id])
+  lastModifiedById String?
+  lastModifiedBy   User?     @relation("CalendarEventLastModifiedBy", fields: [lastModifiedById], references: [id])
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   @@index([ownerId, startDate])
   @@index([startDate, reminderSent])
