@@ -39,6 +39,9 @@ import calendarRoutes from './routes/calendar';
 import apiFlowRoutes from './routes/apiFlows';
 import customRoutes from './routes/custom';
 import profileRoutes from './routes/profile';
+import rolesRoutes from './routes/roles';
+import usersRoutes from './routes/users';
+import teamInvitationsRoutes from './routes/teamInvitations';
 import activityRoutes from './routes/activity';
 import { initStorage } from './utils/storage';
 import prisma from './config/db';
@@ -242,6 +245,9 @@ app.use('/api/api-flows', apiFlowRoutes);
 app.use('/api/profile', csrfProtection);
 app.use('/api/profile', profileRoutes);
 app.use('/api/activity', activityRoutes);
+app.use('/api/roles', rolesRoutes);
+app.use('/api/users', usersRoutes);
+app.use('/api/team/invitations', teamInvitationsRoutes);
 // Custom API routes must be last to catch all /api/custom/* paths
 app.use('/api/custom', customRoutes);
 

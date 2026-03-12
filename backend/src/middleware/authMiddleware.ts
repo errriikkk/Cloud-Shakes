@@ -3,7 +3,10 @@ import { verifyToken } from '../utils/auth';
 import prisma from '../config/db';
 
 export interface AuthRequest extends Request {
-    user?: any;
+    user?: any & {
+        permissions?: string[];
+        roles?: string[];
+    };
     file?: Express.Multer.File;
 }
 
@@ -35,16 +38,52 @@ export const protect = async (req: AuthRequest, res: Response, next: NextFunctio
             return res.status(401).json({ message: 'Invalid token type' });
         }
 
-        const user = await prisma.user.findUnique({
+        const dbUser = await prisma.user.findUnique({
             where: { id: decoded.id },
-            select: { id: true, username: true, isAdmin: true, displayName: true, avatar: true, storageLimit: true },
+            include: {
+                roles: {
+                    include: {
+                        role: {
+                            include: {
+                                permissions: {
+                                    include: {
+                                        permission: true,
+                                    },
+                                },
+                            },
+                        },
+                    },
+                },
+            },
         });
 
-        if (!user) {
+        if (!dbUser) {
             return res.status(401).json({ message: 'Not authorized, user not found' });
         }
 
-        req.user = user;
+        if (!dbUser.isActive) {
+            return res.status(403).json({ message: 'User is deactivated' });
+        }
+
+        const roleKeys = dbUser.roles.map((ur) => ur.role.name);
+        const permissionKeys = Array.from(
+            new Set(
+                dbUser.roles.flatMap((ur) =>
+                    ur.role.permissions.map((rp) => rp.permission.key),
+                ),
+            ),
+        );
+
+        req.user = {
+            id: dbUser.id,
+            username: dbUser.username,
+            displayName: dbUser.displayName,
+            avatar: dbUser.avatar,
+            storageLimit: dbUser.storageLimit,
+            isAdmin: dbUser.isAdmin,
+            roles: roleKeys,
+            permissions: permissionKeys,
+        };
         next();
     } catch (error) {
         console.error(error);
@@ -58,4 +97,23 @@ export const admin = (req: AuthRequest, res: Response, next: NextFunction) => {
     } else {
         res.status(403).json({ message: 'Not authorized as an admin' });
     }
+};
+
+export const requirePermission = (permission: string) => {
+    return (req: AuthRequest, res: Response, next: NextFunction) => {
+        if (!req.user) {
+            return res.status(401).json({ message: 'Not authorized' });
+        }
+
+        if (req.user.isAdmin) {
+            return next();
+        }
+
+        const permissions = req.user.permissions || [];
+        if (!permissions.includes(permission)) {
+            return res.status(403).json({ message: 'Forbidden: missing permission ' + permission });
+        }
+
+        next();
+    };
 };

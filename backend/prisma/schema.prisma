@@ -8,23 +8,27 @@ datasource db {
 }
 
 model User {
-  id           String   @id @default(uuid())
-  username     String   @unique
-  password     String
-  displayName  String   @default("User")
-  avatar       String?  // URL or file ID for profile picture
-  isAdmin      Boolean  @default(false)
-  storageLimit BigInt   @default(53687091200) // 50 GB in bytes
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  files        File[]
-  folders      Folder[]
-  links        Link[]
-  documents    Document[]
-  notes        Note[]
+  id             String      @id @default(uuid())
+  username       String      @unique
+  email          String?     @unique
+  password       String
+  displayName    String      @default("User")
+  avatar         String?     // URL or file ID for profile picture
+  isAdmin        Boolean     @default(false)
+  isActive       Boolean     @default(true)
+  storageLimit   BigInt      @default(53687091200) // 50 GB in bytes
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+  files          File[]
+  folders        Folder[]
+  links          Link[]
+  documents      Document[]
+  notes          Note[]
   calendarEvents CalendarEvent[]
-  apiFlows     ApiFlow[]
-  activities   Activity[]
+  apiFlows       ApiFlow[]
+  activities     Activity[]
+  roles          UserRole[]
+  invitesCreated Invite[]    @relation("InvitesCreated")
 }
 
 model Folder {
@@ -164,4 +168,58 @@ model Activity {
 
   @@index([ownerId, createdAt])
   @@index([createdAt])
+}
+
+// ── IAM: Roles & Permissions ────────────────────────────────────────────────
+model Role {
+  id          String          @id @default(uuid())
+  name        String
+  description String?
+  isSystem    Boolean         @default(false)
+  users       UserRole[]
+  permissions RolePermission[]
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+}
+
+model Permission {
+  id          String          @id @default(uuid())
+  key         String          @unique
+  description String?
+  roles       RolePermission[]
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+}
+
+model RolePermission {
+  id           String     @id @default(uuid())
+  roleId       String
+  permissionId String
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, permissionId])
+}
+
+model UserRole {
+  id      String @id @default(uuid())
+  userId  String
+  roleId  String
+  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role    Role   @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, roleId])
+}
+
+model Invite {
+  id          String   @id @default(uuid())
+  email       String
+  roles       Json
+  token       String   @unique
+  expiresAt   DateTime
+  acceptedAt  DateTime?
+  revokedAt   DateTime?
+  createdById String
+  createdBy   User     @relation("InvitesCreated", fields: [createdById], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
 }
