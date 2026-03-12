@@ -8,14 +8,17 @@ import { hashPassword } from '../utils/auth';
 const router = express.Router();
 
 const createInvitationSchema = z.object({
-    email: z.string().email(),
-    roleIds: z.array(z.string()).min(1),
-    expiresInHours: z.number().int().min(1).max(720).optional(), // default 72h
+    email: z.string().email().optional(),
+    username: z.string().min(3).optional(),
+    roleIds: z.array(z.string()).optional().default([]),
+    expiresInHours: z.number().min(0.1).max(720).optional(), // allow down to 0.1 hr (6 mins)
+}).refine(data => data.email || data.username, {
+    message: "Debe proporcionar un email o un nombre de usuario.",
 });
 
 const acceptInvitationSchema = z.object({
     token: z.string().min(16),
-    username: z.string().min(3),
+    username: z.string().min(3).optional(), // Optional if invite already has username
     password: z.string().min(6),
     displayName: z.string().min(1).max(100),
 });
@@ -37,6 +40,7 @@ router.get('/', protect, requirePermission('manage_users'), async (req: AuthRequ
             invites.map((inv: any) => ({
                 id: inv.id,
                 email: inv.email,
+                username: inv.username,
                 roles: inv.roles,
                 expiresAt: inv.expiresAt,
                 createdAt: inv.createdAt,
@@ -52,12 +56,14 @@ router.post('/', protect, requirePermission('manage_users'), async (req: AuthReq
     try {
         const data = createInvitationSchema.parse(req.body);
 
-        const roles = await (prisma as any).role.findMany({
-            where: { id: { in: data.roleIds } },
-        });
-
-        if (!roles.length) {
-            return res.status(400).json({ message: 'No valid roles provided' });
+        let validRoles: any[] = [];
+        if (data.roleIds && data.roleIds.length > 0) {
+            validRoles = await (prisma as any).role.findMany({
+                where: { id: { in: data.roleIds } },
+            });
+            if (validRoles.length !== data.roleIds.length) {
+                return res.status(400).json({ message: 'Algunos roles proporcionados no son válidos' });
+            }
         }
 
         const token = crypto.randomBytes(32).toString('hex');
@@ -65,7 +71,8 @@ router.post('/', protect, requirePermission('manage_users'), async (req: AuthReq
 
         const invite = await (prisma as any).invite.create({
             data: {
-                email: data.email,
+                email: data.email || null,
+                username: data.username || null,
                 roles: data.roleIds,
                 token,
                 expiresAt,
@@ -78,6 +85,7 @@ router.post('/', protect, requirePermission('manage_users'), async (req: AuthReq
         res.status(201).json({
             id: invite.id,
             email: invite.email,
+            username: invite.username,
             roles: invite.roles,
             expiresAt: invite.expiresAt,
             inviteUrl,
@@ -112,6 +120,28 @@ router.delete('/:id', protect, requirePermission('manage_users'), async (req: Au
     }
 });
 
+// GET /api/team/invitations/:token - get invitation info (public)
+router.get('/:token', async (req, res, next) => {
+    try {
+        const { token } = req.params;
+        const invite = await (prisma as any).invite.findUnique({
+            where: { token }
+        });
+
+        if (!invite || invite.acceptedAt || invite.revokedAt || new Date(invite.expiresAt) < new Date()) {
+            return res.status(404).json({ message: 'Invitación no válida o caducada.' });
+        }
+
+        res.json({
+            email: invite.email,
+            username: invite.username,
+            expiresAt: invite.expiresAt
+        });
+    } catch (err) {
+        next(err);
+    }
+});
+
 // POST /api/team/invitations/accept - accept invitation and create user
 router.post('/accept', async (req, res, next) => {
     try {
@@ -130,9 +160,17 @@ router.post('/accept', async (req, res, next) => {
             return res.status(400).json({ message: 'Invalid or expired invitation' });
         }
 
-        const existingUser = await prisma.user.findFirst({
+        const finalUsername = invite.username || data.username;
+        if (!finalUsername) {
+            return res.status(400).json({ message: 'Username is required' });
+        }
+
+        const existingUser = await (prisma as any).user.findFirst({
             where: {
-                OR: [{ username: data.username }],
+                OR: [
+                    { username: finalUsername },
+                    ...(invite.email ? [{ email: invite.email }] : [])
+                ]
             },
         });
 
@@ -146,16 +184,16 @@ router.post('/accept', async (req, res, next) => {
 
         const user = await (prisma as any).user.create({
             data: {
-                username: data.username,
-                email: invite.email,
+                username: finalUsername,
+                email: invite.email || null,
                 password: hashedPassword,
                 displayName: data.displayName,
                 isActive: true,
-                roles: {
+                roles: roles.length > 0 ? {
                     create: roles.map((roleId: string) => ({
                         roleId,
                     })),
-                },
+                } : undefined,
             },
         });
 

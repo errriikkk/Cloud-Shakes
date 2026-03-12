@@ -213,7 +213,8 @@ model UserRole {
 
 model Invite {
   id          String   @id @default(uuid())
-  email       String
+  email       String?
+  username    String?
   roles       Json
   token       String   @unique
   expiresAt   DateTime

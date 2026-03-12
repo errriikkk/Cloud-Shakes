@@ -243,18 +243,33 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
                 <div className="h-px bg-border/40 my-2 mx-2" />
 
-                <NavItem href="/dashboard/files" icon={HardDrive} label={t("nav.files")} folders={filesFolders} />
-                <NavItem href="/dashboard/documents" icon={FileText} label={t("nav.documents")} />
-                <NavItem href="/dashboard/notes" icon={StickyNote} label={t("nav.notes")} />
-                <NavItem href="/dashboard/calendar" icon={Calendar} label={t("nav.calendar")} />
+                {(user.isAdmin || user.permissions?.includes('view_files')) && (
+                    <NavItem href="/dashboard/files" icon={HardDrive} label={t("nav.files")} folders={filesFolders} />
+                )}
+                {(user.isAdmin || user.permissions?.includes('view_documents')) && (
+                    <NavItem href="/dashboard/documents" icon={FileText} label={t("nav.documents")} />
+                )}
+                {(user.isAdmin || user.permissions?.includes('view_notes')) && (
+                    <NavItem href="/dashboard/notes" icon={StickyNote} label={t("nav.notes")} />
+                )}
+                {(user.isAdmin || user.permissions?.includes('view_calendar')) && (
+                    <NavItem href="/dashboard/calendar" icon={Calendar} label={t("nav.calendar")} />
+                )}
 
                 <div className="h-px bg-border/40 my-2 mx-2" />
 
-                <NavItem href="/dashboard/links" icon={LinkIcon} label={t("nav.shared")} />
-                                <NavItem href="/dashboard/gallery" icon={ImageIcon} label={t("nav.gallery")} />
-
-                <NavItem href="/dashboard/statistics" icon={BarChart3} label={t("nav.statistics")} />
-                <NavItem href="/dashboard/api-builder" icon={Code} label={t("nav.apiBuilder")} />
+                {(user.isAdmin || user.permissions?.includes('view_links')) && (
+                    <NavItem href="/dashboard/links" icon={LinkIcon} label={t("nav.shared")} />
+                )}
+                {(user.isAdmin || user.permissions?.includes('view_gallery')) && (
+                    <NavItem href="/dashboard/gallery" icon={ImageIcon} label={t("nav.gallery")} />
+                )}
+                {(user.isAdmin || user.permissions?.includes('view_statistics')) && (
+                    <NavItem href="/dashboard/statistics" icon={BarChart3} label={t("nav.statistics")} />
+                )}
+                {(user.isAdmin || user.permissions?.includes('view_api_builder')) && (
+                    <NavItem href="/dashboard/api-builder" icon={Code} label={t("nav.apiBuilder")} />
+                )}
                 <NavItem href="/dashboard/settings" icon={Settings} label={t("nav.settings")} />
             </nav>
 

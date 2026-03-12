@@ -38,7 +38,7 @@ export const protect = async (req: AuthRequest, res: Response, next: NextFunctio
             return res.status(401).json({ message: 'Invalid token type' });
         }
 
-        const dbUser = await prisma.user.findUnique({
+        const dbUser = await (prisma as any).user.findUnique({
             where: { id: decoded.id },
             include: {
                 roles: {
@@ -65,14 +65,31 @@ export const protect = async (req: AuthRequest, res: Response, next: NextFunctio
             return res.status(403).json({ message: 'User is deactivated' });
         }
 
-        const roleKeys = dbUser.roles.map((ur) => ur.role.name);
-        const permissionKeys = Array.from(
-            new Set(
-                dbUser.roles.flatMap((ur) =>
-                    ur.role.permissions.map((rp) => rp.permission.key),
+        const DEFAULT_PERMISSIONS = [
+            'view_files',
+            'view_documents',
+            'view_notes',
+            'view_calendar',
+            'view_links',
+            'view_gallery',
+            'view_statistics',
+            'view_api_builder'
+        ];
+
+        let permissionKeys: string[];
+        const userRoles = (dbUser as any).roles || [];
+
+        if (userRoles.length === 0) {
+            permissionKeys = DEFAULT_PERMISSIONS;
+        } else {
+            permissionKeys = Array.from(
+                new Set(
+                    userRoles.flatMap((ur: any) =>
+                        ur.role.permissions.map((rp: any) => rp.permission.key),
+                    ),
                 ),
-            ),
-        );
+            );
+        }
 
         req.user = {
             id: dbUser.id,
@@ -81,7 +98,7 @@ export const protect = async (req: AuthRequest, res: Response, next: NextFunctio
             avatar: dbUser.avatar,
             storageLimit: dbUser.storageLimit,
             isAdmin: dbUser.isAdmin,
-            roles: roleKeys,
+            roles: userRoles.map((ur: any) => ur.role.name),
             permissions: permissionKeys,
         };
         next();

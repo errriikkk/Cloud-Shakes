@@ -308,33 +308,17 @@ export default function SettingsPage() {
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <Link
                                 href="/dashboard/settings/team"
-                                className="group border border-border/60 rounded-xl p-4 hover:border-primary/40 hover:bg-muted/40 transition-colors flex items-start gap-3"
-                            >
-                                <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center">
-                                    <Users className="w-4 h-4 text-primary" />
-                                </div>
-                                <div>
-                                    <div className="text-sm font-semibold text-foreground">
-                                        Gestión de equipo
-                                    </div>
-                                    <p className="text-xs text-muted-foreground mt-1">
-                                        Invita a más personas, asigna roles y suspende accesos.
-                                    </p>
-                                </div>
-                            </Link>
-                            <Link
-                                href="/dashboard/settings/roles"
-                                className="group border border-border/60 rounded-xl p-4 hover:border-primary/40 hover:bg-muted/40 transition-colors flex items-start gap-3"
+                                className="col-span-1 md:col-span-2 group border border-border/60 rounded-xl p-4 hover:border-primary/40 hover:bg-muted/40 transition-colors flex items-start gap-3"
                             >
                                 <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center">
                                     <Shield className="w-4 h-4 text-primary" />
                                 </div>
                                 <div>
                                     <div className="text-sm font-semibold text-foreground">
-                                        Roles y permisos
+                                        Gestión de Equipo y Roles
                                     </div>
                                     <p className="text-xs text-muted-foreground mt-1">
-                                        Define qué puede hacer cada tipo de usuario dentro del Cloud.
+                                        Gestiona usuarios, invitaciones rápidas, grupos y todos los permisos de tu plataforma en un solo lugar.
                                     </p>
                                 </div>
                             </Link>
