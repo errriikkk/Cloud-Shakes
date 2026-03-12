@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Clock, User as UserIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -90,9 +91,14 @@ function ActivityHistoryPanel({ user, resourceId, resourceType, onClose }: Activ
     const [history, setHistory] = useState<ActivityEntry[]>([]);
     const [loading, setLoading] = useState(true);
     const [isMobile, setIsMobile] = useState(false);
+    const [mounted, setMounted] = useState(false);
 
     useEffect(() => {
+        setMounted(true);
         setIsMobile(window.innerWidth < 768);
+        const handleResize = () => setIsMobile(window.innerWidth < 768);
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
     }, []);
 
     useEffect(() => {
@@ -115,47 +121,68 @@ function ActivityHistoryPanel({ user, resourceId, resourceType, onClose }: Activ
         fetchHistory();
     }, [resourceId, resourceType]);
 
-    return (
+    // Prevent body scroll when panel open
+    useEffect(() => {
+        document.body.style.overflow = 'hidden';
+        return () => { document.body.style.overflow = ''; };
+    }, []);
+
+    if (!mounted) return null;
+
+    const content = (
         <>
-            {/* Overlay */}
+            {/* Full-screen dark overlay */}
             <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
+                transition={{ duration: 0.2 }}
                 onClick={onClose}
-                className="fixed inset-0 bg-black/30 backdrop-blur-[2px] z-[200]"
+                style={{ position: 'fixed', inset: 0, zIndex: 99998 }}
+                className="bg-black/50 backdrop-blur-sm"
             />
 
-            {/* Panel */}
+            {/* Modal panel */}
             <motion.div
-                initial={isMobile ? { y: "100%" } : { x: "100%" }}
-                animate={isMobile ? { y: 0 } : { x: 0 }}
-                exit={isMobile ? { y: "100%" } : { x: "100%" }}
-                transition={{ type: "spring", stiffness: 400, damping: 35 }}
+                initial={isMobile ? { y: "100%" } : { opacity: 0, scale: 0.95 }}
+                animate={isMobile ? { y: 0 } : { opacity: 1, scale: 1 }}
+                exit={isMobile ? { y: "100%" } : { opacity: 0, scale: 0.95 }}
+                transition={isMobile
+                    ? { type: "spring", stiffness: 400, damping: 35 }
+                    : { duration: 0.25, ease: [0.4, 0, 0.2, 1] }
+                }
+                style={{ zIndex: 99999 }}
                 className={cn(
-                    "fixed z-[201] bg-sidebar border-border shadow-2xl overflow-hidden flex flex-col",
+                    "fixed bg-sidebar shadow-2xl overflow-hidden flex flex-col border border-border/60",
                     isMobile
-                        ? "inset-x-0 bottom-0 rounded-t-3xl max-h-[70vh] border-t"
-                        : "top-0 right-0 h-full w-96 border-l"
+                        ? "inset-x-0 bottom-0 rounded-t-3xl max-h-[80vh]"
+                        : "top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md rounded-3xl max-h-[70vh]"
                 )}
             >
+                {/* Drag handle on mobile */}
+                {isMobile && (
+                    <div className="flex justify-center pt-3 pb-1">
+                        <div className="w-10 h-1 rounded-full bg-muted-foreground/20" />
+                    </div>
+                )}
+
                 {/* Header */}
                 <div className="flex items-center justify-between px-5 py-4 border-b border-border/40">
                     <div className="flex items-center gap-3">
                         <div
-                            className="w-9 h-9 rounded-full flex items-center justify-center font-bold text-white text-sm shadow-sm"
+                            className="w-10 h-10 rounded-full flex items-center justify-center font-bold text-white text-sm shadow-md"
                             style={{ backgroundColor: userColor(user.id) }}
                         >
                             {(user.displayName || user.username || "?").charAt(0).toUpperCase()}
                         </div>
                         <div>
                             <p className="text-sm font-bold text-foreground">{user.displayName || user.username}</p>
-                            <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Última modificación</p>
+                            <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Historial de actividad</p>
                         </div>
                     </div>
                     <button
                         onClick={onClose}
-                        className="p-2 hover:bg-muted rounded-xl transition-colors"
+                        className="p-2.5 hover:bg-muted rounded-xl transition-colors"
                     >
                         <X className="w-5 h-5 text-muted-foreground" />
                     </button>
@@ -179,10 +206,10 @@ function ActivityHistoryPanel({ user, resourceId, resourceType, onClose }: Activ
                         history.map((entry) => (
                             <div
                                 key={entry.id}
-                                className="flex items-start gap-3 p-3 rounded-xl bg-muted/20 border border-border/30"
+                                className="flex items-start gap-3 p-3 rounded-xl bg-muted/20 border border-border/30 transition-colors hover:bg-muted/30"
                             >
                                 <div
-                                    className="w-7 h-7 rounded-full flex items-center justify-center font-bold text-white text-[10px] shrink-0 mt-0.5"
+                                    className="w-7 h-7 rounded-full flex items-center justify-center font-bold text-white text-[10px] shrink-0 mt-0.5 shadow-sm"
                                     style={{ backgroundColor: userColor(entry.owner.id) }}
                                 >
                                     {(entry.owner.displayName || entry.owner.username || "?").charAt(0).toUpperCase()}
@@ -208,4 +235,7 @@ function ActivityHistoryPanel({ user, resourceId, resourceType, onClose }: Activ
             </motion.div>
         </>
     );
+
+    return createPortal(content, document.body);
 }
+
