@@ -48,6 +48,7 @@ export const API_ENDPOINTS = {
         ROLES: `${API_URL}/api/roles`,
         TEAM_INVITATIONS: `${API_URL}/api/team/invitations`,
         ACCEPT_INVITATION: `${API_URL}/api/team/invitations/accept`,
+        INVITE_INFO: (token: string) => `${API_URL}/api/team/invitations/info/${token}`,
     },
 };
 
