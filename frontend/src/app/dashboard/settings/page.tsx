@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
-import { Settings, User, Lock, Camera, Save, X, Loader2, Globe } from "lucide-react";
+import { Settings, User, Lock, Camera, Save, X, Loader2, Globe, Shield, Users } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { motion, AnimatePresence } from "framer-motion";
@@ -288,6 +289,58 @@ export default function SettingsPage() {
                         </Button>
                     </div>
                 </motion.div>
+
+                {/* Team & Roles shortcuts (only for admin) */}
+                {user?.isAdmin && (
+                    <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.15 }}
+                        className="bg-background border border-border/60 rounded-2xl p-6 shadow-sm"
+                    >
+                        <div className="flex items-center gap-3 mb-6">
+                            <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+                                <Settings className="w-5 h-5 text-primary" />
+                            </div>
+                            <h2 className="text-xl font-bold text-foreground">Seguridad y equipo</h2>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <Link
+                                href="/dashboard/settings/team"
+                                className="group border border-border/60 rounded-xl p-4 hover:border-primary/40 hover:bg-muted/40 transition-colors flex items-start gap-3"
+                            >
+                                <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center">
+                                    <Users className="w-4 h-4 text-primary" />
+                                </div>
+                                <div>
+                                    <div className="text-sm font-semibold text-foreground">
+                                        Gestión de equipo
+                                    </div>
+                                    <p className="text-xs text-muted-foreground mt-1">
+                                        Invita a más personas, asigna roles y suspende accesos.
+                                    </p>
+                                </div>
+                            </Link>
+                            <Link
+                                href="/dashboard/settings/roles"
+                                className="group border border-border/60 rounded-xl p-4 hover:border-primary/40 hover:bg-muted/40 transition-colors flex items-start gap-3"
+                            >
+                                <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center">
+                                    <Shield className="w-4 h-4 text-primary" />
+                                </div>
+                                <div>
+                                    <div className="text-sm font-semibold text-foreground">
+                                        Roles y permisos
+                                    </div>
+                                    <p className="text-xs text-muted-foreground mt-1">
+                                        Define qué puede hacer cada tipo de usuario dentro del Cloud.
+                                    </p>
+                                </div>
+                            </Link>
+                        </div>
+                    </motion.div>
+                )}
             </div>
         </>
     );

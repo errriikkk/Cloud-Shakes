@@ -43,9 +43,11 @@ export const API_ENDPOINTS = {
     ACTIVITY: {
         BASE: `${API_URL}/api/activity`,
     },
-    CALENDAR: {
-        BASE: `${API_URL}/api/calendar`,
-        DETAIL: (id: string) => `${API_URL}/api/calendar/${id}`,
+    IAM: {
+        USERS: `${API_URL}/api/users`,
+        ROLES: `${API_URL}/api/roles`,
+        TEAM_INVITATIONS: `${API_URL}/api/team/invitations`,
+        ACCEPT_INVITATION: `${API_URL}/api/team/invitations/accept`,
     },
 };
 

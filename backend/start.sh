@@ -1,9 +1,6 @@
 #!/bin/sh
 set -e
 
-# Convert Windows line endings to Unix (just in case)
-sed -i 's/\r$//' "$0"
-
 HOST=${DB_HOST:-postgres}
 PORT=${DB_PORT:-5432}
 
