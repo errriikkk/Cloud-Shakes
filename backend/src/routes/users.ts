@@ -79,13 +79,15 @@ router.patch('/:id', protect, requirePermission('manage_users'), async (req: Aut
             data: {
                 ...updateData,
                 roles:
-                    rolesToAssign && rolesToAssign.length
+                    data.roles && data.roles.length > 0 && rolesToAssign
                         ? {
                               deleteMany: {},
                               create: rolesToAssign.map((r: any) => ({
                                   roleId: r.id,
                               })),
                           }
+                        : data.roles && data.roles.length === 0
+                        ? { deleteMany: {} }
                         : undefined,
             },
             include: {

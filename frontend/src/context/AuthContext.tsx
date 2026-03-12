@@ -273,7 +273,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
         // Auto-refresh auth state when window regains focus to fetch new permissions/roles instantly
         const onFocus = () => {
-            if (user) {
+            if (window.location.pathname.startsWith("/dashboard")) {
                 checkAuth();
             }
         };

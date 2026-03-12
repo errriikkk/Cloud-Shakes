@@ -76,7 +76,7 @@ router.put('/:id', protect, async (req: AuthRequest, res, next) => {
             return res.status(404).json({ message: 'Nota no encontrada' });
         }
 
-        if (existing.ownerId !== req.user.id && !req.user.isAdmin) {
+        if (existing.ownerId !== req.user.id && !req.user.isAdmin && !(req.user.permissions || []).includes('view_notes')) {
             return res.status(403).json({ message: 'No autorizado' });
         }
 
@@ -113,7 +113,7 @@ router.delete('/:id', protect, async (req: AuthRequest, res, next) => {
             return res.status(404).json({ message: 'Nota no encontrada' });
         }
 
-        if (note.ownerId !== req.user.id && !req.user.isAdmin) {
+        if (note.ownerId !== req.user.id && !req.user.isAdmin && !(req.user.permissions || []).includes('view_notes')) {
             return res.status(403).json({ message: 'No autorizado' });
         }
 
