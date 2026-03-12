@@ -13,6 +13,8 @@ interface User {
     avatarUrl?: string | null;
     isAdmin: boolean;
     storageLimit: string;
+    permissions?: string[];
+    roles?: string[];
 }
 
 interface AuthContextType {
@@ -268,7 +270,18 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         if (!user) {
             checkAuth();
         }
-    }, [pathname, router, user]);
+
+        // Auto-refresh auth state when window regains focus to fetch new permissions/roles instantly
+        const onFocus = () => {
+            if (user) {
+                checkAuth();
+            }
+        };
+
+        window.addEventListener("focus", onFocus);
+        return () => window.removeEventListener("focus", onFocus);
+
+    }, [pathname, router]); // deliberately left 'user' out of deps so the focus event always references latest checkAuth
 
     return (
         <AuthContext.Provider value={{ user, csrfToken, loading, logout }}>

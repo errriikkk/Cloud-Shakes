@@ -169,6 +169,11 @@ router.post('/logout', (req, res) => {
 // @desc    Get current user profile
 // @access  Private
 router.get('/me', protect, async (req: AuthRequest, res, next) => {
+    // Force browser not to cache this response so permissions updates reflect immediately on F5 or focus
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    
     try {
         const user = req.user;
         const csrfToken = req.cookies['csrf-token'];
