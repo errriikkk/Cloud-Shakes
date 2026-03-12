@@ -379,8 +379,10 @@ export default function TeamRolesSettingsPage() {
                                 <div className="space-y-3">
                                     <div className="flex gap-3">
                                         <Input placeholder="Nombre del Rol" value={newRoleName} onChange={e => setNewRoleName(e.target.value)} className="flex-1" />
-                                        <Input placeholder="Descripción (opciona)" value={newRoleDescription} onChange={e => setNewRoleDescription(e.target.value)} className="flex-2" />
-                                        <Button onClick={handleCreateRole} disabled={!newRoleName || creatingRole}>Crear</Button>
+                                        <Input placeholder="Descripción (opcional)" value={newRoleDescription} onChange={e => setNewRoleDescription(e.target.value)} className="flex-[2]" />
+                                        <Button onClick={handleCreateRole} disabled={!newRoleName || creatingRole}>
+                                            {creatingRole ? <Loader2 className="w-4 h-4 animate-spin" /> : "Crear"}
+                                        </Button>
                                     </div>
                                     <div className="pt-2">
                                         <div className="text-xs font-semibold text-muted-foreground uppercase mb-2">Permisos Opcionales</div>

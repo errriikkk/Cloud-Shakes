@@ -111,25 +111,56 @@ router.patch('/:id', protect, requirePermission('manage_roles'), async (req: Aut
               })
             : null;
 
-        const updated = await (prisma as any).role.update({
-            where: { id },
-            data: {
-                name: data.name ?? existing.name,
-                description: data.description ?? existing.description,
-                permissions:
-                    permissions && permissions.length
-                        ? {
-                              deleteMany: {},
-                              create: permissions.map((p: any) => ({
-                                  permissionId: p.id,
-                              })),
-                          }
-                        : undefined,
-            },
-            include: {
-                permissions: { include: { permission: true } },
-            },
-        });
+        let updated;
+
+        if (permissions !== null) {
+            // Update role and replace all permissions using a transaction
+            updated = await prisma.$transaction(async (tx: any) => {
+                // 1. Update basic role info
+                await tx.role.update({
+                    where: { id },
+                    data: {
+                        name: data.name ?? existing.name,
+                        description: data.description ?? existing.description,
+                    },
+                });
+
+                // 2. Wipe old permissions
+                await tx.rolePermission.deleteMany({
+                    where: { roleId: id },
+                });
+
+                // 3. Create new permissions
+                if (permissions.length > 0) {
+                    await tx.rolePermission.createMany({
+                        data: permissions.map((p: any) => ({
+                            roleId: id,
+                            permissionId: p.id,
+                        })),
+                    });
+                }
+
+                // 4. Return updated role with permissions
+                return await tx.role.findUnique({
+                    where: { id },
+                    include: {
+                        permissions: { include: { permission: true } },
+                    },
+                });
+            });
+        } else {
+            // Just update basic info
+            updated = await (prisma as any).role.update({
+                where: { id },
+                data: {
+                    name: data.name ?? existing.name,
+                    description: data.description ?? existing.description,
+                },
+                include: {
+                    permissions: { include: { permission: true } },
+                },
+            });
+        }
 
         res.json({
             id: updated.id,
