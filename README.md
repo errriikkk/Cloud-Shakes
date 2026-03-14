@@ -1,171 +1,263 @@
-# ☁️ Cloud Shakes – Open Source Cloud Management Platform
-
-Cloud Shakes is a modern, scalable solution for file storage, management, and sharing, designed to offer a seamless, secure, and highly customizable experience.
+# ☁️ Cloud Shakes – Open Source Cloud Platform
 
 
-![Cloud-Shakes RoadMap March](assets/ROADMAPMARCH.png)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Version](https://img.shields.io/badge/Version-1.0.0-blue.svg)](https://github.com/errriikkk/Cloud-Shakes/releases)
+[![Docker](https://img.shields.io/badge/Docker-Ready-blue.svg)](https://www.docker.com/)
+[![Next.js](https://img.shields.io/badge/Next.js-15-black.svg)](https://nextjs.org/)
 
+</div>
 
-🌐 **Website:** [shakes.es](https://shakes.es)
+---
 
-📚 **Documentation:** [docs.shakes.es](https://docs.shakes.es)
+## 🚀 Installation (One Command)
 
-📹 **Video:** [Presentation](https://youtu.be/q5rOE5Qmwqs?si=JSmPzq3ONtJ1DZ9t)
+```bash
+curl -fsSL https://shakes.es/install | sudo bash
+```
 
-## Features
+<p align="center">
+  <img src="assets/install_gif.gif" alt="Cloud Shakes Installer" width="800"/>
+</p>
 
-- **Cloud Storage** with an intuitive interface
-- **File & Folder Management** with drag & drop support
-- **Integrated File Preview**
-- **Secure Shared Links** system
-- **Responsive Interface** for all devices
-- **Progressive Uploads** with visual indicators
-- **Advanced Search** functionality
-- **Document & Note Management**
-- **Integrated Calendar**
-- **Usage Statistics**
-- **Enhanced Security** with validation and auditing
+**That's it!** The installer will guide you through a fully automated setup in just a few minutes.
+
+### What the Installer Handles
+
+| Component | Automated |
+|-----------|-----------|
+| ✅ Docker & Docker Compose | ✓ |
+| ✅ PostgreSQL Database | ✓ |
+| ✅ MinIO S3 Storage | ✓ |
+| ✅ Frontend (Next.js) | ✓ |
+| ✅ Backend API | ✓ |
+| ✅ SSL/HTTPS Configuration | ✓ |
+| ✅ Cloudflare Tunnel | ✓ (optional) |
+
+---
+
+## ✨ Why Cloud Shakes?
+
+<p align="center">
+  <img src="assets/home_gif.gif" alt="Cloud Shakes Interface" width="800"/>
+</p>
+
+### 🎯 Incredibly Easy
+
+- **Single command** installation – no manual setup required
+- **Interactive wizard** guides you through every step
+- **Auto-generates** secure credentials for you
+- **Zero configuration** – works out of the box
+
+### 🔒 Enterprise-Grade Security
+
+- **JWT Authentication** with secure token management
+- **Rate Limiting** on all critical endpoints
+- **Input Validation** with Zod
+- **CSP & Helmet** security headers
+- **File Type Validation** & filename sanitization
+- **Audit Logs** for all administrative actions
+
+### ⚡ Modern Architecture
+
+- **Next.js 15** with App Router for blazing-fast frontend
+- **REST API** with Express.js & TypeScript
+- **PostgreSQL** with Prisma ORM for reliable data storage
+- **MinIO** (S3-compatible) for scalable object storage
+- **Docker** containerization for easy deployment
+
+---
+
+## 📊 Cloud Shakes vs Nextcloud Advanced
+
+| Feature | Cloud Shakes | Nextcloud Advanced |
+|---------|:------------:|:------------------:|
+| **Installation** | `curl -fsSL https://shakes.es/install | sudo bash` | Manual Docker/VM setup required |
+| **Setup Time** | ~5 minutes | ~1-2 hours |
+| **One-Click Deploy** | ✅ | ❌ |
+| **Modern UI** | ✅ Next.js 15 + Tailwind | ⚠️ PHP-based |
+| **S3 Storage** | ✅ Native MinIO | ⚠️ External required |
+| **API-First** | ✅ Full REST API | ⚠️ Limited |
+| **TypeScript** | ✅ Full TypeScript | ❌ PHP |
+| **Docker Native** | ✅ Optimized images | ⚠️ Community images |
+| **Responsive Design** | ✅ Mobile-first | ✅ |
+| **File Preview** | ✅ Integrated | ✅ |
+| **Shared Links** | ✅ Secure + expirable | ✅ |
+| **Search** | ✅ Advanced | ✅ |
+| **Calendar** | ✅ Integrated | ✅ |
+| **Notes** | ✅ Integrated | ⚠️ App required |
+| **Usage Stats** | ✅ Real-time | ⚠️ App required |
+| **Open Source** | ✅ MIT License | ✅ AGPL |
+| **Self-Hosted** | ✅ 100% | ✅ 100% |
+
+### Key Advantages
+
+- **10x Faster Installation** – One command vs hours of manual work
+- **Modern Stack** – TypeScript, Next.js, Prisma vs legacy PHP
+- **Built-in S3** – No external storage configuration needed
+- **API-First Design** – Perfect for integrations and custom clients
+
+---
 
 ## 🛠️ Tech Stack
 
 ### Frontend
-- **Next.js 15** with App Router
-- **TypeScript** for type safety
-- **Tailwind CSS** for modern styling
-- **Framer Motion** for fluid animations
-- **Lucide React** for icons
-- **Axios** for HTTP requests
+- **Next.js 15** – App Router, React Server Components
+- **TypeScript** – Full type safety
+- **Tailwind CSS** – Modern utility-first styling
+- **Framer Motion** – Smooth animations
+- **Lucide React** – Consistent icon set
+- **Axios** – HTTP client
 
 ### Backend
-- **Node.js** with Express 4
-- **TypeScript**
-- **Prisma** as the ORM
-- **PostgreSQL** as the database
-- **JWT** for authentication
-- **Multer** for file handling
-- **Helmet** for security headers
-- **Rate Limiting** for protection
+- **Node.js** + Express 4
+- **TypeScript** – Type-safe backend
+- **Prisma** – Modern ORM
+- **PostgreSQL** – Production database
+- **JWT** – Secure authentication
+- **Multer** – File uploads
+- **Helmet** – Security headers
 
-## 📦 Installation
+### Infrastructure
+- **Docker** + Docker Compose
+- **MinIO** – S3-compatible storage
+- **Cloudflare Tunnel** – Optional no-port-forwarding
+
+---
+
+## 📖 Quick Start
 
 ### Prerequisites
-- Node.js 18+
-- PostgreSQL 13+
-- npm or yarn
+- Ubuntu/Debian, CentOS/RHEL, or Arch Linux
+- Root access
+- Internet connection
 
-### Backend Setup
+### Installation
 
-1. Clone the repository:
 ```bash
+# One command to rule them all
+curl -fsSL https://shakes.es/install | sudo bash
+```
+
+The installer will ask you a few questions:
+1. **Language** – English or Español
+2. **Installation directory** – Default: `/opt/cloud-shakes`
+3. **Admin credentials** – Auto-generated if left blank
+4. **Ports** – Customize or use defaults (9090/5000/9000)
+5. **Network mode** – Local, Public IP, or Cloudflare Tunnel
+
+That's it! 🎉
+
+---
+
+## 🔧 Manual Installation (Advanced)
+
+If you prefer manual setup:
+
+```bash
+# 1. Clone the repository
 git clone https://github.com/errriikkk/Cloud-Shakes.git
 cd Cloud-Shakes
-```
 
-2. Configure environment variables:
-```bash
+# 2. Backend
 cd backend
 cp .env.example .env
-# Edit .env with your credentials
-```
+# Edit .env with your PostgreSQL credentials
 
-3. Install dependencies and run migrations:
-```bash
 npm install
 npm run db:generate
 npm run db:migrate
 npm run dev
-```
 
-### Frontend Setup
-
-1. In a new terminal:
-```bash
+# 3. Frontend (new terminal)
 cd frontend
 cp .env.example .env.local
-# Edit .env.local with the backend URL
-```
+# Set NEXT_PUBLIC_API_URL
 
-2. Install dependencies and start the app:
-```bash
 npm install
 npm run dev
 ```
 
-## 📂 Project Structure
+---
 
-```
-cloud-shakes/
-├── frontend/          # Next.js Application
-├── backend/           # Express REST API
-└── assets/           # Images and resources
-```
+## 🌐 Access URLs
 
-## ⚙️ Environment Variables
+After installation, access your cloud:
+
+| Service | URL |
+|---------|-----|
+| **Frontend** | `http://localhost:9090` |
+| **API** | `http://localhost:5000` |
+| **MinIO Console** | `http://localhost:9001` |
+
+---
+
+## 🔐 Environment Variables
 
 ### Backend (.env)
-- `DATABASE_URL`: PostgreSQL connection string.
-- `JWT_SECRET`: Secret key for JWT signing.
-- `UPLOAD_DIR`: Directory for file storage.
-- `ALLOWED_ORIGINS`: CORS configuration.
+```env
+DATABASE_URL=postgresql://user:pass@localhost:5432/shakes
+JWT_SECRET=your-secret-key
+UPLOAD_DIR=/data/uploads
+ALLOWED_ORIGINS=http://localhost:9090
+```
 
 ### Frontend (.env.local)
-- `NEXT_PUBLIC_API_URL`: Backend API endpoint.
+```env
+NEXT_PUBLIC_API_URL=http://localhost:5000
+```
 
-## 🔒 Security
+---
 
-Implemented security features:
-- **Input Validation** with Zod
-- **Rate Limiting** on critical endpoints
-- **Strict CORS** configuration
-- **CSP with Helmet**
-- **Filename Sanitization**
-- **File Type Validation**
-- **Audit Logs** for administrative actions
-- **CSRF Protection**
+## 🐳 Docker Deployment
 
-## 🚀 Deployment
-
-### Docker
 ```bash
+# Using the installer (recommended)
+curl -fsSL https://shakes.es/install | sudo bash
+
+# Or manually with docker-compose
 docker-compose up -d
 ```
 
-### Production
-Build and start the services manually:
-```bash
-# Backend
-cd backend && npm run build && npm start
-
-# Frontend
-cd frontend && npm run build && npm start
-```
+---
 
 ## 🤝 Contributing
 
 Contributions are welcome!
-1. Fork the project
+
+1. Fork the repository
 2. Create your feature branch (`git checkout -b feature/amazing-feature`)
 3. Commit your changes (`git commit -m 'Add amazing feature'`)
 4. Push to the branch (`git push origin feature/amazing-feature`)
 5. Open a Pull Request
 
+---
+
 ## 📄 License
 
-This project is licensed under the MIT License with commercial restrictions. See the [LICENSE](LICENSE) file for details.
+MIT License with commercial restrictions. See [LICENSE](LICENSE) file.
 
-### Important Restrictions
-- ✅ Personal and internal organizational use.
-- ❌ Reselling or redistributing as a standalone product.
-- ✅ Modifying for internal use.
-- ❌ Removing copyright notices.
-
-## 💖 Acknowledgments
-
-- Next.js team
-- Tailwind CSS team
-- Prisma team
-- Lucide icons
+### Usage Terms
+- ✅ Personal and internal organizational use
+- ✅ Modifying for internal use
+- ❌ Reselling or redistributing as a standalone product
+- ❌ Removing copyright notices
 
 ---
 
-**Made with ❤️ by the open-source community**
+## 🔗 Links
+
+| Resource | URL |
+|----------|-----|
+| 🌐 **Website** | [shakes.es](https://shakes.es) |
+| 📚 **Documentation** | [docs.shakes.es](https://docs.shakes.es) |
+| 🎥 **Video** | [Presentation](https://youtu.be/q5rOE5Qmwqs) |
+| 🐛 **Issues** | [GitHub Issues](https://github.com/errriikkk/Cloud-Shakes/issues) |
+
+---
+
+<div align="center">
+
+**Built with ❤️ by the open-source community**
+
+</div>
