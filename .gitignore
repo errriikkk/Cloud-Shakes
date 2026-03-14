@@ -23,8 +23,9 @@ build/
 *.sqlite3
 
 # Uploads
+!frontend/src/app/dashboard/files
+!frontend/src/app/dashboard/files/page.tsx
 uploads/
-files/
 
 # Logs
 logs
