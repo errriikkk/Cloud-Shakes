@@ -9,7 +9,10 @@ import axios from "axios";
 import { API_ENDPOINTS } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { useModal } from "@/hooks/useModal";
+import { useTranslation } from "@/lib/i18n";
 import { ActivityAvatar } from "@/components/ActivityAvatar";
+import { usePermission } from "@/hooks/usePermission";
+import { PermissionGuard } from "@/components/PermissionGuard";
 
 interface Note {
     id: string;
@@ -33,19 +36,25 @@ const COLORS = [
 
 export default function NotesPage() {
     const { user } = useAuth();
+    const { t } = useTranslation();
     const { confirm, alert, ModalComponents } = useModal();
+    const { canViewNotes, canCreateNotes, canEditNotes, canDeleteNotes } = usePermission();
     const [notes, setNotes] = useState<Note[]>([]);
     const [loading, setLoading] = useState(true);
     const [isCreating, setIsCreating] = useState(false);
 
     useEffect(() => {
-        fetchNotes();
-    }, []);
+        if (user && (user.isAdmin || user.permissions?.includes('view_notes'))) {
+            fetchNotes();
+        }
+    }, [user]);
 
     const fetchNotes = async () => {
         try {
             const res = await axios.get(API_ENDPOINTS.NOTES.BASE, { withCredentials: true });
-            setNotes(res.data);
+            // Handle both old array and new {data, pagination} format
+            const notes = res.data.data || res.data || [];
+            setNotes(notes);
         } catch (err) {
             console.error(err);
         } finally {
@@ -82,9 +91,9 @@ export default function NotesPage() {
 
     const handleDelete = async (id: string) => {
         const confirmed = await confirm(
-            "Eliminar Nota",
-            "¿Estás seguro de que quieres eliminar esta nota? Esta acción no se puede deshacer.",
-            { type: 'danger', confirmText: 'Eliminar', cancelText: 'Cancelar' }
+            t('notes.delete'),
+            t('notes.confirmDelete'),
+            { type: 'danger', confirmText: t('common.delete'), cancelText: t('common.cancel') }
         );
         if (!confirmed) return;
         setNotes(prev => prev.filter(n => n.id !== id));
@@ -92,23 +101,23 @@ export default function NotesPage() {
             await axios.delete(API_ENDPOINTS.NOTES.DETAIL(id), { withCredentials: true });
         } catch (err) {
             console.error(err);
-            await alert("Error", "No se pudo eliminar la nota. Por favor, intenta de nuevo.", { type: 'danger' });
+            await alert(t('common.error'), t('common.error'), { type: 'danger' });
         }
     };
 
     // Simple masonry-like grid using CSS columns
     return (
-        <>
+        <PermissionGuard permission="view_notes" redirectUrl="/dashboard/home">
             <ModalComponents />
             <div className="space-y-6 pb-20 md:pb-0">
             <div className="flex items-center justify-between">
                 <div>
-                    <h1 className="text-2xl font-bold tracking-tight">Notas</h1>
-                    <p className="text-muted-foreground text-sm">Ideas rápidas y recordatorios</p>
+                    <h1 className="text-2xl font-bold tracking-tight">{t('notes.title')}</h1>
+                    <p className="text-muted-foreground text-sm">{t('nav.notes')}</p>
                 </div>
-                <Button onClick={handleCreate} disabled={isCreating}>
+                <Button onClick={handleCreate} disabled={isCreating || !canCreateNotes()} title={canCreateNotes() ? t('notes.newNote') : t('chat.noPermission')}>
                     <Plus className="w-4 h-4 mr-2" />
-                    Nueva Nota
+                    {t('notes.newNote')}
                 </Button>
             </div>
 
@@ -119,7 +128,7 @@ export default function NotesPage() {
             ) : notes.length === 0 ? (
                 <div className="text-center py-20 text-muted-foreground">
                     <StickyNote className="w-12 h-12 mx-auto mb-3 opacity-20" />
-                    <p>No tienes notas aún.</p>
+                    <p>{t('notes.noNotes')}</p>
                 </div>
             ) : (
                 <div className="columns-1 sm:columns-2 lg:columns-3 xl:columns-4 gap-4 space-y-4">
@@ -128,19 +137,21 @@ export default function NotesPage() {
                             <NoteCard
                                 key={note.id}
                                 note={note}
+                                canDelete={canDeleteNotes()}
                                 onUpdate={handleUpdate}
                                 onDelete={handleDelete}
+                                t={t}
                             />
                         ))}
                     </AnimatePresence>
                 </div>
             )}
         </div>
-        </>
+        </PermissionGuard>
     );
 }
 
-function NoteCard({ note, onUpdate, onDelete }: { note: Note, onUpdate: (id: string, data: Partial<Note>) => void, onDelete: (id: string) => void }) {
+function NoteCard({ note, canDelete, onUpdate, onDelete, t }: { note: Note, canDelete: boolean, onUpdate: (id: string, data: Partial<Note>) => void, onDelete: (id: string) => void, t: any }) {
     const [title, setTitle] = useState(note.title);
     const [content, setContent] = useState(note.content);
     const [isSyncing, setIsSyncing] = useState(false);
@@ -194,7 +205,7 @@ function NoteCard({ note, onUpdate, onDelete }: { note: Note, onUpdate: (id: str
                 <input
                     type="text"
                     value={title}
-                    placeholder="Título"
+                    placeholder={t('notes.untitled')}
                     onChange={handleTitleChange}
                     className="flex-1 bg-transparent font-bold text-lg placeholder:text-black/20 outline-none"
                 />
@@ -210,7 +221,7 @@ function NoteCard({ note, onUpdate, onDelete }: { note: Note, onUpdate: (id: str
             </div>
             <textarea
                 value={content}
-                placeholder="Escribe algo..."
+                placeholder={t('notes.untitled')}
                 onChange={handleContentChange}
                 className="w-full bg-transparent resize-none outline-none text-sm min-h-[100px] placeholder:text-black/30 leading-relaxed"
             />
@@ -223,7 +234,7 @@ function NoteCard({ note, onUpdate, onDelete }: { note: Note, onUpdate: (id: str
                         resourceType="note"
                     />
                     <span className="text-[9px] font-bold uppercase tracking-widest opacity-30">
-                        {isSyncing ? "Sincronizando..." : lastSynced ? "Sincronizado" : ""}
+                        {isSyncing ? t('common.saving') : lastSynced ? t('common.success') : ""}
                     </span>
                 </div>
                 <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -241,8 +252,10 @@ function NoteCard({ note, onUpdate, onDelete }: { note: Note, onUpdate: (id: str
                         ))}
                     </div>
                     <button
-                        onClick={() => onDelete(note.id)}
-                        className="p-1.5 text-black/30 hover:text-red-500 hover:bg-black/5 rounded-lg transition-colors"
+                        onClick={() => canDelete ? onDelete(note.id) : null}
+                        disabled={!canDelete}
+                        title={canDelete ? t('common.delete') : t('chat.noPermission')}
+                        className="p-1.5 text-black/30 hover:text-red-500 hover:bg-black/5 rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                     >
                         <Trash2 className="w-3.5 h-3.5" />
                     </button>

@@ -1,11 +1,18 @@
 import * as Minio from 'minio';
 
+const MINIO_ROOT_USER = process.env.MINIO_ROOT_USER;
+const MINIO_ROOT_PASSWORD = process.env.MINIO_ROOT_PASSWORD;
+
+if (!MINIO_ROOT_USER || !MINIO_ROOT_PASSWORD) {
+    throw new Error('MINIO_ROOT_USER and MINIO_ROOT_PASSWORD environment variables are required');
+}
+
 const minioClient = new Minio.Client({
     endPoint: process.env.MINIO_ENDPOINT || 'localhost',
     port: parseInt(process.env.MINIO_PORT || '9000'),
     useSSL: false,
-    accessKey: process.env.MINIO_ROOT_USER || 'minioadmin',
-    secretKey: process.env.MINIO_ROOT_PASSWORD || 'miniopassword',
+    accessKey: MINIO_ROOT_USER,
+    secretKey: MINIO_ROOT_PASSWORD,
 });
 
 const BUCKET_NAME = process.env.MINIO_BUCKET_NAME || 'my-cloud-files';

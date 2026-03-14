@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
-import { Settings, User, Lock, Camera, Save, X, Loader2, Globe, Shield, Users } from "lucide-react";
+import { Settings, User, Lock, Camera, Save, X, Loader2, Globe, Shield, Users, Puzzle, Search, Download, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { motion, AnimatePresence } from "framer-motion";
@@ -14,6 +14,15 @@ import { cn } from "@/lib/utils";
 import { useTranslation, Locale } from "@/lib/i18n";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+const MARKETPLACE_API = process.env.NEXT_PUBLIC_MARKETPLACE_URL || 'http://localhost:5050';
+
+interface Plugin {
+    id: string;
+    name: string;
+    description: string;
+    author: { name: string };
+    versions: { version: string; createdAt: string }[];
+}
 
 export default function SettingsPage() {
     const { user, loading: authLoading } = useAuth();
@@ -30,6 +39,10 @@ export default function SettingsPage() {
         new: "",
         confirm: "",
     });
+    const [extensions, setExtensions] = useState<Plugin[]>([]);
+    const [extensionsLoading, setExtensionsLoading] = useState(false);
+    const [extensionSearch, setExtensionSearch] = useState("");
+    const [installingId, setInstallingId] = useState<string | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
@@ -115,6 +128,43 @@ export default function SettingsPage() {
             setLoading(false);
         }
     };
+
+    const fetchExtensions = useCallback(async () => {
+        setExtensionsLoading(true);
+        try {
+            const res = await axios.get(`${MARKETPLACE_API}/api/catalog`);
+            setExtensions(res.data);
+        } catch (err) {
+            console.error("Failed to fetch extensions:", err);
+        } finally {
+            setExtensionsLoading(false);
+        }
+    }, []);
+
+    useEffect(() => {
+        fetchExtensions();
+    }, [fetchExtensions]);
+
+    const handleInstallExtension = async (pluginId: string) => {
+        setInstallingId(pluginId);
+        try {
+            await axios.post(`${MARKETPLACE_API}/api/install`, {
+                coreInstanceId: `settings-instance-${Date.now()}`,
+                secretHash: 'settings-secret',
+                pluginId: pluginId
+            });
+            alert(t("common.success"), t("extensions.installSuccess"), { type: 'success' });
+        } catch (err: any) {
+            alert(t("common.error"), err.response?.data?.message || t("extensions.error"), { type: 'danger' });
+        } finally {
+            setInstallingId(null);
+        }
+    };
+
+    const filteredExtensions = extensions.filter(ext => 
+        ext.name.toLowerCase().includes(extensionSearch.toLowerCase()) ||
+        ext.description.toLowerCase().includes(extensionSearch.toLowerCase())
+    );
 
     if (authLoading) {
         return (
@@ -290,8 +340,8 @@ export default function SettingsPage() {
                     </div>
                 </motion.div>
 
-                {/* Team & Roles shortcuts (roles/permissions based) */}
-                {user && (user.isAdmin || user.permissions?.includes("manage_users") || user.permissions?.includes("manage_roles")) && (
+                {/* Team Section - Only for admins */}
+                {user && user.isAdmin && (
                     <motion.div
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
@@ -300,31 +350,24 @@ export default function SettingsPage() {
                     >
                         <div className="flex items-center gap-3 mb-6">
                             <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
-                                <Settings className="w-5 h-5 text-primary" />
+                                <Users className="w-5 h-5 text-primary" />
                             </div>
-                            <h2 className="text-xl font-bold text-foreground">Seguridad y equipo</h2>
+                            <h2 className="text-xl font-bold text-foreground">{t("settings.team") || "Team"}</h2>
                         </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <Link
-                                href="/dashboard/settings/team"
-                                className="col-span-1 md:col-span-2 group border border-border/60 rounded-xl p-4 hover:border-primary/40 hover:bg-muted/40 transition-colors flex items-start gap-3"
-                            >
-                                <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center">
-                                    <Shield className="w-4 h-4 text-primary" />
-                                </div>
-                                <div>
-                                    <div className="text-sm font-semibold text-foreground">
-                                        Gestión de Equipo y Roles
-                                    </div>
-                                    <p className="text-xs text-muted-foreground mt-1">
-                                        Gestiona usuarios, invitaciones rápidas, grupos y todos los permisos de tu plataforma en un solo lugar.
-                                    </p>
-                                </div>
-                            </Link>
-                        </div>
+                        <p className="text-xs text-muted-foreground mb-6">{t("settings.teamDesc") || "Manage team members and their access"}</p>
+
+                        <Link
+                            href="/dashboard/settings/team"
+                            className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-xl font-bold text-sm hover:brightness-110 transition-all"
+                        >
+                            <Users className="w-4 h-4" />
+                            {t("settings.manageTeam") || "Manage Team"}
+                        </Link>
                     </motion.div>
                 )}
+
+                {/* Footer or additional content */}
             </div>
         </>
     );

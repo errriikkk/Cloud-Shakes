@@ -1,7 +1,8 @@
 import express from 'express';
 import { z } from 'zod';
 import prisma from '../config/db';
-import { protect, AuthRequest } from '../middleware/authMiddleware';
+import { protect, requirePermission, AuthRequest } from '../middleware/authMiddleware';
+import { createActivity } from './activity';
 import { nanoid } from 'nanoid';
 import { hashPassword, verifyPassword } from '../utils/auth';
 import { ThrottledStream } from '../utils/throttle';
@@ -32,8 +33,8 @@ const updateLinkSchema = z.object({
 
 // @route   GET /api/links/stats
 // @desc    Get link statistics and analytics
-// @access  Private
-router.get('/stats', protect, async (req: AuthRequest, res, next) => {
+// @access  Private - requires view_links permission
+router.get('/stats', protect, requirePermission('view_links'), async (req: AuthRequest, res, next) => {
     try {
         const links = await (prisma.link as any).findMany({
             where: { creatorId: req.user.id },
@@ -170,7 +171,7 @@ router.get('/', protect, async (req: AuthRequest, res, next) => {
 // @route   POST /api/links
 // @desc    Create a shareable link (for files, folders, or documents)
 // @access  Private
-router.post('/', protect, async (req: AuthRequest, res, next) => {
+router.post('/', protect, requirePermission('share_files'), async (req: AuthRequest, res, next) => {
     try {
         const { fileId, documentId, folderId, password, expiresInMinutes, directDownload, isEmbed, customSlug } = createLinkSchema.parse(req.body);
 
@@ -313,6 +314,17 @@ router.post('/', protect, async (req: AuthRequest, res, next) => {
             }
         });
 
+        // Log activity
+        const resourceName = link.file?.originalName || link.document?.title || link.folder?.name || 'Link';
+        await createActivity(
+            req.user.id,
+            'link',
+            'create',
+            link.id,
+            'link',
+            resourceName
+        );
+
         const l = link as any;
         const linkWithSerializedBigInt = {
             ...l,
@@ -448,10 +460,15 @@ router.put('/:id', protect, async (req: AuthRequest, res, next) => {
 // @route   DELETE /api/links/:id
 // @desc    Delete a link
 // @access  Private
-router.delete('/:id', protect, async (req: AuthRequest, res, next) => {
+router.delete('/:id', protect, requirePermission('share_files'), async (req: AuthRequest, res, next) => {
     try {
         const link = await prisma.link.findUnique({
             where: { id: req.params.id as string },
+            include: {
+                file: { select: { originalName: true } },
+                document: { select: { title: true } },
+                folder: { select: { name: true } }
+            },
         });
 
         if (!link) return res.status(404).json({ message: 'Link not found' });
@@ -460,6 +477,17 @@ router.delete('/:id', protect, async (req: AuthRequest, res, next) => {
         }
 
         await prisma.link.delete({ where: { id: req.params.id as string } });
+
+        // Log activity
+        const resourceName = link.file?.originalName || link.document?.title || link.folder?.name || 'Link';
+        await createActivity(
+            req.user.id,
+            'link',
+            'delete',
+            req.params.id as string,
+            'link',
+            resourceName
+        );
 
         res.json({ message: 'Link deleted' });
     } catch (err) {

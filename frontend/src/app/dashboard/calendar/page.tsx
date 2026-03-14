@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/Button";
 import axios from "axios";
 import { API_ENDPOINTS } from "@/lib/api";
 import { format, addMonths, subMonths, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, isToday, startOfWeek, endOfWeek, isWithinInterval, startOfDay, endOfDay, parseISO } from "date-fns";
-import { es } from "date-fns/locale";
+import { es, enUS } from "date-fns/locale";
+import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { EventModal } from "@/components/EventModal";
 import { useModal } from "@/hooks/useModal";
@@ -40,6 +41,9 @@ const COLOR_MAP: Record<string, string> = {
 
 export default function CalendarPage() {
     const { user } = useAuth();
+    const { t, locale } = useTranslation();
+    const dateLocale = locale === 'es' ? es : enUS;
+    
     const { confirm, alert, ModalComponents } = useModal();
     const { isSupported, permission, requestPermission, isIOSDevice, isPWA } = useNotifications();
     const [currentDate, setCurrentDate] = useState(new Date());
@@ -196,7 +200,7 @@ export default function CalendarPage() {
                 {/* Title and Tabs in same line on desktop, stacked on mobile */}
                 <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
                     <h1 className="text-2xl sm:text-3xl font-bold tracking-tight capitalize text-foreground">
-                        {format(currentDate, "MMMM yyyy", { locale: es })}
+                        {format(currentDate, "MMMM yyyy", { locale: dateLocale })}
                     </h1>
                     {/* Tabs - Enhanced with animations, aligned with title */}
                     <div className="relative flex items-center gap-1 bg-muted/40 p-1 rounded-xl border border-border/50 shadow-sm self-start sm:self-center">
@@ -227,8 +231,8 @@ export default function CalendarPage() {
                                 "w-3.5 h-3.5 sm:w-4 sm:h-4 transition-transform shrink-0",
                                 activeTab === 'calendar' && "scale-110"
                             )} />
-                            <span className="hidden sm:inline">Calendario</span>
-                            <span className="sm:hidden">Cal</span>
+                            <span className="hidden sm:inline">{t("nav.calendar")}</span>
+                            <span className="sm:hidden">{t("calendar.shortCal")}</span>
                         </button>
                         <div className="w-px h-5 sm:h-6 bg-border/50" />
                         <button
@@ -244,8 +248,8 @@ export default function CalendarPage() {
                                 "w-3.5 h-3.5 sm:w-4 sm:h-4 transition-transform shrink-0",
                                 activeTab === 'events' && "scale-110"
                             )} />
-                            <span className="hidden sm:inline">Eventos</span>
-                            <span className="sm:hidden">Lista</span>
+                            <span className="hidden sm:inline">{t("calendar.events")}</span>
+                            <span className="sm:hidden">{t("calendar.shortList")}</span>
                             {events.length > 0 && (
                                 <motion.span
                                     initial={{ scale: 0 }}
@@ -270,7 +274,7 @@ export default function CalendarPage() {
                                 <ChevronLeft className="w-5 h-5" />
                             </button>
                             <button onClick={() => setCurrentDate(new Date())} className="text-sm font-bold bg-muted/50 px-4 py-2 hover:bg-muted rounded-xl transition-all active:scale-95">
-                                Hoy
+                                {t("calendar.today")}
                             </button>
                             <button onClick={handleNextMonth} className="p-2 hover:bg-muted rounded-xl transition-colors">
                                 <ChevronRight className="w-5 h-5" />
@@ -279,7 +283,7 @@ export default function CalendarPage() {
                     )}
                     <Button onClick={() => handleOpenCreate(new Date())} className="rounded-xl h-10 shadow-lg shadow-primary/10">
                         <Plus className="w-4 h-4 mr-2" />
-                        Evento
+                        {t("calendar.newEvent")}
                     </Button>
                 </div>
             </div>
@@ -387,9 +391,9 @@ export default function CalendarPage() {
                     ) : sortedEvents.length === 0 ? (
                         <div className="text-center py-20 text-muted-foreground">
                             <CalIcon className="w-12 h-12 mx-auto mb-3 opacity-20" />
-                            <p>No tienes eventos aún.</p>
+                            <p>{t("calendar.noEventsYet")}</p>
                             <Button onClick={() => handleOpenCreate(new Date())} variant="link" className="mt-4">
-                                Crear el primero
+                                {t("calendar.createFirst")}
                             </Button>
                         </div>
                     ) : (

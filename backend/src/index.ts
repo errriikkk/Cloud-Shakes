@@ -36,6 +36,7 @@ import searchRoutes from './routes/search';
 import documentRoutes from './routes/documents';
 import noteRoutes from './routes/notes';
 import calendarRoutes from './routes/calendar';
+import chatRoutes from './routes/chat';
 import apiFlowRoutes from './routes/apiFlows';
 import customRoutes from './routes/custom';
 import profileRoutes from './routes/profile';
@@ -53,38 +54,32 @@ const isProduction = process.env.NODE_ENV === 'production';
 
 // CORS Origins - Configuración robusta multiplataforma
 const getOrigins = () => {
-    const defaultOrigins = [
-        process.env.FRONTEND_URL || 'http://localhost:3000',
-        'https://toolhive.es',
-        'https://api.toolhive.es',
-        'https://cloud.shakes.es',
-        'https://api.shakes.es',
-        'https://www.shakes.es',
-        'https://shakes.es',
+    // En producción, solo usar orígenes de la variable de entorno
+    if (isProduction) {
+        if (process.env.ALLOWED_ORIGINS) {
+            return {
+                origins: process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim()),
+                patterns: []
+            };
+        }
+        throw new Error('ALLOWED_ORIGINS is required in production');
+    }
+
+    // En desarrollo, permitir orígenes configurados + localhost limitado
+    const devOrigins = [
         'http://localhost:3000',
         'http://localhost:5173',
         'http://localhost:5174',
-        // Electron development origins
-        'http://localhost:8080',
-        'http://localhost:8000',
         'http://127.0.0.1:3000',
         'http://127.0.0.1:5173',
-        'http://127.0.0.1:5174'
-    ];
-
-    // Permitir orígenes de desarrollo para Electron
-    const devOrigins = [
-        /^http:\/\/localhost:[0-9]+$/,
-        /^http:\/\/127\.0\.0\.1:[0-9]+$/,
-        /^file:\/\//, // Para Electron en modo file://
-        /^app:\/\/.*$/ // Para Electron en modo app://
+        'http://127.0.0.1:5174',
     ];
 
     if (process.env.ALLOWED_ORIGINS) {
         const extraOrigins = process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim());
-        return { origins: [...new Set([...defaultOrigins, ...extraOrigins])], patterns: devOrigins };
+        return { origins: [...new Set([...devOrigins, ...extraOrigins])], patterns: [] };
     }
-    return { origins: defaultOrigins, patterns: devOrigins };
+    return { origins: devOrigins, patterns: [] };
 };
 
 const allowedOrigins = getOrigins();
@@ -93,7 +88,7 @@ const app = express();
 
 // 1. Logs & CORS Priority (MUST BE FIRST)
 app.use((req, res, next) => {
-    if (req.headers.origin) {
+    if (process.env.DEBUG === 'true' && req.headers.origin) {
         console.log(`[CORS DEBUG] Request from Origin: ${req.headers.origin} to ${req.method} ${req.path}`);
     }
     next();
@@ -104,29 +99,9 @@ const publicEndpoints = ['/api/talks/active-rooms', '/api/links/', '/api/links/p
 const isOriginAllowed = (origin: string | undefined): boolean => {
     if (!origin) return true; // Permitir same-origin y requests sin origin (mobile apps)
     
-    // En desarrollo, ser más permisivo
-    if (!isProduction) {
-        // Permitir localhost, 127.0.0.1, y file:// para Electron
-        if (origin.startsWith('http://localhost') || 
-            origin.startsWith('http://127.0.0.1') ||
-            origin.startsWith('file://') ||
-            origin.startsWith('app://')) {
-            return true;
-        }
-    }
-    
     // Verificar orígenes exactos
     if (allowedOrigins.origins && allowedOrigins.origins.includes(origin)) {
         return true;
-    }
-    
-    // Verificar patrones regex
-    if (allowedOrigins.patterns) {
-        for (const pattern of allowedOrigins.patterns) {
-            if (pattern.test(origin)) {
-                return true;
-            }
-        }
     }
     
     return false;
@@ -173,6 +148,7 @@ app.use(helmet({
     referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
     xContentTypeOptions: true,
     xFrameOptions: { action: 'deny' },
+    hidePoweredBy: true,
 }));
 
 const httpServer = createServer(app);
@@ -210,7 +186,78 @@ seedAdmin().catch(err => console.error('Failed to seed admin:', err));
 app.set('trust proxy', 1);
 
 app.use(cookieParser());
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ limit: '10mb', extended: true }));
+
+// Request timeout to prevent slowloris attacks
+app.use((req, res, next) => {
+    res.setTimeout(30000, () => {
+        res.status(408).json({ message: 'Request timeout' });
+    });
+    next();
+});
+
+// IP allowlist for admin endpoints (optional, configurable via env)
+const adminIpAllowlist = process.env.ADMIN_IP_ALLOWLIST 
+    ? process.env.ADMIN_IP_ALLOWLIST.split(',').map(ip => ip.trim())
+    : [];
+
+const adminIpMiddleware = (req: any, res: any, next: any) => {
+    if (adminIpAllowlist.length === 0) {
+        return next(); // No allowlist configured, allow all
+    }
+    
+    const clientIp = req.ip || req.connection.remoteAddress;
+    const forwardedFor = req.headers['x-forwarded-for'];
+    const clientIpFromHeader = forwardedFor ? forwardedFor.split(',')[0].trim() : null;
+    
+    const allowedIps = [...adminIpAllowlist, '::1', '127.0.0.1', '::ffff:127.0.0.1'];
+    
+    if (!allowedIps.includes(clientIp) && !allowedIps.includes(clientIpFromHeader || '')) {
+        return res.status(403).json({ message: 'Access denied from this IP' });
+    }
+    next();
+};
+
+// Security logging function
+const securityLog = (event: string, data: any) => {
+    if (process.env.NODE_ENV !== 'test') {
+        console.log(`[SECURITY] ${new Date().toISOString()} - ${event}`, JSON.stringify(data));
+    }
+};
+
+// Log authentication events
+app.use((req, res, next) => {
+    const originalSend = res.send;
+    res.send = function(body: any) {
+        if (req.path.startsWith('/api/auth/')) {
+            if (res.statusCode === 401) {
+                securityLog('AUTH_FAILED', { 
+                    path: req.path, 
+                    ip: req.ip,
+                    userAgent: req.headers['user-agent']
+                });
+            } else if (res.statusCode === 200 && req.path === '/api/auth/login') {
+                securityLog('AUTH_SUCCESS', { 
+                    path: req.path,
+                    ip: req.ip
+                });
+            }
+        }
+        
+        // Log permission denied
+        if (res.statusCode === 403 && req.path.startsWith('/api/')) {
+            securityLog('PERMISSION_DENIED', { 
+                path: req.path, 
+                method: req.method,
+                userId: (req as any).user?.id
+            });
+        }
+        
+        return originalSend.call(this, body);
+    };
+    next();
+});
 
 // Global Rate Limiting
 const limiter = rateLimit({
@@ -222,6 +269,18 @@ const limiter = rateLimit({
 });
 app.use(limiter);
 
+// Stricter rate limiting for public endpoints (prevent DoS)
+const publicLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 100, // 100 requests per 15 min for public endpoints
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { message: "Too many requests to public endpoint." },
+});
+app.use('/api/links', publicLimiter);
+app.use('/api/talks', publicLimiter);
+app.use('/health', publicLimiter);
+
 // CSRF Protection — applied to all mutating API requests (except auth endpoints which handle their own CSRF)
 app.use('/api/files', csrfProtection);
 app.use('/api/folders', csrfProtection);
@@ -230,6 +289,7 @@ app.use('/api/search', csrfProtection);
 app.use('/api/documents', csrfProtection);
 app.use('/api/notes', csrfProtection);
 app.use('/api/calendar', csrfProtection);
+app.use('/api/chat', csrfProtection);
 app.use('/api/api-flows', csrfProtection);
 
 // Routes
@@ -241,12 +301,13 @@ app.use('/api/search', searchRoutes);
 app.use('/api/documents', documentRoutes);
 app.use('/api/notes', noteRoutes);
 app.use('/api/calendar', calendarRoutes);
+app.use('/api/chat', chatRoutes);
 app.use('/api/api-flows', apiFlowRoutes);
 app.use('/api/profile', csrfProtection);
 app.use('/api/profile', profileRoutes);
 app.use('/api/activity', activityRoutes);
-app.use('/api/roles', rolesRoutes);
-app.use('/api/users', usersRoutes);
+app.use('/api/roles', adminIpMiddleware, rolesRoutes);
+app.use('/api/users', adminIpMiddleware, usersRoutes);
 app.use('/api/team/invitations', teamInvitationsRoutes);
 // Custom API routes must be last to catch all /api/custom/* paths
 app.use('/api/custom', customRoutes);

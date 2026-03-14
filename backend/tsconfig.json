@@ -12,6 +12,8 @@
   "exclude": [
     "prisma",
     "node_modules",
-    "dist"
+    "dist",
+    "__tests__",
+    "vitest.config.ts"
   ]
 }

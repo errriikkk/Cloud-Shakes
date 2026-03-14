@@ -1,34 +1,175 @@
 import express from 'express';
 import prisma from '../config/db';
-import { protect, AuthRequest } from '../middleware/authMiddleware';
+import { protect, requirePermission, AuthRequest } from '../middleware/authMiddleware';
 
 const router = express.Router();
 
 // @route   GET /api/activity
-// @desc    Get recent activity for the whole workspace (instance)
-// @access  Private
-router.get('/', protect, async (req: AuthRequest, res, next) => {
+// @desc    Get activity log with search, filter, sort, and pagination
+// @access  Private - requires view_activity permission
+router.get('/', protect, requirePermission('view_activity'), async (req: AuthRequest, res, next) => {
     try {
-        const limit = parseInt(req.query.limit as string) || 50;
-        const offset = parseInt(req.query.offset as string) || 0;
-        const resourceId = req.query.resourceId as string | undefined;
-        const resourceType = req.query.resourceType as string | undefined;
+        const { 
+            page = '1', 
+            limit = '50', 
+            search = '',
+            type,
+            action,
+            userId,
+            startDate,
+            endDate,
+            sort = 'desc'
+        } = req.query;
 
+        const pageNum = Math.min(Math.max(parseInt(page as string) || 1, 1), 100);
+        const limitNum = Math.min(Math.max(parseInt(limit as string) || 50, 1), 100);
+        const skip = (pageNum - 1) * limitNum;
+
+        // Build where clause
         const where: any = {};
-        if (resourceId) where.resourceId = resourceId;
-        if (resourceType) where.resourceType = resourceType;
+        
+        // Search in action, resourceName, type
+        if (search) {
+            where.OR = [
+                { action: { contains: search as string, mode: 'insensitive' } },
+                { resourceName: { contains: search as string, mode: 'insensitive' } },
+                { type: { contains: search as string, mode: 'insensitive' } },
+            ];
+        }
+        
+        // Filter by type (category)
+        if (type) where.type = type;
+        
+        // Filter by action
+        if (action) where.action = action;
+        
+        // Filter by user
+        if (userId) where.ownerId = userId;
+        
+        // Filter by date range
+        if (startDate || endDate) {
+            where.createdAt = {};
+            if (startDate) where.createdAt.gte = new Date(startDate as string);
+            if (endDate) where.createdAt.lte = new Date(endDate as string);
+        }
 
-        const activities = await prisma.activity.findMany({
-            where,
-            orderBy: { createdAt: 'desc' },
-            take: limit,
-            skip: offset,
-            include: {
-                owner: { select: { id: true, username: true, displayName: true } },
-            },
+        const [activities, total] = await Promise.all([
+            prisma.activity.findMany({
+                where,
+                orderBy: { createdAt: sort === 'asc' ? 'asc' : 'desc' },
+                skip,
+                take: limitNum,
+                include: {
+                    owner: { select: { id: true, username: true, displayName: true, avatar: true } },
+                },
+            }),
+            prisma.activity.count({ where }),
+        ]);
+
+        // Get unique types for filter dropdown
+        const types = await prisma.activity.findMany({
+            select: { type: true },
+            distinct: ['type'],
+            orderBy: { type: 'asc' }
         });
 
-        res.json(activities);
+        // Get unique actions for filter dropdown
+        const actions = await prisma.activity.findMany({
+            select: { action: true },
+            distinct: ['action'],
+            orderBy: { action: 'asc' }
+        });
+
+        // Get users for filter dropdown
+        const users = await prisma.activity.findMany({
+            select: { owner: { select: { id: true, username: true, displayName: true } } },
+            distinct: ['ownerId'],
+            take: 50
+        });
+
+        res.json({
+            data: activities,
+            pagination: {
+                page: pageNum,
+                limit: limitNum,
+                total,
+                totalPages: Math.ceil(total / limitNum),
+            },
+            filters: {
+                types: types.map(t => t.type).filter(Boolean),
+                actions: actions.map(a => a.action).filter(Boolean),
+                users: users.map(u => u.owner).filter(Boolean),
+            }
+        });
+    } catch (err) {
+        next(err);
+    }
+});
+
+// @route   GET /api/activity/stats
+// @desc    Get activity statistics
+// @access  Private - requires view_activity permission
+router.get('/stats', protect, requirePermission('view_activity'), async (req: AuthRequest, res, next) => {
+    try {
+        const { days = '7' } = req.query;
+        const daysNum = parseInt(days as string) || 7;
+        const startDate = new Date();
+        startDate.setDate(startDate.getDate() - daysNum);
+
+        // Activity by type
+        const byType = await prisma.activity.groupBy({
+            by: ['type'],
+            where: { createdAt: { gte: startDate } },
+            _count: true,
+            orderBy: { _count: { type: 'desc' } }
+        });
+
+        // Activity by action
+        const byAction = await prisma.activity.groupBy({
+            by: ['action'],
+            where: { createdAt: { gte: startDate } },
+            _count: true,
+            orderBy: { _count: { action: 'desc' } }
+        });
+
+        // Activity by day
+        const byDay = await prisma.$queryRaw`
+            SELECT DATE(createdAt) as date, COUNT(*) as count 
+            FROM "Activity" 
+            WHERE "createdAt" >= ${startDate}
+            GROUP BY DATE("createdAt")
+            ORDER BY date DESC
+        `;
+
+        // Top users
+        const topUsers = await prisma.activity.groupBy({
+            by: ['ownerId'],
+            where: { createdAt: { gte: startDate } },
+            _count: true,
+            orderBy: { _count: { ownerId: 'desc' } },
+            take: 10
+        });
+
+        // Get user details for top users
+        const userIds = topUsers.map(u => u.ownerId);
+        const userDetails = await prisma.user.findMany({
+            where: { id: { in: userIds } },
+            select: { id: true, username: true, displayName: true }
+        });
+
+        const topUsersWithDetails = topUsers.map(u => ({
+            userId: u.ownerId,
+            count: u._count,
+            user: userDetails.find(d => d.id === u.ownerId)
+        }));
+
+        res.json({
+            byType: byType.map(t => ({ type: t.type, count: t._count })),
+            byAction: byAction.map(a => ({ action: a.action, count: a._count })),
+            byDay: byDay,
+            topUsers: topUsersWithDetails,
+            total: await prisma.activity.count({ where: { createdAt: { gte: startDate } } })
+        });
     } catch (err) {
         next(err);
     }

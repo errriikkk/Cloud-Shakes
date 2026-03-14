@@ -5,7 +5,7 @@ import { useAuth } from "@/context/AuthContext";
 import {
     Loader2, LogOut, HardDrive, Link as LinkIcon,
     Menu, X, Cloud, Database, Folder, ChevronDown, ChevronRight,
-    FileText, StickyNote, Calendar, MoreHorizontal, Search, Home, BarChart3, Code, Settings, Image as ImageIcon, Video
+    FileText, StickyNote, Calendar, MoreHorizontal, Search, Home, BarChart3, Settings, Image as ImageIcon, Video, MessageSquare, Activity
 } from "lucide-react";
 
 import Link from "next/link";
@@ -18,7 +18,9 @@ import axios from "axios";
 import { API_ENDPOINTS } from "@/lib/api";
 import { SearchModal } from "@/components/SearchModal";
 import { PwaInstallPrompt } from "@/components/PwaInstallPrompt";
+import { NotificationPanel } from "@/components/NotificationPanel";
 import { useTranslation } from "@/lib/i18n";
+import { usePermission } from "@/hooks/usePermission";
 
 function formatBytes(bytes: number): string {
     if (bytes === 0) return "0 B";
@@ -57,11 +59,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     const fetchFolders = useCallback(async () => {
         if (!user) return;
         try {
-            const filesRes = await axios.get(API_ENDPOINTS.FOLDERS.BASE, {
+            const filesRes = await axios.get(`${API_ENDPOINTS.FOLDERS.BASE}`, {
                 params: { parentId: null },
                 withCredentials: true
             });
-            setFilesFolders(filesRes.data);
+            // Handle both old array and new {data, pagination} format
+            const files = filesRes.data.data || filesRes.data || [];
+            setFilesFolders(files);
         } catch (err) {
             console.error("Sidebar fetch failed:", err);
         }
@@ -119,9 +123,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         { href: "/dashboard/documents", icon: FileText, label: t("nav.documents") },
         { href: "/dashboard/notes", icon: StickyNote, label: t("nav.notes") },
         { href: "/dashboard/calendar", icon: Calendar, label: t("nav.calendar") },
+        { href: "/dashboard/chat", icon: MessageSquare, label: t("nav.chat") },
         { href: "/dashboard/links", icon: LinkIcon, label: t("nav.shared") },
-                { href: "/dashboard/statistics", icon: BarChart3, label: t("nav.statistics") },
-        { href: "/dashboard/api-builder", icon: Code, label: t("nav.apiBuilder") },
+        { href: "/dashboard/statistics", icon: BarChart3, label: t("nav.statistics") },
+        { href: "/dashboard/activity", icon: Activity, label: t("nav.activity") || "Activity Log", permission: 'view_activity' },
     ];
 
     // Bottom nav items (mobile) — max 5 for clean UX
@@ -255,6 +260,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 {(user.isAdmin || user.permissions?.includes('view_calendar')) && (
                     <NavItem href="/dashboard/calendar" icon={Calendar} label={t("nav.calendar")} />
                 )}
+                {(user.isAdmin || user.permissions?.includes('view_chat')) && (
+                    <NavItem href="/dashboard/chat" icon={MessageSquare} label={t("nav.chat")} />
+                )}
 
                 <div className="h-px bg-border/40 my-2 mx-2" />
 
@@ -267,10 +275,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 {(user.isAdmin || user.permissions?.includes('view_statistics')) && (
                     <NavItem href="/dashboard/statistics" icon={BarChart3} label={t("nav.statistics")} />
                 )}
-                {(user.isAdmin || user.permissions?.includes('view_api_builder')) && (
-                    <NavItem href="/dashboard/api-builder" icon={Code} label={t("nav.apiBuilder")} />
+                {(user.isAdmin || user.permissions?.includes('view_activity')) && (
+                    <NavItem href="/dashboard/activity" icon={Activity} label={t("nav.activity") || "Activity Log"} />
                 )}
-                <NavItem href="/dashboard/settings" icon={Settings} label={t("nav.settings")} />
+                {(user.isAdmin || user.permissions?.includes('view_settings')) && (
+                    <NavItem href="/dashboard/settings" icon={Settings} label={t("nav.settings")} />
+                )}
             </nav>
 
             {/* Storage Usage + User Info */}
@@ -304,7 +314,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                                 />
                             </div>
                             <p className="px-1 text-[10px] text-muted-foreground font-medium">
-                                {formatBytes(storageUsed)} de {formatBytes(storageLimit)}
+                                {formatBytes(storageUsed)} / {formatBytes(storageLimit)}
                             </p>
                         </div>
 
@@ -324,7 +334,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                                 )}
                                 <div className="flex-1 min-w-0">
                                     <p className="text-xs text-foreground font-semibold truncate leading-none mb-0.5">{user.displayName || user.username}</p>
-                                    <p className="text-[10px] text-muted-foreground font-medium truncate">Free Plan</p>
+                                    <p className="text-[10px] text-muted-foreground font-medium truncate">{t("common.loading")}</p>
                                 </div>
                             </Link>
                             <button
@@ -401,9 +411,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 <div className="flex-1 overflow-y-auto p-4 md:p-8 content-with-nav">
                     <div className="max-w-5xl mx-auto">
                         <Suspense fallback={<div className="py-20 text-center text-muted-foreground text-sm font-medium">{t("common.loadingContent")}</div>}>
-                            <ContentWrapper pathname={pathname}>
+                            <DashboardContent>
                                 {children}
-                            </ContentWrapper>
+                            </DashboardContent>
                         </Suspense>
                     </div>
                 </div>
@@ -510,5 +520,14 @@ function ContentWrapper({ children, pathname }: { children: React.ReactNode; pat
                 {children}
             </motion.div>
         </AnimatePresence>
+    );
+}
+
+function DashboardContent({ children }: { children: React.ReactNode }) {
+    return (
+        <div className="relative">
+            {children}
+            <NotificationPanel />
+        </div>
     );
 }

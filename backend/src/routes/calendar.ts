@@ -1,7 +1,7 @@
 import express from 'express';
 import { z } from 'zod';
 import prisma from '../config/db';
-import { protect, AuthRequest } from '../middleware/authMiddleware';
+import { protect, requirePermission, AuthRequest } from '../middleware/authMiddleware';
 
 const router = express.Router();
 
@@ -30,8 +30,8 @@ const updateEventSchema = z.object({
 
 // @route   GET /api/calendar
 // @desc    List calendar events for a month/year range
-// @access  Private
-router.get('/', protect, async (req: AuthRequest, res, next) => {
+// @access  Private - requires view_calendar permission
+router.get('/', protect, requirePermission('view_calendar'), async (req: AuthRequest, res, next) => {
     try {
         // Validate user
         if (!req.user || !req.user.id) {
@@ -88,7 +88,6 @@ router.get('/', protect, async (req: AuthRequest, res, next) => {
             },
             include: {
                 owner: { select: { id: true, username: true, displayName: true } },
-                lastModifiedBy: { select: { id: true, username: true, displayName: true } },
             },
             orderBy: { startDate: 'asc' },
         });
@@ -104,7 +103,7 @@ router.get('/', protect, async (req: AuthRequest, res, next) => {
 // @route   POST /api/calendar
 // @desc    Create a calendar event
 // @access  Private
-router.post('/', protect, async (req: AuthRequest, res, next) => {
+router.post('/', protect, requirePermission('create_events'), async (req: AuthRequest, res, next) => {
     try {
         const { title, description, startDate, endDate, allDay, pinned, color, reminderMinutes } = createEventSchema.parse(req.body);
 
@@ -135,7 +134,7 @@ router.post('/', protect, async (req: AuthRequest, res, next) => {
 // @route   PUT /api/calendar/:id
 // @desc    Update a calendar event
 // @access  Private
-router.put('/:id', protect, async (req: AuthRequest, res, next) => {
+router.put('/:id', protect, requirePermission('edit_events'), async (req: AuthRequest, res, next) => {
     try {
         const data = updateEventSchema.parse(req.body);
 
@@ -188,7 +187,7 @@ router.put('/:id', protect, async (req: AuthRequest, res, next) => {
 // @route   DELETE /api/calendar/:id
 // @desc    Delete a calendar event
 // @access  Private
-router.delete('/:id', protect, async (req: AuthRequest, res, next) => {
+router.delete('/:id', protect, requirePermission('delete_events'), async (req: AuthRequest, res, next) => {
     try {
         const event = await prisma.calendarEvent.findUnique({
             where: { id: req.params.id as string },

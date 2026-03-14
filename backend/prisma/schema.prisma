@@ -28,7 +28,12 @@ model User {
   apiFlows       ApiFlow[]
   activities     Activity[]
   roles          UserRole[]
+  conversations  ConversationParticipant[]
+  messages       Message[]
+  reactions      MessageReaction[]
+  status         UserStatus?
   invitesCreated Invite[]    @relation("InvitesCreated")
+  createdConversations Conversation[] @relation("ConversationsCreated")
   modifiedFiles          File[]          @relation("FileLastModifiedBy")
   modifiedDocuments      Document[]      @relation("DocumentLastModifiedBy")
   modifiedNotes          Note[]          @relation("NoteLastModifiedBy")
@@ -187,6 +192,7 @@ model Role {
   id          String          @id @default(uuid())
   name        String
   description String?
+  color       String?         @default("#7289DA")
   isSystem    Boolean         @default(false)
   users       UserRole[]
   permissions RolePermission[]
@@ -235,4 +241,189 @@ model Invite {
   createdById String
   createdBy   User     @relation("InvitesCreated", fields: [createdById], references: [id], onDelete: Cascade)
   createdAt   DateTime @default(now())
+}
+
+// ── Chat: Conversations & Messages ────────────────────────────────────────────────
+model Conversation {
+  id            String             @id @default(uuid())
+  name          String?
+  isGroup       Boolean            @default(false)
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+  createdById   String
+  createdBy     User               @relation("ConversationsCreated", fields: [createdById], references: [id], onDelete: Cascade)
+  participants  ConversationParticipant[]
+  messages      Message[]
+  lastMessageAt DateTime?
+
+  @@index([updatedAt])
+}
+
+model ConversationParticipant {
+  id             String       @id @default(uuid())
+  conversationId String
+  userId         String
+  role           String       @default("member") // member, admin
+  joinedAt       DateTime     @default(now())
+  lastReadAt     DateTime     @default(now())
+  notifications  String       @default("all") // all, mentions, none
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([conversationId, userId])
+  @@index([userId])
+}
+
+model Message {
+  id             String       @id @default(uuid())
+  conversationId String
+  senderId       String
+  content        String
+  type           String       @default("text") // text, file, system
+  metadata       Json?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  deletedAt      DateTime?
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender         User         @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  reactions      MessageReaction[]
+
+  @@index([conversationId, createdAt])
+  @@index([senderId])
+}
+
+model MessageReaction {
+  id        String   @id @default(uuid())
+  messageId String
+  userId    String
+  emoji     String
+  createdAt DateTime @default(now())
+  message   Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId, emoji])
+}
+
+// ── User Status ───────────────────────────────────────────────────────────────────
+model UserStatus {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  status    String   @default("online") // online, away, dnd, offline
+  lastSeen  DateTime @default(now())
+  custom    String?
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ── Plugin System ───────────────────────────────────────────────────────────────
+
+model Plugin {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  displayName String
+  description String?
+  author      String
+  authorId    String?
+  type        String   @default("backend") // backend, frontend, fullstack
+  category    String   @default("integration") // integration, automation, analytics, ai, storage, ui
+  website     String?
+  repository  String?
+  license     String   @default("MIT")
+  isPublic    Boolean  @default(false)
+  isFeatured  Boolean  @default(false)
+  isApproved  Boolean  @default(false)
+  status      String   @default("draft") // draft, pending, approved, rejected, deprecated
+  
+  // SDK
+  sdkVersion  String   @default("1.0.0")
+  minSdkVersion String?
+  
+  // Resources
+  cpuLimit    String   @default("500m")
+  memoryLimit String   @default("512Mi")
+  storageLimit String  @default("1Gi")
+  
+  // Security
+  permissions String[] @default([])
+  allowedDomains String[] @default([])
+  
+  // Stats
+  downloads   Int      @default(0)
+  rating      Float    @default(0)
+  ratingCount Int      @default(0)
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  versions    PluginVersion[]
+  installations UserPlugin[]
+}
+
+model PluginVersion {
+  id          String   @id @default(uuid())
+  pluginId    String
+  plugin      Plugin   @relation(fields: [pluginId], references: [id], onDelete: Cascade)
+  version     String
+  
+  // Build info
+  buildStatus String   @default("pending") // pending, building, success, failed
+  buildLog    String?
+  
+  // Artifact
+  artifactUrl String?  // URL to ZIP file in MinIO
+  artifactSize BigInt?
+  checksum    String?
+  
+  // Docker
+  dockerImage String?
+  dockerfile  String?
+  
+  // Metadata
+  changelog   String?
+  minAppVersion String?
+  deprecated  Boolean  @default(false)
+  deprecationNote String?
+  
+  createdAt   DateTime @default(now())
+  publishedAt DateTime?
+  
+  @@unique([pluginId, version])
+}
+
+model UserPlugin {
+  id          String   @id @default(uuid())
+  userId      String
+  pluginId    String
+  plugin      Plugin   @relation(fields: [pluginId], references: [id], onDelete: Cascade)
+  version     String
+  
+  // Installation status
+  status      String   @default("installed") // installed, enabled, disabled, error
+  errorMessage String?
+  
+  // Container info
+  containerId String?
+  containerStatus String?
+  containerIp  String?
+  containerPort Int?
+  
+  // Config
+  config      Json     @default("{}")
+  
+  // Stats
+  lastUsedAt  DateTime?
+  useCount    Int      @default(0)
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@unique([userId, pluginId])
+}
+
+model PluginLog {
+  id          String   @id @default(uuid())
+  userPluginId String
+  level       String   // info, warn, error
+  message     String
+  metadata    Json?
+  timestamp   DateTime @default(now())
 }

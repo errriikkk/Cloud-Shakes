@@ -1,13 +1,10 @@
-FROM node:20-alpine AS base
+FROM --platform=linux/amd64 node:20
 
-FROM base AS deps
 WORKDIR /app
+
 COPY package.json package-lock.json* ./
-RUN npm ci
+RUN rm -rf node_modules package-lock.json && npm install
 
-FROM base AS builder
-WORKDIR /app
-COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
 ARG NEXT_PUBLIC_API_URL
@@ -15,21 +12,16 @@ ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 
 RUN npm run build
 
-FROM base AS runner
+FROM --platform=linux/amd64 node:20
+
 WORKDIR /app
+
 ENV NODE_ENV production
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nextjs
 
-COPY --from=builder /app/public ./public
-COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
-
-USER nextjs
+COPY --from=0 /app/.next/standalone ./
+COPY --from=0 /app/.next/static ./.next/static
+COPY --from=0 /app/public ./public
 
 EXPOSE 3000
-
-ENV PORT 3000
-ENV HOSTNAME "0.0.0.0"
 
 CMD ["node", "server.js"]

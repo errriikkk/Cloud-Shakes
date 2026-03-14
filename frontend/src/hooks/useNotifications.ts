@@ -206,20 +206,26 @@ export function useNotifications() {
     useEffect(() => {
         if (!user || permission !== "granted" || typeof window === 'undefined') return;
 
+        let isMounted = true;
+
         // Initial check (with delay to avoid blocking render)
         const timeout = setTimeout(() => {
-            checkUpcomingEvents();
-        }, 1000);
+            if (isMounted) {
+                checkUpcomingEvents();
+            }
+        }, 2000);
 
         // Check every minute (or more frequently on iOS for better reliability)
         const intervalTime = isIOSDevice ? 30 * 1000 : 60 * 1000; // Check every 30s on iOS
         const interval = setInterval(() => {
-            checkUpcomingEvents();
+            if (isMounted) {
+                checkUpcomingEvents();
+            }
         }, intervalTime);
 
         // For iOS, also check when page becomes visible (user returns to app)
         const handleVisibilityChange = () => {
-            if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+            if (isMounted && typeof document !== 'undefined' && document.visibilityState === 'visible') {
                 checkUpcomingEvents();
             }
         };
@@ -229,13 +235,14 @@ export function useNotifications() {
         }
 
         return () => {
+            isMounted = false;
             clearTimeout(timeout);
             clearInterval(interval);
             if (typeof document !== 'undefined') {
                 document.removeEventListener('visibilitychange', handleVisibilityChange);
             }
         };
-    }, [user, permission, checkUpcomingEvents, isIOSDevice]);
+    }, [user, permission, isIOSDevice]);
 
     return {
         isSupported,

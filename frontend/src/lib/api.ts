@@ -50,6 +50,17 @@ export const API_ENDPOINTS = {
         ACCEPT_INVITATION: `${API_URL}/api/team/invitations/accept`,
         INVITE_INFO: (token: string) => `${API_URL}/api/team/invitations/info/${token}`,
     },
+    CHAT: {
+        BASE: `${API_URL}/api/chat`,
+        CONVERSATIONS: `${API_URL}/api/chat/conversations`,
+        USERS: `${API_URL}/api/chat/users`,
+        STATUS: `${API_URL}/api/chat/status`,
+        CONVERSATION_MESSAGES: (id: string) => `${API_URL}/api/chat/conversations/${id}/messages`,
+        CONVERSATION_DETAIL: (id: string) => `${API_URL}/api/chat/conversations/${id}`,
+        MESSAGE: (id: string) => `${API_URL}/api/chat/messages/${id}`,
+        SEARCH_MENTIONS: `${API_URL}/api/chat/search-mentions`,
+        VALIDATE_SHARE: `${API_URL}/api/chat/validate-share`,
+    },
 };
 
 export default API_URL;

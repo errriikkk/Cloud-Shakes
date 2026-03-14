@@ -155,7 +155,9 @@ export default function DocumentEditorPage() {
                             // Check for existing link
                             axios.get(API_ENDPOINTS.LINKS.BASE, { withCredentials: true })
                                 .then(res => {
-                                    const docLink = res.data.find((l: any) => l.documentId === id);
+                                    // Handle both old array and new {data, pagination} format
+                                    const links = res.data.data || res.data || [];
+                                    const docLink = links.find((l: any) => l.documentId === id);
                                     setExistingLink(docLink || null);
                                     setIsShareOpen(true);
                                 })

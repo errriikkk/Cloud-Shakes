@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
 import axios from "axios";
+import { useTranslation } from "@/lib/i18n";
 import {
     File as FileIcon, Trash2, Link as LinkIcon, FileText,
     Image as ImageIcon, Video, Music, Download, Copy,
@@ -63,6 +64,7 @@ interface FileBrowserProps {
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 
 export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserProps) {
+    const { t } = useTranslation();
     const [files, setFiles] = useState<FileItem[]>([]);
     const [folders, setFolders] = useState<FolderItem[]>([]);
     const [loading, setLoading] = useState(true);
@@ -142,10 +144,12 @@ export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserPro
                     withCredentials: true
                 })
             ]);
-            setFiles(filesRes.data);
+            // Handle both old array and new {data, pagination} format
+            const files = filesRes.data.data || filesRes.data || [];
+            setFiles(files);
             setFolders(foldersRes.data);
             // After files load, fetch activities for these resources
-            const ids = filesRes.data.map((f: any) => f.id);
+            const ids = files.map((f: any) => f.id);
             if (ids.length > 0) {
                 try {
                     const actRes = await axios.get(`${API}/api/activity`, {
@@ -640,8 +644,8 @@ export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserPro
                         <div className="w-20 h-20 bg-primary/20 rounded-full flex items-center justify-center shadow-lg shadow-primary/20">
                             <Upload className="w-10 h-10 text-primary animate-bounce" />
                         </div>
-                        <h2 className="text-2xl font-bold text-primary tracking-tight">Suelta aquí para subir</h2>
-                        <p className="text-sm font-medium text-primary/60">Libera tus archivos para comenzar la magia</p>
+                        <h2 className="text-2xl font-bold text-primary tracking-tight">{t("files.dropHere")}</h2>
+                        <p className="text-sm font-medium text-primary/60">{t("files.releaseFiles")}</p>
                     </motion.div>
                 )}
             </AnimatePresence>
@@ -719,7 +723,7 @@ export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserPro
                         className="px-4 py-2.5 rounded-xl bg-primary text-white font-bold text-sm flex items-center gap-2 hover:brightness-110 shadow-lg shadow-primary/20 transition-all active:scale-[0.98]"
                     >
                         <Upload className="w-4 h-4" />
-                        <span>Subir</span>
+                        <span>{t("files.upload")}</span>
                     </button>
                 </div>
             </div>

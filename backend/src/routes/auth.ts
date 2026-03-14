@@ -66,9 +66,9 @@ router.post('/login', loginLimiter, async (req, res, next) => {
                 path: '/api/auth', // Only sent to auth endpoints
             });
 
-            // CSRF token cookie (readable by frontend JS)
+            // CSRF token cookie - httpOnly for security, frontend reads from response body
             res.cookie('csrf-token', csrfToken, {
-                httpOnly: false, // Must be readable by JS
+                httpOnly: true, // Security: not accessible by JS
                 secure: isProduction,
                 sameSite: isProduction ? 'none' : 'lax',
                 domain: isProduction ? cookieDomain : undefined,
@@ -133,7 +133,7 @@ router.post('/refresh', async (req, res, next) => {
         });
 
         res.cookie('csrf-token', newCsrfToken, {
-            httpOnly: false,
+            httpOnly: true,
             secure: isProduction,
             sameSite: isProduction ? 'none' : 'lax',
             domain: isProduction ? cookieDomain : undefined,
@@ -160,7 +160,7 @@ router.post('/logout', (req, res) => {
     const cookieDomain = process.env.COOKIE_DOMAIN;
     res.cookie('token', '', { httpOnly: true, expires: new Date(0), secure: isProduction, sameSite: isProduction ? 'none' : 'lax', domain: isProduction ? cookieDomain : undefined });
     res.cookie('refreshToken', '', { httpOnly: true, expires: new Date(0), path: '/api/auth', secure: isProduction, sameSite: isProduction ? 'none' : 'lax', domain: isProduction ? cookieDomain : undefined });
-    res.cookie('csrf-token', '', { httpOnly: false, expires: new Date(0), secure: isProduction, sameSite: isProduction ? 'none' : 'lax', domain: isProduction ? cookieDomain : undefined });
+    res.cookie('csrf-token', '', { httpOnly: true, expires: new Date(0), secure: isProduction, sameSite: isProduction ? 'none' : 'lax', domain: isProduction ? cookieDomain : undefined });
 
     res.json({ message: 'Logged out' });
 });

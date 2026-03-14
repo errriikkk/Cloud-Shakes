@@ -7,6 +7,7 @@ import axios from "axios";
 import { cn } from "@/lib/utils";
 import { useRouter } from "next/navigation";
 import { API_ENDPOINTS } from "@/lib/api";
+import { useTranslation } from "@/lib/i18n";
 import { ActivityAvatar } from "@/components/ActivityAvatar";
 
 interface SearchResult {
@@ -31,6 +32,7 @@ interface SearchModalProps {
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 
 export function SearchModal({ isOpen, onClose }: SearchModalProps) {
+    const { t } = useTranslation();
     const [query, setQuery] = useState("");
     const [results, setResults] = useState<{ 
         files: SearchResult[], 
@@ -98,12 +100,12 @@ export function SearchModal({ isOpen, onClose }: SearchModalProps) {
     ];
 
     const categories = [
-        { key: 'all', label: 'Todo', count: allResults.length },
-        { key: 'files', label: 'Archivos', count: results.files.length },
-        { key: 'folders', label: 'Carpetas', count: results.folders.length },
-        { key: 'documents', label: 'Documentos', count: results.documents.length },
-        { key: 'notes', label: 'Notas', count: results.notes.length },
-        { key: 'calendar', label: 'Eventos', count: results.calendarEvents.length },
+        { key: 'all', label: t("search.all"), count: allResults.length },
+        { key: 'files', label: t("nav.files"), count: results.files.length },
+        { key: 'folders', label: t("search.folders"), count: results.folders.length },
+        { key: 'documents', label: t("nav.documents"), count: results.documents.length },
+        { key: 'notes', label: t("nav.notes"), count: results.notes.length },
+        { key: 'calendar', label: t("nav.calendar"), count: results.calendarEvents.length },
     ];
 
     const filteredResults = selectedCategory && selectedCategory !== 'all'
@@ -246,7 +248,7 @@ export function SearchModal({ isOpen, onClose }: SearchModalProps) {
                                 value={query}
                                 onChange={(e) => setQuery(e.target.value)}
                                 onKeyDown={handleKeyDown}
-                                placeholder="Buscar archivos, documentos, notas, eventos..."
+                                placeholder={t("search.placeholder")}
                                 className="flex-1 bg-transparent border-none text-base md:text-lg text-foreground placeholder:text-muted-foreground/40 focus:outline-none"
                             />
                             {loading && <Loader2 className="w-5 h-5 animate-spin text-primary/40 shrink-0" />}
@@ -305,12 +307,12 @@ export function SearchModal({ isOpen, onClose }: SearchModalProps) {
                                     <div className="w-16 h-16 rounded-2xl bg-muted/40 flex items-center justify-center mx-auto mb-4 border border-border/40">
                                         <Search className="w-8 h-8 text-muted-foreground/20" />
                                     </div>
-                                    <h3 className="text-sm font-bold text-foreground mb-1">Búsqueda Rápida</h3>
-                                    <p className="text-xs text-muted-foreground">Busca archivos, documentos, notas y eventos.</p>
+                                    <h3 className="text-sm font-bold text-foreground mb-1">{t("search.quickSearch")}</h3>
+                                    <p className="text-xs text-muted-foreground">{t("search.description")}</p>
                                 </div>
                             ) : filteredResults.length === 0 && !loading ? (
                                 <div className={cn("text-center text-muted-foreground", isMobile ? "p-8" : "p-12")}>
-                                    No se encontraron resultados para "{query}"
+                                    {t("search.noResults")} "{query}"
                                 </div>
                             ) : (
                                 <div className={cn("space-y-1", isMobile ? "p-2" : "p-2")}>
@@ -357,7 +359,7 @@ export function SearchModal({ isOpen, onClose }: SearchModalProps) {
                                                     )}
                                                     {item.type !== 'calendar' && (
                                                         <>
-                                                            <span>Mi Unidad</span>
+                                                            <span>{t("files.myUnit")}</span>
                                                             {(item.folder?.name || item.parent?.name) && (
                                                                 <>
                                                                     <ChevronRight className="w-3 h-3 mx-1" />
@@ -409,14 +411,14 @@ export function SearchModal({ isOpen, onClose }: SearchModalProps) {
                                 <div className="flex items-center gap-4">
                                     <div className="flex items-center gap-1.5">
                                         <span className="bg-muted px-1.5 py-0.5 rounded border border-border/60">↑↓</span>
-                                        <span>Navegar</span>
+                                        <span>{t("search.navigate")}</span>
                                     </div>
                                     <div className="flex items-center gap-1.5">
                                         <span className="bg-muted px-1.5 py-0.5 rounded border border-border/60">Enter</span>
-                                        <span>Seleccionar</span>
+                                        <span>{t("search.select")}</span>
                                     </div>
                                 </div>
-                                <span>Shakes CLOUD Quick Search</span>
+                                <span>{t("search.quickSearch")}</span>
                             </div>
                         )}
                     </motion.div>

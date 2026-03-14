@@ -1,7 +1,8 @@
 import express from 'express';
 import { z } from 'zod';
 import prisma from '../config/db';
-import { protect, AuthRequest } from '../middleware/authMiddleware';
+import { protect, requirePermission, AuthRequest } from '../middleware/authMiddleware';
+import { createActivity } from './activity';
 
 const router = express.Router();
 
@@ -19,23 +20,39 @@ const updateDocumentSchema = z.object({
 
 // @route   GET /api/documents
 // @desc    List all documents for the current user
-// @access  Private
-router.get('/', protect, async (req: AuthRequest, res, next) => {
+// @access  Private - requires view_documents permission
+router.get('/', protect, requirePermission('view_documents'), async (req: AuthRequest, res, next) => {
     try {
-        // Shared within instance: list all documents, regardless of owner
-        const documents = await prisma.document.findMany({
-            orderBy: { updatedAt: 'desc' },
-            select: {
-                id: true,
-                title: true,
-                folderId: true,
-                createdAt: true,
-                updatedAt: true,
-                owner: { select: { id: true, username: true, displayName: true } },
-                lastModifiedBy: { select: { id: true, username: true, displayName: true } },
+        const { page = '1', limit = '50' } = req.query;
+        const pageNum = Math.min(Math.max(parseInt(page as string) || 1, 1), 100);
+        const limitNum = Math.min(Math.max(parseInt(limit as string) || 50, 1), 100);
+        const skip = (pageNum - 1) * limitNum;
+
+        const [documents, total] = await Promise.all([
+            prisma.document.findMany({
+                orderBy: { updatedAt: 'desc' },
+                skip,
+                take: limitNum,
+                select: {
+                    id: true,
+                    title: true,
+                    folderId: true,
+                    createdAt: true,
+                    updatedAt: true,
+                    owner: { select: { id: true, username: true, displayName: true } },
+                },
+            }),
+            prisma.document.count(),
+        ]);
+        res.json({
+            data: documents,
+            pagination: {
+                page: pageNum,
+                limit: limitNum,
+                total,
+                totalPages: Math.ceil(total / limitNum),
             },
         });
-        res.json(documents);
     } catch (err) {
         next(err);
     }
@@ -44,7 +61,7 @@ router.get('/', protect, async (req: AuthRequest, res, next) => {
 // @route   POST /api/documents
 // @desc    Create a new document
 // @access  Private
-router.post('/', protect, async (req: AuthRequest, res, next) => {
+router.post('/', protect, requirePermission('create_documents'), async (req: AuthRequest, res, next) => {
     try {
         const { title, content, folderId } = createDocumentSchema.parse(req.body);
 
@@ -56,6 +73,16 @@ router.post('/', protect, async (req: AuthRequest, res, next) => {
                 folderId: folderId || null,
             },
         });
+
+        // Log activity
+        await createActivity(
+            req.user.id,
+            'document',
+            'create',
+            doc.id,
+            'document',
+            doc.title
+        );
 
         res.json(doc);
     } catch (error: any) {
@@ -88,7 +115,7 @@ router.get('/:id', protect, async (req: AuthRequest, res, next) => {
 // @route   PUT /api/documents/:id
 // @desc    Update a document (auto-save support)
 // @access  Private
-router.put('/:id', protect, async (req: AuthRequest, res, next) => {
+router.put('/:id', protect, requirePermission('edit_documents'), async (req: AuthRequest, res, next) => {
     try {
         const { title, content, folderId } = updateDocumentSchema.parse(req.body);
 
@@ -115,6 +142,16 @@ router.put('/:id', protect, async (req: AuthRequest, res, next) => {
             data: updateData,
         });
 
+        // Log activity
+        await createActivity(
+            req.user.id,
+            'document',
+            'edit',
+            updated.id,
+            'document',
+            updated.title
+        );
+
         res.json(updated);
     } catch (error: any) {
         if (error instanceof z.ZodError) {
@@ -127,7 +164,7 @@ router.put('/:id', protect, async (req: AuthRequest, res, next) => {
 // @route   DELETE /api/documents/:id
 // @desc    Delete a document
 // @access  Private
-router.delete('/:id', protect, async (req: AuthRequest, res, next) => {
+router.delete('/:id', protect, requirePermission('delete_documents'), async (req: AuthRequest, res, next) => {
     try {
         const doc = await prisma.document.findUnique({
             where: { id: req.params.id as string },
@@ -144,6 +181,16 @@ router.delete('/:id', protect, async (req: AuthRequest, res, next) => {
         await prisma.document.delete({
             where: { id: req.params.id as string },
         });
+
+        // Log activity
+        await createActivity(
+            req.user.id,
+            'document',
+            'delete',
+            req.params.id as string,
+            'document',
+            doc.title
+        );
 
         res.json({ message: 'Documento eliminado' });
     } catch (err) {

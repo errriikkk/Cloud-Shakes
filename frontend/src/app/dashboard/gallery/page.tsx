@@ -9,6 +9,7 @@ import { API_ENDPOINTS } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { useRouter } from "next/navigation";
 import { createPortal } from "react-dom";
+import { useTranslation } from "@/lib/i18n";
 
 interface ImageFile {
     id: string;
@@ -24,6 +25,7 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 
 export default function GalleryPage() {
     const { user } = useAuth();
+    const { t } = useTranslation();
     const router = useRouter();
     const [images, setImages] = useState<ImageFile[]>([]);
     const [loading, setLoading] = useState(true);
@@ -47,8 +49,11 @@ export default function GalleryPage() {
             setLoading(true);
             const res = await axios.get(API_ENDPOINTS.FILES.BASE, { withCredentials: true });
             
+            // Handle both old array and new {data, pagination} format
+            const files = res.data.data || res.data || [];
+            
             // Filter only image files
-            const imageFiles = res.data.filter((file: any) => 
+            const imageFiles = files.filter((file: any) => 
                 file.mimeType?.startsWith('image/')
             );
 
@@ -138,10 +143,10 @@ export default function GalleryPage() {
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                     <div>
                         <h1 className="text-4xl font-extrabold text-foreground tracking-tightest">
-                            Galería
+                            {t('gallery.title')}
                         </h1>
                         <p className="text-muted-foreground mt-2 text-sm font-medium">
-                            {images.length} {images.length === 1 ? 'imagen' : 'imágenes'} en tu almacenamiento
+                            {images.length} {images.length === 1 ? t('gallery.image') : t('gallery.images')} {t('gallery.inStorage')}
                         </p>
                     </div>
 
@@ -154,6 +159,7 @@ export default function GalleryPage() {
                                     ? "bg-primary/10 text-primary"
                                     : "bg-muted/30 text-muted-foreground hover:bg-muted/50"
                             )}
+                            title={t('files.viewGrid')}
                         >
                             <Grid className="w-5 h-5" />
                         </button>
@@ -165,6 +171,7 @@ export default function GalleryPage() {
                                     ? "bg-primary/10 text-primary"
                                     : "bg-muted/30 text-muted-foreground hover:bg-muted/50"
                             )}
+                            title={t('files.viewList')}
                         >
                             <ImageIcon className="w-5 h-5" />
                         </button>
@@ -175,8 +182,8 @@ export default function GalleryPage() {
                 {images.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-20 text-center">
                         <ImageIcon className="w-16 h-16 text-muted-foreground/20 mb-4" />
-                        <p className="text-muted-foreground font-medium">No hay imágenes en tu almacenamiento</p>
-                        <p className="text-sm text-muted-foreground/60 mt-1">Sube imágenes para verlas aquí</p>
+                        <p className="text-muted-foreground font-medium">{t('gallery.noImages')}</p>
+                        <p className="text-sm text-muted-foreground/60 mt-1">{t('gallery.uploadPrompt')}</p>
                     </div>
                 ) : (
                     <div

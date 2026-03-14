@@ -13,6 +13,9 @@ import { API_ENDPOINTS } from "@/lib/api";
 import { formatDistanceToNow } from "date-fns";
 import { es } from "date-fns/locale";
 import { useModal } from "@/hooks/useModal";
+import { usePermission } from "@/hooks/usePermission";
+import { useTranslation } from "@/lib/i18n";
+import { PermissionGuard } from "@/components/PermissionGuard";
 
 interface Document {
     id: string;
@@ -22,21 +25,27 @@ interface Document {
 
 export default function DocumentsPage() {
     const { user } = useAuth();
+    const { t } = useTranslation();
     const { confirm, alert, ModalComponents } = useModal();
     const router = useRouter();
+    const { canViewDocuments, canCreateDocuments, canEditDocuments, canDeleteDocuments } = usePermission();
     const [documents, setDocuments] = useState<Document[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState("");
     const [isCreating, setIsCreating] = useState(false);
 
     useEffect(() => {
-        fetchDocuments();
-    }, []);
+        if (user && (user.isAdmin || user.permissions?.includes('view_documents'))) {
+            fetchDocuments();
+        }
+    }, [user]);
 
     const fetchDocuments = async () => {
         try {
             const res = await axios.get(API_ENDPOINTS.DOCUMENTS.BASE, { withCredentials: true });
-            setDocuments(res.data);
+            // Handle both old array and new {data, pagination} format
+            const docs = res.data.data || res.data || [];
+            setDocuments(docs);
         } catch (err) {
             console.error("Failed to fetch docs:", err);
         } finally {
@@ -48,7 +57,7 @@ export default function DocumentsPage() {
         setIsCreating(true);
         try {
             const res = await axios.post(API_ENDPOINTS.DOCUMENTS.BASE, {
-                title: "Nuevo Documento",
+                title: t('documents.untitled'),
                 content: {} // Empty doc
             }, { withCredentials: true });
             router.push(`/dashboard/documents/${res.data.id}`);
@@ -61,9 +70,9 @@ export default function DocumentsPage() {
     const handleDelete = async (e: React.MouseEvent, id: string) => {
         e.stopPropagation();
         const confirmed = await confirm(
-            "Eliminar Documento",
-            "¿Estás seguro de que quieres eliminar este documento? Esta acción no se puede deshacer.",
-            { type: 'danger', confirmText: 'Eliminar', cancelText: 'Cancelar' }
+            t('documents.delete'),
+            t('documents.confirmDelete'),
+            { type: 'danger', confirmText: t('common.delete'), cancelText: t('common.cancel') }
         );
         if (!confirmed) return;
         try {
@@ -79,29 +88,29 @@ export default function DocumentsPage() {
     );
 
     return (
-        <>
+        <PermissionGuard permission="view_documents" redirectUrl="/dashboard/home">
             <ModalComponents />
             <div className="space-y-6 pb-20 md:pb-0">
             {/* Header */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
-                    <h1 className="text-2xl font-bold tracking-tight">Documentos</h1>
-                    <p className="text-muted-foreground text-sm">Gestiona tus escritos y borradores in-app</p>
+                    <h1 className="text-2xl font-bold tracking-tight">{t('documents.title')}</h1>
+                    <p className="text-muted-foreground text-sm">{t('nav.documents')}</p>
                 </div>
                 <div className="flex items-center gap-2 w-full md:w-auto">
                     <div className="relative flex-1 md:w-64">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                         <input
                             type="text"
-                            placeholder="Buscar documentos..."
+                            placeholder={t('documents.search')}
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
                             className="w-full pl-9 pr-4 py-2 bg-muted/50 border border-border/60 rounded-xl text-sm focus:bg-background focus:ring-2 focus:ring-primary/20 outline-none transition-all"
                         />
                     </div>
-                    <Button onClick={handleCreate} disabled={isCreating} className="shrink-0">
+                    <Button onClick={handleCreate} disabled={isCreating || !canCreateDocuments()} className="shrink-0" title={canCreateDocuments() ? t('documents.newDocument') : t('chat.noPermission')}>
                         <Plus className="w-4 h-4 mr-2" />
-                        Nuevo
+                        {t('common.next')}
                     </Button>
                 </div>
             </div>
@@ -116,8 +125,8 @@ export default function DocumentsPage() {
             ) : filteredDocs.length === 0 ? (
                 <div className="text-center py-20 text-muted-foreground">
                     <FileText className="w-12 h-12 mx-auto mb-3 opacity-20" />
-                    <p>No tienes documentos aún.</p>
-                    <Button variant="link" onClick={handleCreate}>Crear el primero</Button>
+                    <p>{t('documents.noDocuments')}</p>
+                    <Button variant="link" onClick={handleCreate}>{t('documents.newDocument')}</Button>
                 </div>
             ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
@@ -138,15 +147,17 @@ export default function DocumentsPage() {
                                     </div>
                                     <div className="opacity-0 group-hover:opacity-100 transition-opacity">
                                         <button
-                                            onClick={(e) => handleDelete(e, doc.id)}
-                                            className="p-2 hover:bg-red-50 hover:text-red-500 rounded-lg transition-colors text-muted-foreground"
+                                            onClick={(e) => canDeleteDocuments() ? handleDelete(e, doc.id) : null}
+                                            disabled={!canDeleteDocuments()}
+                                            className="p-2 hover:bg-red-50 hover:text-red-500 rounded-lg transition-colors text-muted-foreground disabled:opacity-30 disabled:cursor-not-allowed"
+                                            title={canDeleteDocuments() ? t('common.delete') : t('chat.noPermission')}
                                         >
                                             <Trash2 className="w-4 h-4" />
                                         </button>
                                     </div>
                                 </div>
                                 <h3 className="font-semibold text-lg leading-tight mb-1 line-clamp-2 group-hover:text-primary transition-colors">
-                                    {doc.title || "Sin título"}
+                                    {doc.title || t('documents.untitled')}
                                 </h3>
                                 <div className="mt-auto flex items-center text-xs text-muted-foreground gap-1.5">
                                     <Clock className="w-3 h-3" />
@@ -160,6 +171,6 @@ export default function DocumentsPage() {
                 </div>
             )}
         </div>
-        </>
+        </PermissionGuard>
     );
 }

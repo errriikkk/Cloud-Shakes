@@ -10,6 +10,74 @@ export interface AuthRequest extends Request {
     file?: Express.Multer.File;
 }
 
+const DEFAULT_PERMISSIONS = [
+    'view_files',
+    'view_documents',
+    'view_notes',
+    'view_calendar',
+    'view_links',
+    'view_gallery',
+    'view_statistics',
+    'view_api_builder'
+];
+
+/**
+ * Helper function to get user permissions and roles from database
+ * Use this to avoid code duplication across routes
+ */
+export async function getUserPermissions(userId: string): Promise<{
+    permissions: string[];
+    roles: string[];
+    isAdmin: boolean;
+}> {
+    const dbUser = await prisma.user.findUnique({
+        where: { id: userId },
+        include: {
+            roles: {
+                include: {
+                    role: {
+                        include: {
+                            permissions: {
+                                include: {
+                                    permission: true,
+                                },
+                            },
+                        },
+                    },
+                },
+            },
+        },
+    });
+
+    if (!dbUser) {
+        return { permissions: [], roles: [], isAdmin: false };
+    }
+
+    const userRoles = dbUser.roles || [];
+    
+    if (userRoles.length === 0) {
+        return { 
+            permissions: DEFAULT_PERMISSIONS, 
+            roles: [], 
+            isAdmin: dbUser.isAdmin 
+        };
+    }
+
+    const permissionKeys = Array.from(
+        new Set(
+            userRoles.flatMap((ur: any) =>
+                ur.role.permissions.map((rp: any) => rp.permission.key),
+            ),
+        ),
+    );
+
+    return {
+        permissions: permissionKeys,
+        roles: userRoles.map((ur: any) => ur.role.name),
+        isAdmin: dbUser.isAdmin,
+    };
+}
+
 export const protect = async (req: AuthRequest, res: Response, next: NextFunction) => {
     let token: string | undefined;
 

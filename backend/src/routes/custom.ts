@@ -28,6 +28,11 @@ const checkRateLimit = (apiKey: string, limit: number): boolean => {
     return true;
 };
 
+// Helper to validate storedName against path traversal
+const isPathTraversal = (storedName: string): boolean => {
+    return storedName.includes('..') || storedName.includes('/') || storedName.includes('\\');
+};
+
 // Helper to execute API blocks
 export const executeBlocks = async (blocks: any[], context: any): Promise<any> => {
     let result: any = null;
@@ -57,6 +62,12 @@ export const executeBlocks = async (blocks: any[], context: any): Promise<any> =
                         where: { id: fileId },
                     });
                     if (file) {
+                        // Validate against path traversal
+                        if (isPathTraversal(file.storedName)) {
+                            console.error(`[CUSTOM API] Path traversal attempt detected: ${file.storedName}`);
+                            throw new Error('Invalid file path');
+                        }
+                        
                         // Get file from MinIO
                         try {
                             const stream = await minioClient.getObject(BUCKET_NAME, file.storedName);

@@ -2,17 +2,48 @@ import express from 'express';
 import busboy from 'busboy';
 import prisma from '../config/db';
 import { minioClient, BUCKET_NAME, getPresignedUrl } from '../utils/storage';
-import { protect, AuthRequest } from '../middleware/authMiddleware';
+import { protect, requirePermission, AuthRequest } from '../middleware/authMiddleware';
 import { v4 as uuidv4 } from 'uuid';
 import { ThrottledStream } from '../utils/throttle';
 import { LIMITS } from '../config/limits';
+import { createActivity } from './activity';
 
 const router = express.Router();
 
+// Allowed MIME types for uploads (whitelist)
+const ALLOWED_MIME_TYPES = [
+    // Images
+    'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml',
+    'image/bmp', 'image/tiff', 'image/x-icon',
+    // Documents
+    'application/pdf', 'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.ms-excel',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'application/vnd.ms-powerpoint',
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    'text/plain', 'text/csv', 'text/html', 'text/css', 'text/javascript',
+    'application/json', 'application/xml', 'text/xml',
+    // Archives
+    'application/zip', 'application/x-zip-compressed',
+    'application/x-rar-compressed', 'application/vnd.rar',
+    'application/x-tar', 'application/gzip', 'application/x-gzip',
+    // Audio/Video
+    'audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/webm',
+    'video/mp4', 'video/webm', 'video/ogg', 'video/mpeg',
+    // Other
+    'application/octet-stream', 'application/javascript'
+];
+
+// Helper to validate MIME type
+const isMimeTypeAllowed = (mimeType: string): boolean => {
+    return ALLOWED_MIME_TYPES.includes(mimeType.toLowerCase());
+};
+
 // @route   GET /api/files/usage
 // @desc    Get current user's storage usage and limit
-// @access  Private
-router.get('/usage', protect, async (req: AuthRequest, res, next) => {
+// @access  Private - requires view_files permission
+router.get('/usage', protect, requirePermission('view_files'), async (req: AuthRequest, res, next) => {
     try {
         const result = await prisma.file.aggregate({
             // Storage limit is still per user (owner)
@@ -35,7 +66,7 @@ router.get('/usage', protect, async (req: AuthRequest, res, next) => {
 // @route   POST /api/files/upload
 // @desc    Upload a file (Streaming + Throttling)
 // @access  Private
-router.post('/upload', protect, async (req: AuthRequest, res, next) => {
+router.post('/upload', protect, requirePermission('upload_files'), async (req: AuthRequest, res, next) => {
     const bb = busboy({ headers: req.headers });
     let fileUploaded = false;
     let folderId: string | null = null;
@@ -49,6 +80,12 @@ router.post('/upload', protect, async (req: AuthRequest, res, next) => {
     bb.on('file', async (name: string, file: any, info: any) => {
         const { filename, mimeType } = info;
         fileUploaded = true;
+
+        // Validate MIME type
+        if (!isMimeTypeAllowed(mimeType)) {
+            file.resume();
+            return res.status(400).json({ message: 'File type not allowed. Only safe file types are accepted.' });
+        }
 
         try {
             // Storage Limit Check
@@ -91,6 +128,16 @@ router.post('/upload', protect, async (req: AuthRequest, res, next) => {
                 },
             });
 
+            // Log activity
+            await createActivity(
+                req.user.id,
+                'file',
+                'upload',
+                newFile.id,
+                'file',
+                filename
+            );
+
             res.json({
                 ...newFile,
                 size: newFile.size.toString(),
@@ -119,19 +166,84 @@ router.post('/upload', protect, async (req: AuthRequest, res, next) => {
 // @access  Private
 router.get('/', protect, async (req: AuthRequest, res, next) => {
     try {
-        const { folderId } = req.query;
-        const files = await prisma.file.findMany({
-            where: {
-                // Shared within instance: no owner filter for listing
-                folderId: folderId ? (folderId as string) : null,
+        const { folderId, page = '1', limit = '50' } = req.query;
+        const pageNum = Math.min(Math.max(parseInt(page as string) || 1, 1), 100);
+        const limitNum = Math.min(Math.max(parseInt(limit as string) || 50, 1), 100);
+        const skip = (pageNum - 1) * limitNum;
+
+        // Check if user has workspace permission to see all files
+        const userRoles = await prisma.userRole.findMany({
+            where: { userId: req.user.id },
+            include: { role: { include: { permissions: true } } }
+        });
+        const permissions = new Set(
+            userRoles.flatMap((ur: any) => ur.role.permissions.map((p: any) => p.name))
+        );
+        const canViewAll = req.user.isAdmin || permissions.has('view_workspace_files');
+
+        const [files, total] = await Promise.all([
+            prisma.file.findMany({
+                where: canViewAll
+                    ? { folderId: folderId ? (folderId as string) : null }
+                    : { ownerId: req.user.id, folderId: folderId ? (folderId as string) : null },
+                include: {
+                    owner: { select: { id: true, username: true, displayName: true } },
+                },
+                orderBy: { createdAt: 'desc' },
+                skip,
+                take: limitNum,
+            }),
+            prisma.file.count({
+                where: canViewAll
+                    ? { folderId: folderId ? (folderId as string) : null }
+                    : { ownerId: req.user.id, folderId: folderId ? (folderId as string) : null },
+            }),
+        ]);
+        res.json({
+            data: files.map(f => ({ ...f, size: f.size.toString() })),
+            pagination: {
+                page: pageNum,
+                limit: limitNum,
+                total,
+                totalPages: Math.ceil(total / limitNum),
             },
+        });
+    } catch (err) {
+        next(err);
+    }
+});
+
+// @route   GET /api/files/:id
+// @desc    Get file details
+// @access  Private
+router.get('/:id', protect, async (req: AuthRequest, res, next) => {
+    try {
+        const file = await prisma.file.findUnique({
+            where: { id: req.params.id as string },
             include: {
                 owner: { select: { id: true, username: true, displayName: true } },
-                lastModifiedBy: { select: { id: true, username: true, displayName: true } },
-            },
-            orderBy: { createdAt: 'desc' },
+            }
         });
-        res.json(files.map(f => ({ ...f, size: f.size.toString() })));
+
+        if (!file) {
+            return res.status(404).json({ message: 'File not found' });
+        }
+
+        // Check if user can view this file (owner, admin, or has workspace permission)
+        const userRoles = await prisma.userRole.findMany({
+            where: { userId: req.user.id },
+            include: { role: { include: { permissions: true } } }
+        });
+        const permissions = new Set(
+            userRoles.flatMap((ur: any) => ur.role.permissions.map((p: any) => p.name))
+        );
+        const canViewAll = req.user.isAdmin || permissions.has('view_workspace_files');
+
+        if (file.ownerId !== req.user.id && !canViewAll) {
+            return res.status(404).json({ message: 'File not found' });
+        }
+
+        res.json(file);
     } catch (err) {
         next(err);
     }
@@ -140,7 +252,7 @@ router.get('/', protect, async (req: AuthRequest, res, next) => {
 // @route   POST /api/files/bulk-delete
 // @desc    Delete multiple files
 // @access  Private
-router.post('/bulk-delete', protect, async (req: AuthRequest, res, next) => {
+router.post('/bulk-delete', protect, requirePermission('delete_files'), async (req: AuthRequest, res, next) => {
     try {
         const { ids } = req.body;
         if (!Array.isArray(ids) || ids.length === 0) {
@@ -177,7 +289,7 @@ router.post('/bulk-delete', protect, async (req: AuthRequest, res, next) => {
 // @route   POST /api/files/bulk-move
 // @desc    Move multiple files
 // @access  Private
-router.post('/bulk-move', protect, async (req: AuthRequest, res, next) => {
+router.post('/bulk-move', protect, requirePermission('upload_files'), async (req: AuthRequest, res, next) => {
     try {
         const { ids, targetFolderId } = req.body;
         if (!Array.isArray(ids) || ids.length === 0) {
@@ -218,7 +330,17 @@ router.get('/:id/preview', protect, async (req: AuthRequest, res, next) => {
 
         if (!file) return res.status(404).json({ message: 'File not found' });
 
-        if (file.ownerId !== req.user.id && !req.user.isAdmin && !(req.user.permissions || []).includes('view_files')) {
+        // Check if user can view this file (owner, admin, or has workspace permission)
+        const userRoles = await prisma.userRole.findMany({
+            where: { userId: req.user.id },
+            include: { role: { include: { permissions: true } } }
+        });
+        const permissions = new Set(
+            userRoles.flatMap((ur: any) => ur.role.permissions.map((p: any) => p.name))
+        );
+        const canViewAll = req.user.isAdmin || permissions.has('view_workspace_files');
+
+        if (file.ownerId !== req.user.id && !canViewAll) {
             return res.status(401).json({ message: 'Not authorized' });
         }
 
@@ -304,7 +426,7 @@ router.get('/:id/download', protect, async (req: AuthRequest, res, next) => {
 // @route   DELETE /api/files/:id
 // @desc    Delete a file
 // @access  Private
-router.delete('/:id', protect, async (req: AuthRequest, res, next) => {
+router.delete('/:id', protect, requirePermission('delete_files'), async (req: AuthRequest, res, next) => {
     try {
         const file = await prisma.file.findUnique({
             where: { id: req.params.id as string },
@@ -320,6 +442,16 @@ router.delete('/:id', protect, async (req: AuthRequest, res, next) => {
         await prisma.file.delete({
             where: { id: req.params.id as string },
         });
+
+        // Log activity
+        await createActivity(
+            req.user.id,
+            'file',
+            'delete',
+            req.params.id as string,
+            'file',
+            file.originalName
+        );
 
         res.json({ message: 'File removed' });
     } catch (err) {

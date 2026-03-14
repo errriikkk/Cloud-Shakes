@@ -2,6 +2,7 @@ import express from 'express';
 import prisma from '../config/db';
 import { protect, AuthRequest } from '../middleware/authMiddleware';
 import { minioClient, BUCKET_NAME } from '../utils/storage';
+import { createActivity } from './activity';
 
 const router = express.Router();
 
@@ -24,6 +25,16 @@ router.post('/', protect, async (req: AuthRequest, res, next) => {
             },
         });
 
+        // Log activity
+        await createActivity(
+            req.user.id,
+            'folder',
+            'create',
+            folder.id,
+            'folder',
+            name
+        );
+
         res.status(201).json(folder);
     } catch (err) {
         next(err);
@@ -37,11 +48,20 @@ router.get('/', protect, async (req: AuthRequest, res, next) => {
     try {
         const parentId = (req.query.parentId as string) || null;
 
+        // Check if user has workspace permission to see all folders
+        const userRoles = await prisma.userRole.findMany({
+            where: { userId: req.user.id },
+            include: { role: { include: { permissions: true } } }
+        });
+        const permissions = new Set(
+            userRoles.flatMap((ur: any) => ur.role.permissions.map((p: any) => p.name))
+        );
+        const canViewAll = req.user.isAdmin || permissions.has('view_workspace_files');
+
         const folders = await prisma.folder.findMany({
-            where: {
-                ownerId: req.user.id,
-                parentId: parentId === 'null' ? null : parentId,
-            },
+            where: canViewAll 
+                ? { parentId: parentId === 'null' ? null : parentId }
+                : { ownerId: req.user.id, parentId: parentId === 'null' ? null : parentId },
             orderBy: { createdAt: 'desc' },
         });
 
@@ -56,12 +76,22 @@ router.get('/', protect, async (req: AuthRequest, res, next) => {
 // @access  Private
 router.get('/all-content', protect, async (req: AuthRequest, res, next) => {
     try {
+        // Check if user has workspace permission to see all folders
+        const userRoles = await prisma.userRole.findMany({
+            where: { userId: req.user.id },
+            include: { role: { include: { permissions: true } } }
+        });
+        const permissions = new Set(
+            userRoles.flatMap((ur: any) => ur.role.permissions.map((p: any) => p.name))
+        );
+        const canViewAll = req.user.isAdmin || permissions.has('view_workspace_files');
+
         const folders = await prisma.folder.findMany({
-            where: { ownerId: req.user.id },
+            where: canViewAll ? {} : { ownerId: req.user.id },
         });
 
         const files = await prisma.file.findMany({
-            where: { ownerId: req.user.id },
+            where: canViewAll ? {} : { ownerId: req.user.id },
         });
 
         res.json({
@@ -91,7 +121,17 @@ router.get('/:id', protect, async (req: AuthRequest, res, next) => {
             return res.status(404).json({ message: 'Folder not found' });
         }
 
-        if (folder.ownerId !== req.user.id && !req.user.isAdmin) {
+        // Check if user has workspace permission
+        const userRoles = await prisma.userRole.findMany({
+            where: { userId: req.user.id },
+            include: { role: { include: { permissions: true } } }
+        });
+        const permissions = new Set(
+            userRoles.flatMap((ur: any) => ur.role.permissions.map((p: any) => p.name))
+        );
+        const canViewAll = req.user.isAdmin || permissions.has('view_workspace_files');
+
+        if (folder.ownerId !== req.user.id && !canViewAll) {
             return res.status(401).json({ message: 'Not authorized' });
         }
 
@@ -167,6 +207,16 @@ router.delete('/:id', protect, async (req: AuthRequest, res, next) => {
         await prisma.folder.delete({
             where: { id },
         });
+
+        // Log activity
+        await createActivity(
+            req.user.id,
+            'folder',
+            'delete',
+            id,
+            'folder',
+            folder.name
+        );
 
         res.json({ message: 'Folder and its contents removed' });
     } catch (err) {

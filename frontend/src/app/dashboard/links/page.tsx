@@ -14,6 +14,7 @@ import { cn } from "@/lib/utils";
 import { Modal, ModalFooter } from "@/components/ui/Modal";
 import { useRouter, useSearchParams } from "next/navigation";
 import { API_ENDPOINTS } from "@/lib/api";
+import { useTranslation } from "@/lib/i18n";
 
 interface FolderItem {
     id: string;
@@ -52,6 +53,7 @@ interface GroupedLinks {
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
 
 function SharedLinksContent() {
+    const { t } = useTranslation();
     const searchParams = useSearchParams();
     const folderParam = searchParams.get("folder");
 
@@ -148,7 +150,7 @@ function SharedLinksContent() {
             setFolders(Array.from(folderMap.values()));
             
             // Build trail (simplified - you may want to enhance this)
-            setTrail(folderParam ? [{ id: folderParam, name: folderMap.get(folderParam)?.name || 'Carpeta' }] : []);
+            setTrail(folderParam ? [{ id: folderParam, name: folderMap.get(folderParam)?.name || t('files.title') }] : []);
         } catch (err) {
             console.error(err);
         } finally {
@@ -298,7 +300,7 @@ function SharedLinksContent() {
     const handleRemoveExpiry = async (id: string) => {
         try {
             await axios.put(`${API}/api/links/${id}`, { expiresInMinutes: null }, { withCredentials: true });
-            fetchLinks();
+            setLinks(prev => prev.map(l => l.id === id ? { ...l, expiresAt: null, isExpired: false } : l));
         } catch (err) {
             console.error(err);
         }
@@ -320,13 +322,13 @@ function SharedLinksContent() {
         return `${(bytes / 1024 / 1024).toFixed(2)} MB`;
     };
 
-    const formatDate = (date: string) => new Date(date).toLocaleDateString("es-ES", {
+    const formatDate = (date: string) => new Date(date).toLocaleDateString(undefined, {
         month: "short", day: "numeric", year: "numeric",
     });
 
     const timeUntilExpiry = (expiresAt: string) => {
         const diff = new Date(expiresAt).getTime() - Date.now();
-        if (diff <= 0) return "Expirado";
+        if (diff <= 0) return t('links.expires');
         const hours = Math.floor(diff / 3600000);
         const mins = Math.floor((diff % 3600000) / 60000);
         if (hours > 24) return `${Math.floor(hours / 24)}d`;
@@ -336,7 +338,7 @@ function SharedLinksContent() {
 
     if (loading) {
         return (
-            <div className="py-20 text-center text-[#9b9b9b] text-sm font-medium">Cargando enlaces...</div>
+            <div className="py-20 text-center text-[#9b9b9b] text-sm font-medium">{t('common.loading')}</div>
         );
     }
 
@@ -367,7 +369,7 @@ function SharedLinksContent() {
                         ))}
                     </div>
                     <h1 className="text-4xl font-extrabold text-foreground tracking-tightest">
-                        {trail[trail.length - 1]?.name || "Compartidos"}
+                        {trail[trail.length - 1]?.name || t('links.title')}
                     </h1>
                 </div>
 
@@ -377,7 +379,7 @@ function SharedLinksContent() {
                         <div className="px-4 py-2 flex items-center gap-2 bg-background rounded-xl shadow-sm border border-border/40">
                             <Eye className="w-4 h-4 text-blue-500" />
                             <span className="text-xs font-bold text-foreground">
-                                {links.reduce((sum, l) => sum + l.views, 0)} <span className="text-muted-foreground font-medium">Vistas</span>
+                                {links.reduce((sum, l) => sum + l.views, 0)} <span className="text-muted-foreground font-medium">{t('links.clicks')}</span>
                             </span>
                         </div>
                     </div>
@@ -391,7 +393,7 @@ function SharedLinksContent() {
                                 view === 'grid' ? "bg-background shadow-sm border border-border/40 text-foreground" : "text-muted-foreground hover:text-foreground"
                             )}
                         >
-                            <span className="text-[10px] font-bold uppercase tracking-wider">Cuadrícula</span>
+                            <span className="text-[10px] font-bold uppercase tracking-wider">{t('files.viewGrid')}</span>
                         </button>
                         <button
                             onClick={() => setView('list')}
@@ -400,7 +402,7 @@ function SharedLinksContent() {
                                 view === 'list' ? "bg-background shadow-sm border border-border/40 text-foreground" : "text-muted-foreground hover:text-foreground"
                             )}
                         >
-                            <span className="text-[10px] font-bold uppercase tracking-wider">Lista</span>
+                            <span className="text-[10px] font-bold uppercase tracking-wider">{t('files.viewList')}</span>
                         </button>
                     </div>
                 </div>
@@ -438,7 +440,7 @@ function SharedLinksContent() {
                             </div>
                             <div className="min-w-0 flex-1">
                                 <h3 className="text-sm font-bold text-foreground truncate">{folder.name}</h3>
-                                <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-widest mt-0.5">Carpeta</p>
+                                <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-widest mt-0.5">{t('files.noFolders').replace('No hay ', '')}</p>
                             </div>
                         </motion.div>
                     ))}
@@ -482,10 +484,10 @@ function SharedLinksContent() {
                                             <div className="min-w-0 flex-1">
                                                 <div className="flex items-center gap-2 mb-1">
                                                     <h3 className="text-sm font-bold text-foreground truncate">
-                                                        {firstLink.file?.originalName || "Archivo desconocido"}
+                                                        {firstLink.file?.originalName || t('documents.untitled')}
                                                     </h3>
                                                     <span className="text-[10px] font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-full">
-                                                        {group.links.length} enlaces
+                                                        {group.links.length} {t('links.title')}
                                                     </span>
                                                 </div>
                                                 <div className={cn(
@@ -548,28 +550,28 @@ function SharedLinksContent() {
                                                                 )}
                                                             </div>
                                                             <span className="text-[10px] text-muted-foreground">
-                                                                {link.views} vistas
+                                                                {link.views} {t('links.clicks')}
                                                             </span>
                                                         </div>
                                                         <div className="flex items-center gap-1">
                                                             <button
                                                                 onClick={() => handleCopy(link.id)}
                                                                 className="p-1.5 rounded hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
-                                                                title="Copiar"
+                                                                title={t('common.copy')}
                                                             >
                                                                 <Copy className="w-3.5 h-3.5" />
                                                             </button>
                                                             <button
                                                                 onClick={() => window.open(`/s/${link.id}`, '_blank')}
                                                                 className="p-1.5 rounded hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
-                                                                title="Abrir"
+                                                                title={t('gallery.view')}
                                                             >
                                                                 <ExternalLink className="w-3.5 h-3.5" />
                                                             </button>
                                                             <button
                                                                 onClick={() => confirmDelete(link.id)}
                                                                 className="p-1.5 rounded hover:bg-muted transition-colors text-muted-foreground hover:text-red-400"
-                                                                title="Eliminar"
+                                                                title={t('common.delete')}
                                                             >
                                                                 <Trash2 className="w-3.5 h-3.5" />
                                                             </button>
@@ -615,13 +617,13 @@ function SharedLinksContent() {
                                     </div>
                                     <div className="min-w-0 flex-1">
                                         <h3 className="text-sm font-bold text-foreground truncate mb-1">
-                                            {link.file?.originalName || "Archivo desconocido"}
+                                            {link.file?.originalName || t('documents.untitled')}
                                         </h3>
                                         <div className={cn(
                                             "flex flex-wrap items-center gap-x-4 gap-y-1",
                                             view === 'grid' && "justify-center"
                                         )}>
-                                            <span className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest">/{link.id}</span>
+                                            <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">/{link.id}</span>
                                             {link.file && (
                                                 <span className="text-[10px] text-muted-foreground font-medium">{formatSize(link.file.size)}</span>
                                             )}
@@ -651,7 +653,7 @@ function SharedLinksContent() {
                                         )}
                                     >
                                         {link.isPasswordProtected ? <Lock className="w-3 h-3" /> : <Unlock className="w-3 h-3" />}
-                                        {view === 'list' && (link.isPasswordProtected ? "Bloqueado" : "Público")}
+                                        {view === 'list' && (link.isPasswordProtected ? t('talk.password') : "Public")}
                                     </button>
 
                                     {/* Expiry */}
@@ -662,8 +664,8 @@ function SharedLinksContent() {
                                         </div>
                                     ) : link.expiresAt ? (
                                         <button
-                                            onClick={() => handleRemoveExpiry(link.id)}
-                                            className="flex items-center gap-1.5 px-2 py-1 rounded-xl bg-blue-50 border border-blue-100 text-blue-600 hover:bg-blue-100 transition-all font-bold text-[10px] leading-none"
+                                            onClick={() => openExpiryModal(link)}
+                                            className="flex items-center gap-1.5 px-2 py-1 rounded-xl bg-blue-50 border border-blue-100 text-blue-600 font-bold text-[10px] leading-none hover:bg-blue-100 transition-colors"
                                         >
                                             <Clock className="w-3 h-3" />
                                             {timeUntilExpiry(link.expiresAt)}
@@ -671,10 +673,10 @@ function SharedLinksContent() {
                                     ) : (
                                         <button
                                             onClick={() => openExpiryModal(link)}
-                                            className="flex items-center gap-1.5 px-2 py-1 rounded-xl bg-transparent border border-border/60 text-muted-foreground hover:bg-muted/60 transition-all font-bold text-[10px] leading-none"
+                                            className="flex items-center gap-1.5 px-2 py-1 rounded-xl border border-border/60 text-muted-foreground font-bold text-[10px] leading-none hover:bg-muted/60 transition-colors"
                                         >
                                             <Clock className="w-3 h-3" />
-                                            {view === 'list' && "Infinito"}
+                                            {view === 'list' && t('links.never')}
                                         </button>
                                     )}
                                 </div>
@@ -682,29 +684,26 @@ function SharedLinksContent() {
                                 {/* Actions */}
                                 <div className={cn(
                                     "flex items-center gap-1",
-                                    view === 'grid' && "justify-center border-t border-border/40 pt-3 mt-1"
+                                    view === 'grid' ? "justify-center border-t border-border/40 pt-3 mt-1" : "justify-end lg:ml-auto"
                                 )}>
                                     <button
                                         onClick={() => handleCopy(link.id)}
-                                        className={cn(
-                                            "p-1.5 rounded hover:bg-[#3f3f3f] transition-colors",
-                                            copiedId === link.id ? "text-emerald-400" : "text-[#9b9b9b] hover:text-[#d4d4d4]"
-                                        )}
-                                        title="Copiar Enlace"
+                                        className="p-2 rounded-xl bg-muted/50 hover:bg-muted text-muted-foreground hover:text-foreground transition-all"
+                                        title={t('common.copy')}
                                     >
-                                        {copiedId === link.id ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                                        <Copy className="w-4 h-4" />
                                     </button>
                                     <button
                                         onClick={() => window.open(`/s/${link.id}`, '_blank')}
-                                        className="p-1.5 rounded hover:bg-[#3f3f3f] text-[#9b9b9b] hover:text-[#d4d4d4] transition-colors"
-                                        title="Abrir"
+                                        className="p-2 rounded-xl bg-muted/50 hover:bg-muted text-muted-foreground hover:text-foreground transition-all"
+                                        title={t('gallery.view')}
                                     >
                                         <ExternalLink className="w-4 h-4" />
                                     </button>
                                     <button
                                         onClick={() => confirmDelete(link.id)}
-                                        className="p-1.5 rounded hover:bg-[#3f3f3f] text-[#9b9b9b] hover:text-red-400 transition-colors"
-                                        title="Eliminar"
+                                        className="p-2 rounded-xl bg-red-50 hover:bg-red-100 text-red-500 transition-all"
+                                        title={t('common.delete')}
                                     >
                                         <Trash2 className="w-4 h-4" />
                                     </button>
@@ -713,76 +712,68 @@ function SharedLinksContent() {
                         </motion.div>
                         );
                     })}
-
-                    {links.length === 0 && folders.length === 0 && (
-                        <div className="flex flex-col items-center justify-center py-20 text-center col-span-full">
-                            <div className="w-20 h-20 rounded-full bg-muted/60 flex items-center justify-center mb-4">
-                                <LinkIcon className="w-10 h-10 text-muted-foreground/40" />
-                            </div>
-                            <h3 className="text-xl font-bold text-foreground mb-2">Vacío aquí</h3>
-                            <p className="text-muted-foreground text-sm max-w-xs">
-                                No hay elementos compartidos en esta ubicación.
-                            </p>
-                        </div>
-                    )}
                 </AnimatePresence>
             </div>
 
+            {/* Pagination/Scroll spacing */}
+            <div className="h-20" />
+
             {/* Modals */}
-            <Modal isOpen={deleteModalOpen} onClose={() => setDeleteModalOpen(false)} title="Eliminar Enlace">
+            <Modal
+                isOpen={deleteModalOpen}
+                onClose={() => setDeleteModalOpen(false)}
+                title={t('links.delete')}
+            >
                 <div className="space-y-4">
-                    <p className="text-sm text-muted-foreground font-medium leading-relaxed">¿Estás seguro de que quieres eliminar este enlace? El acceso será revocado inmediatamente y esta acción no se puede deshacer.</p>
+                    <p className="text-sm text-muted-foreground">
+                        {t('links.confirmDelete')}
+                    </p>
                     <ModalFooter>
-                        <Button variant="ghost" className="rounded-xl" onClick={() => setDeleteModalOpen(false)}>Cancelar</Button>
-                        <Button variant="destructive" className="rounded-xl" onClick={handleDelete}>Eliminar Enlace</Button>
-                    </ModalFooter>
-                </div>
-            </Modal>
-
-            <Modal isOpen={passwordModalOpen} onClose={() => setPasswordModalOpen(false)} title="Proteger Enlace">
-                <div className="space-y-5">
-                    <p className="text-sm text-muted-foreground font-medium leading-relaxed">Establece una contraseña fuerte para restringir el acceso a este recurso compartido.</p>
-                    <Input
-                        type="password"
-                        placeholder="Código secreto..."
-                        className="rounded-xl h-12"
-                        value={newPassword}
-                        onChange={(e) => setNewPassword(e.target.value)}
-                    />
-                    <ModalFooter>
-                        <Button variant="ghost" className="rounded-xl" onClick={() => setPasswordModalOpen(false)}>Cancelar</Button>
-                        <Button className="rounded-xl px-8" onClick={() => handleTogglePassword(linkToProtect!)} disabled={!newPassword}>
-                            Asegurar Enlace
+                        <Button variant="ghost" onClick={() => setDeleteModalOpen(false)}>
+                            {t('common.cancel')}
+                        </Button>
+                        <Button variant="destructive" onClick={handleDelete}>
+                            {t('common.delete')}
                         </Button>
                     </ModalFooter>
                 </div>
             </Modal>
 
-            <Modal isOpen={expiryModalOpen} onClose={() => setExpiryModalOpen(false)} title="Establecer Expiración">
-                <div className="space-y-5">
-                    <p className="text-sm text-muted-foreground font-medium leading-relaxed">¿Cuántos minutos debería permanecer activo este enlace?</p>
-                    <Input
-                        type="number"
-                        placeholder="Minutos (ej. 60)"
-                        className="rounded-xl h-12"
-                        value={expiryMinutes}
-                        onChange={(e) => setExpiryMinutes(e.target.value)}
-                    />
+            <Modal
+                isOpen={passwordModalOpen}
+                onClose={() => setPasswordModalOpen(false)}
+                title={t('talk.password')}
+            >
+                <div className="space-y-4">
+                    <div className="space-y-2">
+                        <label className="text-sm font-medium">{t('talk.password')}</label>
+                        <Input
+                            type="password"
+                            value={newPassword}
+                            onChange={(e) => setNewPassword(e.target.value)}
+                            placeholder={t('talk.passwordPlaceholder')}
+                            autoFocus
+                        />
+                    </div>
                     <ModalFooter>
-                        <Button variant="ghost" className="rounded-xl" onClick={() => setExpiryModalOpen(false)}>Cancelar</Button>
-                        <Button className="rounded-xl px-8" onClick={handleSetExpiry} disabled={!expiryMinutes}>
-                            Iniciar Cuenta Atrás
+                        <Button variant="ghost" onClick={() => setPasswordModalOpen(false)}>
+                            {t('common.cancel')}
+                        </Button>
+                        <Button onClick={() => linkToProtect && handleTogglePassword(linkToProtect)}>
+                            {t('common.save')}
                         </Button>
                     </ModalFooter>
                 </div>
             </Modal>
 
-            <Modal isOpen={copyModalOpen} onClose={() => setCopyModalOpen(false)} title="¡Listo para Compartir!">
-                <div className="space-y-6">
-                    <p className="text-sm text-muted-foreground font-medium leading-relaxed">El enlace ha sido copiado con éxito. Ahora puedes enviarlo a tus destinatarios.</p>
+            <Modal
+                isOpen={copyModalOpen}
+                onClose={() => setCopyModalOpen(false)}
+                title={t('common.copied')}
+            >
+                <div className="space-y-4">
                     <div className="flex items-center gap-2">
                         <input
-                            type="text"
                             readOnly
                             value={copiedUrl}
                             className="flex-1 bg-muted/60 border border-border/40 rounded-xl px-4 py-3 text-sm text-foreground font-mono select-all focus:outline-none focus:border-primary/40 focus:bg-background transition-all"
@@ -791,13 +782,18 @@ function SharedLinksContent() {
                         <button
                             onClick={() => copyToClipboard(copiedUrl)}
                             className="p-3 rounded-xl bg-primary/10 text-primary hover:bg-primary/20 transition-all shrink-0 shadow-sm shadow-primary/5"
-                            title="Copiar de nuevo"
+                            title={t('common.copy')}
                         >
                             <Copy className="w-5 h-5" />
                         </button>
                     </div>
+                    <div className="flex justify-center">
+                        <div className="w-12 h-12 rounded-full bg-green-500/10 flex items-center justify-center text-green-500">
+                            <Check className="w-6 h-6" />
+                        </div>
+                    </div>
                     <ModalFooter>
-                        <Button className="rounded-xl w-full h-11 font-bold" onClick={() => setCopyModalOpen(false)}>Hecho</Button>
+                        <Button className="rounded-xl w-full h-11 font-bold" onClick={() => setCopyModalOpen(false)}>{t('common.close')}</Button>
                     </ModalFooter>
                 </div>
             </Modal>
@@ -806,8 +802,9 @@ function SharedLinksContent() {
 }
 
 export default function SharedLinksPage() {
+    const { t } = useTranslation();
     return (
-        <Suspense fallback={<div className="py-20 text-center text-[#9b9b9b] text-sm font-medium">Cargando...</div>}>
+        <Suspense fallback={<div className="py-20 text-center text-muted-foreground text-sm font-medium">{t('common.loading')}</div>}>
             <SharedLinksContent />
         </Suspense>
     );

@@ -13,6 +13,7 @@ import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
+import { useTranslation } from "@/lib/i18n";
 
 function formatBytes(bytes: number): string {
     if (bytes === 0) return "0 B";
@@ -24,6 +25,7 @@ function formatBytes(bytes: number): string {
 
 export default function StatisticsPage() {
     const { user } = useAuth();
+    const { t } = useTranslation();
     const [stats, setStats] = useState({
         storage: { used: 0, limit: 53687091200 },
         files: { total: 0, byType: {} as Record<string, number> },
@@ -36,16 +38,23 @@ export default function StatisticsPage() {
     const [linkStats, setLinkStats] = useState<any>(null);
     const [loading, setLoading] = useState(true);
 
-    useEffect(() => {
+    // Helper to extract data from API response (handles both old array and new {data, pagination} format)
+const extractData = (res: any) => {
+    if (Array.isArray(res.data)) return res.data;
+    if (res.data && Array.isArray(res.data.data)) return res.data.data;
+    return [];
+};
+
+useEffect(() => {
         const fetchStats = async () => {
             if (!user) return;
             try {
                 const [usageRes, filesRes, foldersRes, docsRes, notesRes, eventsRes, linksRes, linksStatsRes] = await Promise.all([
                     axios.get(API_ENDPOINTS.FILES.USAGE, { withCredentials: true }).catch(() => ({ data: { used: 0, limit: 53687091200 } })),
-                    axios.get(API_ENDPOINTS.FILES.BASE, { withCredentials: true }).catch(() => ({ data: [] })),
+                    axios.get(API_ENDPOINTS.FILES.BASE, { withCredentials: true }).catch(() => ({ data: { data: [], pagination: { total: 0 } } })),
                     axios.get(API_ENDPOINTS.FOLDERS.BASE, { withCredentials: true }).catch(() => ({ data: [] })),
-                    axios.get(API_ENDPOINTS.DOCUMENTS.BASE, { withCredentials: true }).catch(() => ({ data: [] })),
-                    axios.get(API_ENDPOINTS.NOTES.BASE, { withCredentials: true }).catch(() => ({ data: [] })),
+                    axios.get(API_ENDPOINTS.DOCUMENTS.BASE, { withCredentials: true }).catch(() => ({ data: { data: [], pagination: { total: 0 } } })),
+                    axios.get(API_ENDPOINTS.NOTES.BASE, { withCredentials: true }).catch(() => ({ data: { data: [], pagination: { total: 0 } } })),
                     axios.get(API_ENDPOINTS.CALENDAR.BASE, { 
                         params: { month: new Date().getMonth() + 1, year: new Date().getFullYear() },
                         withCredentials: true 
@@ -54,9 +63,13 @@ export default function StatisticsPage() {
                     axios.get(API_ENDPOINTS.LINKS.STATS, { withCredentials: true }).catch(() => ({ data: null })),
                 ]);
 
+                const files = extractData(filesRes);
+                const documents = extractData(docsRes);
+                const notes = extractData(notesRes);
+
                 // Calculate file types
                 const byType: Record<string, number> = {};
-                filesRes.data.forEach((f: any) => {
+                files.forEach((f: any) => {
                     const type = f.mimeType?.split('/')[0] || 'other';
                     byType[type] = (byType[type] || 0) + 1;
                 });
@@ -67,12 +80,12 @@ export default function StatisticsPage() {
                         limit: Number(usageRes.data.limit || 53687091200),
                     },
                     files: {
-                        total: filesRes.data.length,
+                        total: files.length,
                         byType,
                     },
                     folders: foldersRes.data.length,
-                    documents: docsRes.data.length,
-                    notes: notesRes.data.length,
+                    documents: documents.length,
+                    notes: notes.length,
                     calendarEvents: eventsRes.data.length,
                     links: linksRes.data.length,
                 });
@@ -112,10 +125,10 @@ export default function StatisticsPage() {
             {/* Header */}
             <div>
                 <h1 className="text-4xl font-extrabold text-foreground tracking-tightest">
-                    Estadísticas
+                    {t('statistics.title')}
                 </h1>
                 <p className="text-muted-foreground mt-2 text-sm font-medium">
-                    Análisis y métricas de tu espacio de trabajo
+                    {t('statistics.overview')}
                 </p>
             </div>
 
@@ -126,13 +139,13 @@ export default function StatisticsPage() {
                         <HardDrive className="w-6 h-6 text-primary" />
                     </div>
                     <div>
-                        <h2 className="text-lg font-bold text-foreground">Almacenamiento</h2>
-                        <p className="text-xs text-muted-foreground">Uso total del espacio</p>
+                        <h2 className="text-lg font-bold text-foreground">{t('statistics.storage')}</h2>
+                        <p className="text-xs text-muted-foreground">{t('home.storage')}</p>
                     </div>
                 </div>
                 <div className="space-y-4">
                     <div className="flex items-center justify-between">
-                        <span className="text-sm font-medium text-foreground">Espacio usado</span>
+                        <span className="text-sm font-medium text-foreground">{t('home.used')}</span>
                         <span className="text-sm font-bold text-foreground">
                             {formatBytes(stats.storage.used)} / {formatBytes(stats.storage.limit)}
                         </span>
@@ -149,7 +162,7 @@ export default function StatisticsPage() {
                         />
                     </div>
                     <p className="text-xs text-muted-foreground">
-                        {Math.round(storagePercent)}% del espacio total utilizado
+                        {Math.round(storagePercent)}% {t('home.used')}
                     </p>
                 </div>
             </div>
@@ -169,7 +182,7 @@ export default function StatisticsPage() {
                     <h3 className="text-3xl font-bold text-foreground mb-1">
                         {stats.files.total}
                     </h3>
-                    <p className="text-xs text-muted-foreground">Archivos totales</p>
+                    <p className="text-xs text-muted-foreground">{t('statistics.files')}</p>
                 </motion.div>
 
                 <motion.div
@@ -186,7 +199,7 @@ export default function StatisticsPage() {
                     <h3 className="text-3xl font-bold text-foreground mb-1">
                         {stats.folders}
                     </h3>
-                    <p className="text-xs text-muted-foreground">Carpetas</p>
+                    <p className="text-xs text-muted-foreground">{t('files.noFolders').replace('No hay ', '')}</p>
                 </motion.div>
 
                 <motion.div
@@ -203,7 +216,7 @@ export default function StatisticsPage() {
                     <h3 className="text-3xl font-bold text-foreground mb-1">
                         {stats.documents}
                     </h3>
-                    <p className="text-xs text-muted-foreground">Documentos</p>
+                    <p className="text-xs text-muted-foreground">{t('statistics.documents')}</p>
                 </motion.div>
 
                 <motion.div
@@ -220,7 +233,7 @@ export default function StatisticsPage() {
                     <h3 className="text-3xl font-bold text-foreground mb-1">
                         {stats.notes}
                     </h3>
-                    <p className="text-xs text-muted-foreground">Notas</p>
+                    <p className="text-xs text-muted-foreground">{t('statistics.notes')}</p>
                 </motion.div>
             </div>
 
@@ -229,7 +242,7 @@ export default function StatisticsPage() {
                 <div className="bg-background border border-border/60 rounded-2xl p-6 shadow-sm">
                     <div className="flex items-center gap-3 mb-4">
                         <Calendar className="w-5 h-5 text-purple-500" />
-                        <h3 className="text-sm font-bold text-foreground">Eventos</h3>
+                        <h3 className="text-sm font-bold text-foreground">{t('nav.calendar')}</h3>
                     </div>
                     <p className="text-2xl font-bold text-foreground">{stats.calendarEvents}</p>
                 </div>
@@ -237,7 +250,7 @@ export default function StatisticsPage() {
                 <div className="bg-background border border-border/60 rounded-2xl p-6 shadow-sm">
                     <div className="flex items-center gap-3 mb-4">
                         <LinkIcon className="w-5 h-5 text-blue-500" />
-                        <h3 className="text-sm font-bold text-foreground">Enlaces compartidos</h3>
+                        <h3 className="text-sm font-bold text-foreground">{t('statistics.links')}</h3>
                     </div>
                     <p className="text-2xl font-bold text-foreground">{stats.links}</p>
                 </div>
@@ -245,7 +258,7 @@ export default function StatisticsPage() {
                 <div className="bg-background border border-border/60 rounded-2xl p-6 shadow-sm">
                     <div className="flex items-center gap-3 mb-4">
                         <PieChart className="w-5 h-5 text-primary" />
-                        <h3 className="text-sm font-bold text-foreground">Tipos de archivo</h3>
+                        <h3 className="text-sm font-bold text-foreground">{t('files.details')}</h3>
                     </div>
                     <p className="text-2xl font-bold text-foreground">
                         {Object.keys(stats.files.byType).length}
@@ -258,7 +271,7 @@ export default function StatisticsPage() {
                 <div className="bg-background border border-border/60 rounded-2xl p-6 shadow-sm">
                     <h3 className="text-lg font-bold text-foreground mb-4 flex items-center gap-2">
                         <BarChart3 className="w-5 h-5 text-primary" />
-                        Distribución por tipo de archivo
+                        {t('statistics.overview')}
                     </h3>
                     <div className="space-y-3">
                         {Object.entries(stats.files.byType)
@@ -269,7 +282,7 @@ export default function StatisticsPage() {
                                     <div key={type} className="space-y-2">
                                         <div className="flex items-center justify-between">
                                             <span className="text-sm font-medium text-foreground capitalize">
-                                                {type === 'other' ? 'Otros' : type}
+                                                {type === 'other' ? t('activity.filters.all') : type}
                                             </span>
                                             <span className="text-sm font-bold text-muted-foreground">
                                                 {count} ({Math.round(percent)}%)
@@ -295,7 +308,7 @@ export default function StatisticsPage() {
                 <div className="space-y-6">
                     <h2 className="text-2xl font-bold text-foreground flex items-center gap-2">
                         <LinkIcon className="w-6 h-6 text-primary" />
-                        Estadísticas de Enlaces Compartidos
+                        {t('statistics.links')}
                     </h2>
 
                     {/* Link Overview Cards */}
@@ -307,7 +320,7 @@ export default function StatisticsPage() {
                         >
                             <div className="flex items-center gap-3 mb-4">
                                 <LinkIcon className="w-5 h-5 text-primary" />
-                                <h3 className="text-sm font-bold text-foreground">Total Enlaces</h3>
+                                <h3 className="text-sm font-bold text-foreground">{t('links.title')}</h3>
                             </div>
                             <p className="text-3xl font-bold text-foreground">{linkStats.totalLinks}</p>
                         </motion.div>
@@ -320,7 +333,7 @@ export default function StatisticsPage() {
                         >
                             <div className="flex items-center gap-3 mb-4">
                                 <Eye className="w-5 h-5 text-blue-500" />
-                                <h3 className="text-sm font-bold text-foreground">Total Visualizaciones</h3>
+                                <h3 className="text-sm font-bold text-foreground">{t('links.clicks')}</h3>
                             </div>
                             <p className="text-3xl font-bold text-foreground">{linkStats.totalViews}</p>
                         </motion.div>
@@ -333,7 +346,7 @@ export default function StatisticsPage() {
                         >
                             <div className="flex items-center gap-3 mb-4">
                                 <CheckCircle2 className="w-5 h-5 text-green-500" />
-                                <h3 className="text-sm font-bold text-foreground">Enlaces Activos</h3>
+                                <h3 className="text-sm font-bold text-foreground">{t('links.title')}</h3>
                             </div>
                             <p className="text-3xl font-bold text-foreground">{linkStats.activeLinks}</p>
                         </motion.div>
@@ -346,7 +359,7 @@ export default function StatisticsPage() {
                         >
                             <div className="flex items-center gap-3 mb-4">
                                 <AlertCircle className="w-5 h-5 text-red-500" />
-                                <h3 className="text-sm font-bold text-foreground">Enlaces Expirados</h3>
+                                <h3 className="text-sm font-bold text-foreground">{t('links.expires')}</h3>
                             </div>
                             <p className="text-3xl font-bold text-foreground">{linkStats.expiredLinks}</p>
                         </motion.div>
@@ -357,14 +370,14 @@ export default function StatisticsPage() {
                         <div className="bg-background border border-border/60 rounded-2xl p-6 shadow-sm">
                             <h3 className="text-lg font-bold text-foreground mb-4 flex items-center gap-2">
                                 <PieChart className="w-5 h-5 text-primary" />
-                                Enlaces por Tipo
+                                {t('statistics.links')}
                             </h3>
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                 {Object.entries(linkStats.linksByType).map(([type, count]: [string, any]) => (
                                     <div key={type} className="p-4 bg-muted/30 rounded-xl">
                                         <div className="flex items-center justify-between mb-2">
                                             <span className="text-sm font-bold text-foreground capitalize">
-                                                {type === 'file' ? 'Archivos' : type === 'document' ? 'Documentos' : 'Carpetas'}
+                                                {type === 'file' ? t('statistics.files') : type === 'document' ? t('statistics.documents') : t('files.noFolders').replace('No hay ', '')}
                                             </span>
                                             <span className="text-lg font-bold text-primary">{count}</span>
                                         </div>
@@ -387,7 +400,7 @@ export default function StatisticsPage() {
                         <div className="bg-background border border-border/60 rounded-2xl p-6 shadow-sm">
                             <h3 className="text-lg font-bold text-foreground mb-4 flex items-center gap-2">
                                 <TrendingUp className="w-5 h-5 text-primary" />
-                                Enlaces Más Vistos
+                                {t('statistics.links')}
                             </h3>
                             <div className="space-y-2">
                                 {linkStats.mostViewed.slice(0, 5).map((link: any, index: number) => (
@@ -398,7 +411,7 @@ export default function StatisticsPage() {
                                             </div>
                                             <div>
                                                 <p className="text-sm font-bold text-foreground capitalize">
-                                                    {link.type === 'file' ? 'Archivo' : link.type === 'document' ? 'Documento' : 'Carpeta'}
+                                                    {link.type === 'file' ? t('statistics.files') : link.type === 'document' ? t('statistics.documents') : t('files.noFolders').replace('No hay ', '')}
                                                 </p>
                                                 <p className="text-xs text-muted-foreground font-mono">{link.id}</p>
                                             </div>
