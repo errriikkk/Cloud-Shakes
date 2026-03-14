@@ -68,12 +68,14 @@ export const getPresignedUrl = async (objectName: string, expiry: number = 900, 
     const externalHost = process.env.MINIO_EXTERNAL_ENDPOINT;
 
     if (externalHost) {
-        const useSSL = (process.env.MINIO_EXTERNAL_USE_SSL || '').trim() === 'true';
+        // Always use HTTPS when there's an external endpoint (Cloudflare Tunnel or public domain)
+        // The browser accesses the public URL, not direct to MinIO
+        const useSSL = true;
         const port = parseInt(process.env.MINIO_EXTERNAL_PORT || '443');
 
         const clientOptions: Minio.ClientOptions = {
             endPoint: externalHost,
-            useSSL: useSSL,
+            useSSL: false, // Internal connection to MinIO always HTTP
             accessKey: process.env.MINIO_ROOT_USER || 'minioadmin',
             secretKey: process.env.MINIO_ROOT_PASSWORD || 'miniopassword',
             region: 'us-east-1'
@@ -86,7 +88,9 @@ export const getPresignedUrl = async (objectName: string, expiry: number = 900, 
 
         const signingClient = new Minio.Client(clientOptions);
         try {
-            const url = await signingClient.presignedGetObject(BUCKET_NAME, objectName, expiry, options);
+            let url = await signingClient.presignedGetObject(BUCKET_NAME, objectName, expiry, options);
+            // Force HTTPS in the returned URL for browsers (avoids Mixed Content)
+            url = url.replace(/^http:\/\//, 'https://');
             return url;
         } catch (err) {
             console.error('[STORAGE] Error generating external presigned URL:', err);
