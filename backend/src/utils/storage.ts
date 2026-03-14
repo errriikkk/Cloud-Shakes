@@ -68,29 +68,31 @@ export const getPresignedUrl = async (objectName: string, expiry: number = 900, 
     const externalHost = process.env.MINIO_EXTERNAL_ENDPOINT;
 
     if (externalHost) {
-        // Always use HTTPS when there's an external endpoint (Cloudflare Tunnel or public domain)
-        // The browser accesses the public URL, not direct to MinIO
-        const useSSL = true;
-        const port = parseInt(process.env.MINIO_EXTERNAL_PORT || '443');
+        // Use internal MinIO client to generate the URL, then replace host with external
+        const port = parseInt(process.env.MINIO_EXTERNAL_PORT || '9000');
 
         const clientOptions: Minio.ClientOptions = {
-            endPoint: externalHost,
-            useSSL: false, // Internal connection to MinIO always HTTP
+            endPoint: 'minio', // Internal Docker network endpoint
+            useSSL: false,
             accessKey: process.env.MINIO_ROOT_USER || 'minioadmin',
             secretKey: process.env.MINIO_ROOT_PASSWORD || 'miniopassword',
             region: 'us-east-1'
         };
 
-        // Only include port if it is NOT the default for the protocol
-        if (!((useSSL && port === 443) || (!useSSL && port === 80))) {
+        // Only include port if it is NOT the default
+        if (port !== 9000 && port !== 80) {
             clientOptions.port = port;
         }
 
         const signingClient = new Minio.Client(clientOptions);
         try {
+            // Generate URL with internal host, then replace with external
             let url = await signingClient.presignedGetObject(BUCKET_NAME, objectName, expiry, options);
-            // Force HTTPS in the returned URL for browsers (avoids Mixed Content)
-            url = url.replace(/^http:\/\//, 'https://');
+            
+            // Replace internal hostname with external hostname
+            url = url.replace(/minio:[0-9]+/, externalHost);
+            url = url.replace(/http:\/\/[^/]+/, `https://${externalHost}`);
+            
             return url;
         } catch (err) {
             console.error('[STORAGE] Error generating external presigned URL:', err);
