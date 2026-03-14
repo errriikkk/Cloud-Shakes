@@ -381,7 +381,7 @@ const start = async () => {
     await initStorage();
     console.log('✅ MinIO storage initialized.');
 
-    // Seed admin user if not exists
+    // Seed / update admin user from environment
     const adminUsername = process.env.ADMIN_USERNAME;
     const adminPassword = process.env.ADMIN_PASSWORD;
 
@@ -390,14 +390,24 @@ const start = async () => {
     }
 
     try {
-        const existing = await prisma.user.findUnique({ where: { username: adminUsername } });
-        if (!existing) {
-            const hashed = await hashPassword(adminPassword);
-            await prisma.user.create({ data: { username: adminUsername, password: hashed, displayName: 'Admin', isAdmin: true } });
-            console.log(`✅ User "${adminUsername}" seeded.`);
-        }
+        const hashed = await hashPassword(adminPassword);
+        const user = await prisma.user.upsert({
+            where: { username: adminUsername },
+            update: {
+                password: hashed,
+                isAdmin: true,
+                displayName: 'Admin',
+            },
+            create: {
+                username: adminUsername,
+                password: hashed,
+                displayName: 'Admin',
+                isAdmin: true,
+            },
+        });
+        console.log(`✅ Admin user "${user.username}" is in sync with .env credentials.`);
     } catch (e) {
-        console.error('❌ Error seeding user:', e);
+        console.error('❌ Error seeding/updating admin user:', e);
     }
 
     setupCallHandlers(io);

@@ -177,26 +177,24 @@ export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserPro
 
 
     useEffect(() => {
-        const loadPreviews = async () => {
+        const loadPreviews = () => {
             const imageFiles = files.filter(f => f.mimeType.startsWith('image/'));
-            const allImages = imageFiles;
-
             const newPreviews: Record<string, string> = {};
-            await Promise.all(
-                allImages.map(async (file) => {
-                    if (previews[file.id]) return;
-                    try {
-                        const res = await axios.get(`${API}/api/files/${file.id}/preview`, { withCredentials: true });
-                        newPreviews[file.id] = res.data.url;
-                    } catch { }
-                })
-            );
+
+            imageFiles.forEach((file) => {
+                if (!previews[file.id]) {
+                    // Always go through backend endpoint, which streams the file.
+                    newPreviews[file.id] = `${API}/api/files/${file.id}/preview`;
+                }
+            });
+
             if (Object.keys(newPreviews).length > 0) {
                 setPreviews(prev => ({ ...prev, ...newPreviews }));
             }
         };
+
         if (files.length > 0) loadPreviews();
-    }, [files]);
+    }, [files, previews]);
 
     useEffect(() => {
         const syncPath = async () => {

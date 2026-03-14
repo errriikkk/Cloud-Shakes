@@ -320,7 +320,7 @@ router.post('/bulk-move', protect, requirePermission('upload_files'), async (req
 });
 
 // @route   GET /api/files/:id/preview
-// @desc    Get a presigned URL for file preview (images, etc.)
+// @desc    Stream file contents for in-browser preview (images, video, audio, pdf, text, etc.)
 // @access  Private
 router.get('/:id/preview', protect, async (req: AuthRequest, res, next) => {
     try {
@@ -344,8 +344,43 @@ router.get('/:id/preview', protect, async (req: AuthRequest, res, next) => {
             return res.status(401).json({ message: 'Not authorized' });
         }
 
-        const url = await getPresignedUrl(file.storedName, 60 * 60);
-        res.json({ url });
+        const safeFilename = encodeURIComponent(file.originalName);
+        const previewSpeedKB = parseInt(process.env.MAX_PREVIEW_SPEED || process.env.MAX_DOWNLOAD_SPEED || '0');
+        const previewSpeedBytes = previewSpeedKB * 1024;
+        const shouldThrottle = previewSpeedBytes > 0;
+
+        try {
+            const stat = await minioClient.statObject(BUCKET_NAME, file.storedName);
+            const fileSize = stat.size;
+
+            // For previews we always serve full content with inline disposition.
+            const dataStream = await minioClient.getObject(BUCKET_NAME, file.storedName);
+
+            res.writeHead(200, {
+                'Content-Length': fileSize,
+                'Content-Type': file.mimeType,
+                'Content-Disposition': `inline; filename="${safeFilename}"`,
+                'Accept-Ranges': 'bytes',
+            });
+
+            dataStream.on('error', (err: any) => {
+                console.error('[PREVIEW] Stream Error', err);
+                if (!res.headersSent) {
+                    res.status(500).end();
+                } else {
+                    res.end();
+                }
+            });
+
+            if (shouldThrottle) {
+                const throttler = new ThrottledStream(previewSpeedBytes);
+                dataStream.pipe(throttler).pipe(res);
+            } else {
+                dataStream.pipe(res);
+            }
+        } catch (minioErr) {
+            next(minioErr);
+        }
     } catch (err) {
         next(err);
     }

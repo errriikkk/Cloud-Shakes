@@ -60,9 +60,8 @@ export function PreviewModal({ file, isOpen, onClose }: PreviewModalProps) {
                         setUrl(res.data.url);
                     }
                 } else {
-                    // For other files, use preview endpoint
-                    const res = await axios.get(`${API}/api/files/${file.id}/preview`, { withCredentials: true });
-                    setUrl(res.data.url);
+                    // For other files, just use backend streaming endpoint as URL
+                    setUrl(`${API}/api/files/${file.id}/preview`);
                 }
             } catch (err) {
                 console.error("Failed to load preview URL", err);

@@ -57,23 +57,11 @@ export default function GalleryPage() {
                 file.mimeType?.startsWith('image/')
             );
 
-            // Fetch preview URLs for all images
-            const imagesWithPreview = await Promise.all(
-                imageFiles.map(async (file: ImageFile) => {
-                    try {
-                        const previewRes = await axios.get(
-                            `${API_BASE}/api/files/${file.id}/preview`,
-                            { withCredentials: true }
-                        );
-                        return {
-                            ...file,
-                            previewUrl: previewRes.data.url,
-                        };
-                    } catch {
-                        return file;
-                    }
-                })
-            );
+            // Attach backend preview endpoint URL directly
+            const imagesWithPreview: ImageFile[] = imageFiles.map((file: ImageFile) => ({
+                ...file,
+                previewUrl: `${API_BASE}/api/files/${file.id}/preview`,
+            }));
 
             // Sort by creation date (newest first)
             imagesWithPreview.sort((a, b) => 
