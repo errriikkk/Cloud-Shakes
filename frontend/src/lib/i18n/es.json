@@ -443,19 +443,6 @@
             "response": "Respuesta"
         }
     },
-    "extensions": {
-        "title": "Extensiones",
-        "subtitle": "Gestiona las extensiones instaladas en tu instancia",
-        "search": "Buscar extensiones...",
-        "noInstalled": "No hay extensiones disponibles",
-        "noInstalledDesc": "Intenta de nuevo mas tarde",
-        "by": "por",
-        "install": "Instalar",
-        "installing": "Instalando...",
-        "installSuccess": "Extension instalada correctamente",
-        "error": "Error al instalar extension",
-        "explore": "Explorar Marketplace"
-    },
     "notifications": {
         "title": "Notificaciones",
         "unreadCount": "sin leer",

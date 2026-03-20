@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
-import { Settings, User, Lock, Camera, Save, X, Loader2, Globe, Shield, Users, Puzzle, Search, Download, ExternalLink, Database, ServerCog, RotateCcw } from "lucide-react";
+import { Settings, User, Lock, Camera, Save, X, Loader2, Globe, Shield, Users, Database, ServerCog, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { motion, AnimatePresence } from "framer-motion";
@@ -18,15 +18,6 @@ import { Modal, ModalFooter } from "@/components/ui/Modal";
 
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
-const MARKETPLACE_API = process.env.NEXT_PUBLIC_MARKETPLACE_URL || 'http://localhost:5050';
-
-interface Plugin {
-    id: string;
-    name: string;
-    description: string;
-    author: { name: string };
-    versions: { version: string; createdAt: string }[];
-}
 
 export default function SettingsPage() {
     const { user, loading: authLoading } = useAuth();
@@ -46,10 +37,6 @@ export default function SettingsPage() {
         new: "",
         confirm: "",
     });
-    const [extensions, setExtensions] = useState<Plugin[]>([]);
-    const [extensionsLoading, setExtensionsLoading] = useState(false);
-    const [extensionSearch, setExtensionSearch] = useState("");
-    const [installingId, setInstallingId] = useState<string | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     // Backup configuration
@@ -365,21 +352,9 @@ export default function SettingsPage() {
         }
     };
 
-    const fetchExtensions = useCallback(async () => {
-        setExtensionsLoading(true);
-        try {
-            const res = await axios.get(`${MARKETPLACE_API}/api/catalog`);
-            setExtensions(res.data);
-        } catch (err) {
-            console.error("Failed to fetch extensions:", err);
-        } finally {
-            setExtensionsLoading(false);
-        }
-    }, []);
-
     useEffect(() => {
-        fetchExtensions();
-    }, [fetchExtensions]);
+        fetchCloudLimits();
+    }, [fetchCloudLimits]);
 
     useEffect(() => {
         fetchCloudLimits();
@@ -393,26 +368,6 @@ export default function SettingsPage() {
         fetchBackupConfigs();
     }, [fetchBackupConfigs]);
 
-    const handleInstallExtension = async (pluginId: string) => {
-        setInstallingId(pluginId);
-        try {
-            await axios.post(`${MARKETPLACE_API}/api/install`, {
-                coreInstanceId: `settings-instance-${Date.now()}`,
-                secretHash: 'settings-secret',
-                pluginId: pluginId
-            });
-            alert(t("common.success"), t("extensions.installSuccess"), { type: 'success' });
-        } catch (err: any) {
-            alert(t("common.error"), err.response?.data?.message || t("extensions.error"), { type: 'danger' });
-        } finally {
-            setInstallingId(null);
-        }
-    };
-
-    const filteredExtensions = extensions.filter(ext => 
-        ext.name.toLowerCase().includes(extensionSearch.toLowerCase()) ||
-        ext.description.toLowerCase().includes(extensionSearch.toLowerCase())
-    );
 
     if (authLoading) {
         return (
