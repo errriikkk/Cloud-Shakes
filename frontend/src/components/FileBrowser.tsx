@@ -901,7 +901,7 @@ export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserPro
                                         draggable
                                         onDragStart={(e) => handleDragStart(e, file.id, 'file')}
                                         className={cn(
-                                            "grid grid-cols-[40px_1fr_115px] sm:grid-cols-[40px_1fr_120px_120px] lg:grid-cols-[40px_1fr_120px_140px_140px] gap-2 sm:gap-4 px-4 sm:px-6 py-3 sm:py-4 items-center border-b border-border/40 last:border-0 hover:bg-muted/30 transition-colors group cursor-default",
+                                            "grid grid-cols-[40px_1fr_115px] sm:grid-cols-[40px_1fr_120px_120px] lg:grid-cols-[40px_1fr_120px_140px_140px] gap-2 sm:gap-4 px-4 sm:px-6 py-3 sm:py-4 items-center border-b border-border/40 last:border-0 hover:bg-muted/30 transition-colors group cursor-pointer",
                                             selectedFile === file.id && "bg-accent/40",
                                             selectedItems.find(i => i.id === file.id) && "bg-primary/5"
                                         )}
@@ -919,9 +919,13 @@ export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserPro
                                             </div>
                                         </div>
                                         <div className="flex items-center gap-4 min-w-0">
-                                            {previews[file.id] ? (
+                                            {previews[file.id] && file.mimeType.startsWith('image/') ? (
                                                 <div className="w-10 h-10 rounded-xl overflow-hidden shadow-sm border border-border/40">
                                                     <img src={previews[file.id]} alt="" className="w-full h-full object-cover shrink-0" />
+                                                </div>
+                                            ) : previews[file.id] && file.mimeType.startsWith('video/') ? (
+                                                <div className="w-10 h-10 rounded-xl overflow-hidden shadow-sm border border-border/40 flex items-center justify-center bg-black">
+                                                    <video src={previews[file.id]} className="w-full h-full object-cover shrink-0" muted playsInline preload="metadata" />
                                                 </div>
                                             ) : (
                                                 <div className="w-10 h-10 flex items-center justify-center shrink-0 bg-muted/60 rounded-xl">
