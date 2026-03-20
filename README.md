@@ -20,9 +20,9 @@
 
 ---
 
-**Cloud Shakes** is not just another file manager. It is a completely re-engineered, enterprise-grade, **self-hosted cloud storage solution** designed for the modern web. Built specifically to replace sluggish, legacy PHP applications like Nextcloud or expensive walled gardens like Google Drive and Dropbox, Cloud Shakes offers **2025-level UX/UI**, uncompromising security, and an object-storage-first backend.
+**Cloud Shakes** is not just another file manager. It is a completely re-engineered, enterprise-grade, **S3-native API-first self-hosted cloud storage solution** designed for the modern web. Built specifically to replace sluggish, legacy PHP applications like Nextcloud or expensive walled gardens like Google Drive and Dropbox, Cloud Shakes offers **2025-level UX/UI**, uncompromising security, and an object-storage-first backend.
 
-If you believe that owning your data shouldn't mean sacrificing performance or aesthetics, Cloud Shakes is built for you.
+By decoupling the storage layer from the filesystem and adopting a strictly-typed Node.js architecture, we ensure sub-millisecond metadata operations and horizontal scalability that legacy LAMP stacks simply cannot match.
 
 ---
 
@@ -86,28 +86,41 @@ Why build another cloud system? Because the self-hosted community deserves a tie
 </p>
 
 ### 1. 📁 Advanced Storage & File Management
-- **S3-First Backend Architecture**: Instead of storing files flatly on an ext4 disk which severely limits scalability, Cloud Shakes stores objects using standard S3 APIs. By default, it bundles **MinIO**, but it can effortlessly pipe to AWS S3, DigitalOcean Spaces, or Cloudflare R2 by simply changing your `.env`.
+- **S3-Native Backend Architecture**: Instead of storing files flatly on an ext4 disk which severely limits scalability, Cloud Shakes stores objects using standard S3 APIs. By default, it bundles **MinIO**, but it can effortlessly pipe to AWS S3, DigitalOcean Spaces, or Cloudflare R2 by simply changing your `.env`.
 - **Intelligent Media Previews**: Native support for viewing images, reading PDFs, and editing Markdown documents inline.
-- **Buffered Media Streaming**: Videos and massive audio files stream directly. The backend fully supports the `Range` HTTP header, meaning you can skip through a 4GB 4K video instantly without downloading the whole file.
-- **Resilient Uploads**: Ultra-fast, chunked drag-and-drop system.
+- **High-Performance Media Streaming**: Support for large media files via HTTP `Range` headers, enabling instant seeking and buffered playback of 4K video without full downloads.
+- **Resilient Uploads**: Ultra-fast, chunked drag-and-drop system designed for reliability over unstable connections.
 
 ### 2. 🔗 Secure Reverse-Sharing
-- **Share Links on Steroids**: Generate a public link in 1 second.
-- **Granular Perimeter Security**: Need to lock it down? Add a custom password, set an automatic expiration date (e.g., "expires in 48 hours").
-- **Direct Downloads**: Files are safely proxied. Anonymous users never see your actual internal S3 bucket URLs or database IDs.
+- **Advanced Share Links**: Generate public access points with unique, non-guessable identifiers.
+- **Granular Perimeter Security**: Add custom password protection and set automatic expiration dates (e.g., "expires in 48 hours") for temporary access.
+- **Secure Proxying**: Files are proxied through the API; external users never see your internal S3 bucket URLs or private database IDs.
 
-### 3. 🛡️ Enterprise-Grade Security & Roles (RBAC)
-- **Visual Role-Based Access Control**: Inspired by Discord's role system. Create custom roles (e.g., "Editors", "Viewers") and assign them specific permissions (Upload, Delete, Share, Manage Users).
-- **Stateless Authentication**: Uses asymmetric JWT session tokens with a silent HTTP-Only cookie refresh flow. Completely immune to standard XSS token theft.
-- **CSRF Protection**: Native double-submit cookie patterns for mutating requests.
-- **Runtime Validation**: Everything hitting the API is validated through `Zod` schemas. Malformed payloads or path-traversal strings are stripped out before they even hit the controllers.
-- **DDoS/Abuse Mitigation**: Integrated IP-based Rate Limiting on critical endpoints (login, register, share creation).
+### 3. 🛡️ Enterprise-Grade Security (IAM)
+- **Discord-Inspired RBAC**: A visual Role-Based Access Control system. Create custom roles (e.g., "Editors", "Viewers") with specific atomic permissions (Upload, Delete, Share, Manage Users).
+- **Stateless Asymmetric Authentication**: Uses high-entropy JWT session tokens with a silent HTTP-Only cookie refresh flow, providing immunity to XSS-based token theft.
+- **Zod-Backed Runtime Validation**: Every request hitting the API is strictly validated against Zod schemas. Malformed payloads or path-traversal attempts are neutralized at the entry point.
+- **DDoS Mitigation**: Integrated IP-based Rate Limiting on critical gateways (login, registration, public shares).
 
-### 4. 📝 Rich Modules Built-in
-More than just files:
-- **Collaborative Notes**: Fully-featured Markdown note-taking synced to your cloud.
-- **Event Calendar**: Keep track of events, deadlines, and shared team schedules.
-- **Gallery Mode**: A specialized, visual-first grid view for organizing and sharing large photographic albums.
+### 4. 📝 Integrated Modules
+- **Collaborative Documents**: Rich-text document editing with JSON-based content persistence.
+- **Markdown Notes**: Fast, pinned, and color-coded note-taking for quick thoughts.
+- **Event Calendar**: Integrated scheduling and deadline tracking.
+- **Gallery Mode**: A visual-first grid view optimized for photographic albums.
+
+---
+
+## ⚡ Advanced Architectural Engines
+
+Cloud Shakes goes beyond simple storage by providing powerful automation and extensibility engines:
+
+### 🔄 API Flows (Low-Code Automation)
+The **API Flow Engine** allows you to create custom API endpoints via a visual block-based builder. Chain together logic blocks (file-reads, data-transforms, HTTP requests, and conditional checks) to automate workflows without writing backend code.
+- **Custom JS Execution**: Inject logic directly via sandboxed JavaScript blocks.
+- **Visual Builder**: Design complex data pipelines that interact with your stored files.
+
+### 🧩 Plugin Framework
+A modular system designed for infinite extensibility. Developers can build and distribute plugins that hook into the core Cloud Shakes architecture, with support for versioning, containerized execution, and granular plugin permissions.
 
 ---
 
