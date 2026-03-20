@@ -25,10 +25,11 @@ export function UploadModal({ isOpen, onClose, currentFolderId, initialFiles }: 
     const fileInputRef = useRef<HTMLInputElement>(null);
     const { addUploads } = useUploads();
     const { t } = useTranslation();
-    const [existingFilenames, setExistingFilenames] = useState<string[]>([]);
+    const [existingFiles, setExistingFiles] = useState<{name: string, id: string}[]>([]);
     const [showConfirmModal, setShowConfirmModal] = useState(false);
     const [pendingFiles, setPendingFiles] = useState<ScannedFile[]>([]);
     const [conflictingNames, setConflictingNames] = useState<string[]>([]);
+    const [replacing, setReplacing] = useState(false);
 
     useEffect(() => {
         if (isOpen) {
@@ -47,11 +48,11 @@ export function UploadModal({ isOpen, onClose, currentFolderId, initialFiles }: 
             });
             
             const files = res.data.data || res.data || [];
-            setExistingFilenames(files.map((f: any) => f.originalName));
+            setExistingFiles(files.map((f: any) => ({ name: f.originalName, id: f.id })));
         } catch (err) {
             console.error("Error fetching existing files:", err);
             // We don't block the user if this fails, just proceed without collision check
-            setExistingFilenames([]);
+            setExistingFiles([]);
         }
     };
 
@@ -100,7 +101,7 @@ export function UploadModal({ isOpen, onClose, currentFolderId, initialFiles }: 
 
         // Check for collisions
         const collisions = normalizedFiles.filter(f => 
-            existingFilenames.includes(f.file.name)
+            existingFiles.some(ef => ef.name === f.file.name)
         ).map(f => f.file.name);
 
         if (collisions.length > 0) {
@@ -112,11 +113,30 @@ export function UploadModal({ isOpen, onClose, currentFolderId, initialFiles }: 
         }
     };
 
-    const processUpload = (filesToUpload: ScannedFile[]) => {
-        addUploads(filesToUpload, currentFolderId);
-        onClose();
-        setFiles([]);
-        setShowConfirmModal(false);
+    const processUpload = async (filesToUpload: ScannedFile[]) => {
+        try {
+            if (conflictingNames.length > 0) {
+                setReplacing(true);
+                // Get IDs of files to delete
+                const idsToDelete = existingFiles
+                    .filter(ef => conflictingNames.includes(ef.name))
+                    .map(ef => ef.id);
+                
+                // Delete existing files in parallel
+                await Promise.all(idsToDelete.map(id => 
+                    axios.delete(API_ENDPOINTS.FILES.DELETE(id), { withCredentials: true })
+                ));
+            }
+
+            addUploads(filesToUpload, currentFolderId);
+            onClose();
+            setFiles([]);
+            setShowConfirmModal(false);
+        } catch (err) {
+            console.error("Error during replacement:", err);
+        } finally {
+            setReplacing(false);
+        }
     };
 
     const removeFile = (index: number) => {
@@ -244,6 +264,7 @@ export function UploadModal({ isOpen, onClose, currentFolderId, initialFiles }: 
                 type="warning"
                 confirmText={t("common.replace") || "Reemplazar"}
                 cancelText={t("common.cancel") || "Cancelar"}
+                isLoading={replacing}
             />
         </Modal>
     );
