@@ -22,6 +22,7 @@ export default function DocumentEditorPage() {
     const id = params.id as string;
 
     const [title, setTitle] = useState("");
+    const [initialContent, setInitialContent] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [isDirty, setIsDirty] = useState(false);
@@ -36,21 +37,25 @@ export default function DocumentEditorPage() {
         fetchDocument();
     }, [id]);
 
+    // Initialize content once editor is mounted
+    useEffect(() => {
+        if (!loading && editorRef.current && initialContent !== null) {
+            const c = initialContent;
+            if (c && c.html) {
+                editorRef.current.innerHTML = c.html;
+            } else if (c && c.text) {
+                editorRef.current.innerText = c.text;
+            } else if (typeof c === 'string') {
+                editorRef.current.innerText = c;
+            }
+        }
+    }, [loading, initialContent]);
+
     const fetchDocument = async () => {
         try {
             const res = await axios.get(API_ENDPOINTS.DOCUMENTS.DETAIL(id), { withCredentials: true });
             setTitle(res.data.title || "");
-
-            if (editorRef.current) {
-                const c = res.data.content;
-                if (c && c.html) {
-                    editorRef.current.innerHTML = c.html;
-                } else if (c && c.text) {
-                    editorRef.current.innerText = c.text;
-                } else if (typeof c === 'string') {
-                    editorRef.current.innerText = c;
-                }
-            }
+            setInitialContent(res.data.content || "");
         } catch (err) {
             console.error("Failed to fetch doc:", err);
             router.push("/dashboard/documents");
