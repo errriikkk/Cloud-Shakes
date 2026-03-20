@@ -328,11 +328,26 @@ export function SearchModal({ isOpen, onClose }: SearchModalProps) {
                                             )}
                                         >
                                             <div className={cn(
-                                                "rounded-xl flex items-center justify-center shrink-0 border border-border/20",
+                                                "rounded-xl flex items-center justify-center shrink-0 border border-border/20 overflow-hidden bg-muted/20",
                                                 isMobile ? "w-9 h-9" : "w-10 h-10",
                                                 getTypeColor(item.type)
                                             )}>
-                                                {getFileIcon(item)}
+                                                {item.type === 'file' && item.mimeType?.startsWith('image/') ? (
+                                                    <img 
+                                                        src={`${API}/api/files/${item.id}/preview`} 
+                                                        alt="" 
+                                                        className="w-full h-full object-cover"
+                                                    />
+                                                ) : item.type === 'file' && item.mimeType?.startsWith('video/') ? (
+                                                    <video 
+                                                        src={`${API}/api/files/${item.id}/preview`} 
+                                                        className="w-full h-full object-cover"
+                                                        muted
+                                                        playsInline
+                                                    />
+                                                ) : (
+                                                    getFileIcon(item)
+                                                )}
                                             </div>
 
                                             <div className="flex-1 min-w-0">
