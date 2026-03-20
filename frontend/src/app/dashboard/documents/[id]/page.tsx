@@ -32,22 +32,6 @@ export default function DocumentEditorPage() {
 
     useEffect(() => {
         fetchDocument();
-        
-        // Auto-sync when window regains focus
-        const handleFocus = () => {
-            fetchDocument();
-        };
-        window.addEventListener('focus', handleFocus);
-        
-        // Auto-sync every 10 seconds
-        const syncInterval = setInterval(() => {
-            fetchDocument();
-        }, 10000);
-        
-        return () => {
-            window.removeEventListener('focus', handleFocus);
-            clearInterval(syncInterval);
-        };
     }, [id]);
 
     const fetchDocument = async () => {
@@ -83,35 +67,52 @@ export default function DocumentEditorPage() {
             setLastSaved(new Date());
         } catch (err) {
             console.error("Failed to save:", err);
+            // Optional: alert user or show error state
         } finally {
             setSaving(false);
         }
     };
 
-    const debouncedSave = useCallback(() => {
+    const debouncedSave = (newTitle: string, html: string) => {
         if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
         saveTimeoutRef.current = setTimeout(() => {
-            if (editorRef.current) {
-                saveDocument(title, editorRef.current.innerHTML);
-            }
+            saveDocument(newTitle, html);
         }, 800);
-    }, [title]);
+    };
 
     const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const val = e.target.value;
         setTitle(val);
-        debouncedSave();
+        if (editorRef.current) {
+            debouncedSave(val, editorRef.current.innerHTML);
+        }
     };
 
     const handleInput = () => {
-        debouncedSave();
+        if (editorRef.current) {
+            debouncedSave(title, editorRef.current.innerHTML);
+        }
     };
 
     const execCommand = (command: string, value: string | undefined = undefined) => {
         document.execCommand(command, false, value);
-        if (editorRef.current) editorRef.current.focus();
-        debouncedSave();
+        if (editorRef.current) {
+            editorRef.current.focus();
+            debouncedSave(title, editorRef.current.innerHTML);
+        }
     };
+
+    // Warn if leaving with unsaved changes
+    useEffect(() => {
+        const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+            if (saving) {
+                e.preventDefault();
+                e.returnValue = '';
+            }
+        };
+        window.addEventListener('beforeunload', handleBeforeUnload);
+        return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+    }, [saving]);
 
     const handleDelete = async () => {
         const confirmed = await confirm(
