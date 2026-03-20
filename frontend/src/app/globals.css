@@ -1,0 +1,206 @@
+@import "tailwindcss";
+
+@theme {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-sidebar: var(--sidebar);
+  --color-border: var(--border);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+
+  --font-sans: 'Inter', system-ui, sans-serif;
+
+  --animate-shimmer: shimmer 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes shimmer {
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.5;
+  }
+}
+
+/* Notion-inspired Light Palette */
+:root {
+  --background: #ffffff;
+  --foreground: #37352f;
+
+  --sidebar: #f7f7f5;
+  --border: #edece9;
+
+  --primary: #2383e2;
+  --primary-foreground: #ffffff;
+
+  --muted: #f1f1ef;
+  --muted-foreground: #787774;
+
+  --accent: #ebf5fe;
+  --accent-foreground: #2383e2;
+
+  --radius: 0.5rem;
+
+  /* Safe areas for mobile */
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-top: env(safe-area-inset-top, 0px);
+  --bottom-nav-height: 4rem;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html,
+  body {
+    @apply bg-background text-foreground tracking-tight selection:bg-accent selection:text-accent-foreground;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    overscroll-behavior: none;
+    height: 100%;
+  }
+
+  /* Fix iOS viewport height */
+  html {
+    height: 100dvh;
+  }
+
+  body {
+    height: 100dvh;
+    overflow: hidden;
+  }
+}
+
+@layer utilities {
+  .notion-card {
+    @apply bg-background border border-border/60 rounded-[1.5rem] shadow-sm shadow-black/[0.04] transition-all duration-300 hover:shadow-xl hover:shadow-black/[0.06] hover:border-border;
+  }
+
+  .notion-input {
+    @apply bg-muted/40 border border-border/60 rounded-xl px-4 py-2 focus:bg-background focus:ring-4 focus:ring-primary/5 focus:border-primary/40 outline-none transition-all placeholder:text-muted-foreground/50 text-sm font-medium;
+  }
+
+  .notion-button {
+    @apply bg-muted/60 hover:bg-muted text-foreground px-4 py-2 rounded-xl transition-all font-bold border border-transparent active:scale-[0.96] text-sm;
+  }
+
+  .glass {
+    @apply bg-background/70 backdrop-blur-xl border border-border/40 shadow-sm shadow-black/[0.02];
+  }
+
+  .glass-subtle {
+    @apply bg-white/40 backdrop-blur-md border border-border/30;
+  }
+
+  /* Hide scrollbar but keep scroll functionality */
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  /* Minimal scrollbar */
+  ::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 10px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--muted-foreground);
+  }
+
+  /* Bottom safe area padding for iOS */
+  .pb-safe {
+    padding-bottom: calc(var(--bottom-nav-height) + var(--safe-bottom));
+  }
+
+  /* Content area that accounts for bottom nav on mobile */
+  .content-with-nav {
+    padding-bottom: calc(var(--bottom-nav-height) + var(--safe-bottom) + 2rem);
+  }
+
+  @media (min-width: 768px) {
+    .content-with-nav {
+      padding-bottom: 0;
+    }
+
+    .pb-safe {
+      padding-bottom: 0;
+    }
+  }
+
+  /* DVH height */
+  .h-screen-dvh {
+    height: 100dvh;
+    height: -webkit-fill-available;
+  }
+}
+
+/* Typography for contentEditable */
+[contenteditable]:empty:before {
+  content: attr(placeholder);
+  color: var(--muted-foreground);
+  opacity: 0.3;
+  cursor: text;
+}
+
+.prose h1 {
+  @apply text-3xl font-bold mb-4 mt-8 first:mt-0;
+}
+
+.prose h2 {
+  @apply text-2xl font-bold mb-3 mt-6;
+}
+
+.prose p {
+  @apply mb-4 leading-relaxed;
+}
+
+.prose ul {
+  @apply list-disc list-inside mb-4;
+}
+
+.prose ol {
+  @apply list-decimal list-inside mb-4;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

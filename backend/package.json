@@ -1,0 +1,82 @@
+{
+  "name": "cloud-shakes-backend",
+  "version": "1.0.0",
+  "description": "Backend de Cloud Shakes - API REST para gestión de archivos",
+  "main": "dist/index.js",
+  "scripts": {
+    "start": "node dist/index.js",
+    "dev": "nodemon --exec ts-node --transpile-only src/index.ts",
+    "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "db:migrate": "prisma migrate dev",
+    "db:generate": "prisma generate",
+    "db:seed": "ts-node src/seed.ts",
+    "audit": "npm audit --audit-level=moderate",
+    "audit:fix": "npm audit fix",
+    "security-check": "npm audit && npm outdated",
+    "lint": "eslint src/**/*.ts",
+    "lint:fix": "eslint src/**/*.ts --fix"
+  },
+  "keywords": [
+    "cloud",
+    "storage",
+    "api",
+    "express",
+    "typescript",
+    "prisma",
+    "postgresql"
+  ],
+  "author": "Cloud Shakes Team",
+  "license": "MIT",
+  "dependencies": {
+    "@prisma/client": "5.22.0",
+    "@types/dockerode": "^4.0.1",
+    "argon2": "^0.40.3",
+    "busboy": "^1.6.0",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.5",
+    "dockerode": "^4.0.9",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "express-rate-limit": "^7.4.1",
+    "express-validator": "^7.2.0",
+    "helmet": "^7.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "minio": "^8.0.6",
+    "multer": "^1.4.5-lts.1",
+    "nanoid": "^5.0.7",
+    "pg": "^8.13.1",
+    "prisma": "5.22.0",
+    "socket.io": "^4.8.1",
+    "uuid": "^10.0.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/busboy": "^1.5.4",
+    "@types/cookie-parser": "^1.4.10",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/multer": "^2.0.0",
+    "@types/node": "^25.2.3",
+    "@types/pg": "^8.16.0",
+    "@types/socket.io": "^3.0.1",
+    "@types/uuid": "^10.0.0",
+    "@vitest/coverage-v8": "^2.1.8",
+    "nodemon": "^3.1.11",
+    "supertest": "^7.0.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3",
+    "vitest": "^2.1.8"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=8.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/errriikkk/Cloud-Shakes.git"
+  }
+}
