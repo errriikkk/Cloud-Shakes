@@ -6,6 +6,7 @@ import { Modal, ModalFooter } from "./ui/Modal";
 import { cn } from "@/lib/utils";
 import { scanItems, ScannedFile } from "@/lib/fileScanner";
 import { useUploads } from "@/context/UploadContext";
+import { useTranslation } from "@/lib/i18n";
 
 interface UploadModalProps {
     isOpen: boolean;
@@ -20,6 +21,7 @@ export function UploadModal({ isOpen, onClose, currentFolderId, initialFiles }: 
     const [dragActive, setDragActive] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const { addUploads } = useUploads();
+    const { t } = useTranslation();
 
     useEffect(() => {
         if (initialFiles && initialFiles.length > 0) {
@@ -69,6 +71,14 @@ export function UploadModal({ isOpen, onClose, currentFolderId, initialFiles }: 
         setFiles([]);
     };
 
+    const removeFile = (index: number) => {
+        setFiles(prev => prev.filter((_, i) => i !== index));
+    };
+
+    const clearFiles = () => {
+        setFiles([]);
+    };
+
     const formatSize = (bytes: number) => {
         if (bytes < 1024) return `${bytes} B`;
         if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -84,7 +94,7 @@ export function UploadModal({ isOpen, onClose, currentFolderId, initialFiles }: 
     };
 
     return (
-        <Modal isOpen={isOpen} onClose={onClose} title="Preparar Subida" width="max-w-xl">
+        <Modal isOpen={isOpen} onClose={onClose} title={t("upload.modal.title")} width="max-w-xl">
             <div className="space-y-4">
                 <div
                     className={cn(
@@ -112,24 +122,39 @@ export function UploadModal({ isOpen, onClose, currentFolderId, initialFiles }: 
                     {files.length > 0 ? (
                         <div className="text-left w-full max-h-[300px] overflow-y-auto px-4 custom-scrollbar">
                             <div className="flex items-center justify-between mb-4 border-b border-border/40 pb-2">
-                                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Elementos Seleccionados</span>
-                                <span className="text-[10px] font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-full">{files.length}</span>
+                                <div className="flex items-center gap-2">
+                                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">{t("upload.modal.selectedItems")}</span>
+                                    <span className="text-[10px] font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-full">{files.length}</span>
+                                </div>
+                                <button
+                                    onClick={(e) => { e.stopPropagation(); clearFiles(); }}
+                                    className="text-[10px] font-bold text-red-500 hover:text-red-600 transition-colors uppercase tracking-widest px-2 py-1 rounded-lg hover:bg-red-50"
+                                >
+                                    {t("upload.modal.clearFiles")}
+                                </button>
                             </div>
                             <div className="space-y-2">
                                 {files.slice(0, 50).map((f, idx) => (
-                                    <div key={idx} className="flex items-center gap-3 p-2.5 rounded-xl border border-border/40 bg-background/40">
+                                    <div key={idx} className="group/item flex items-center gap-3 p-2.5 rounded-xl border border-border/40 bg-background/40 hover:border-primary/20 transition-all">
                                         <FileIcon className="w-4 h-4 shrink-0 text-muted-foreground" />
                                         <div className="min-w-0 flex-1">
                                             <p className="text-[11px] font-bold text-foreground truncate">{getFileName(f)}</p>
                                             <p className="text-[9px] text-muted-foreground font-medium">
                                                 {formatSize(getFileSize(f))}
-                                                {'path' in f && f.path && <span className="ml-2 italic opacity-60">en {f.path}</span>}
+                                                {'path' in f && f.path && <span className="ml-2 italic opacity-60">{t("upload.modal.inPath").replace("{path}", f.path)}</span>}
                                             </p>
                                         </div>
+                                        <button
+                                            onClick={(e) => { e.stopPropagation(); removeFile(idx); }}
+                                            className="p-1.5 opacity-0 group-hover/item:opacity-100 text-muted-foreground hover:text-red-500 transition-all rounded-lg hover:bg-red-50"
+                                            title={t("common.remove")}
+                                        >
+                                            <X className="w-3.5 h-3.5" />
+                                        </button>
                                     </div>
                                 ))}
                                 {files.length > 50 && (
-                                    <p className="text-[10px] text-center text-muted-foreground py-2 italic">...y {files.length - 50} archivos más</p>
+                                    <p className="text-[10px] text-center text-muted-foreground py-2 italic">{t("upload.modal.moreFiles").replace("{count}", (files.length - 50).toString())}</p>
                                 )}
                             </div>
                         </div>
@@ -138,8 +163,8 @@ export function UploadModal({ isOpen, onClose, currentFolderId, initialFiles }: 
                             <div className="w-12 h-12 bg-primary/10 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-primary/10 text-primary">
                                 <CloudUpload className="w-7 h-7" />
                             </div>
-                            <p className="text-sm text-foreground font-bold">Arrastra carpetas o archivos aquí</p>
-                            <p className="text-xs text-muted-foreground mt-1 font-medium italic">o haz clic para explorar</p>
+                            <p className="text-sm text-foreground font-bold">{t("upload.modal.dragDrop")}</p>
+                            <p className="text-xs text-muted-foreground mt-1 font-medium italic">{t("upload.modal.clickBrowse")}</p>
                         </div>
                     )}
                 </div>
@@ -147,19 +172,18 @@ export function UploadModal({ isOpen, onClose, currentFolderId, initialFiles }: 
                 <div className="bg-primary/5 border border-primary/10 rounded-2xl p-4 flex gap-3">
                     <AlertCircle className="w-5 h-5 text-primary shrink-0" />
                     <p className="text-[11px] text-primary/80 font-medium leading-relaxed">
-                        Al pulsar <b>"Iniciar Subida"</b>, los archivos se procesarán en segundo plano.
-                        Podrás seguir navegando sin interrumpir el proceso.
+                        {t("upload.modal.note")}
                     </p>
                 </div>
 
                 <ModalFooter center>
-                    <Button variant="ghost" onClick={onClose}>Cancelar</Button>
+                    <Button variant="ghost" onClick={onClose}>{t("common.cancel")}</Button>
                     <Button
                         onClick={handleUploadClick}
                         disabled={files.length === 0}
                         variant="premium"
                     >
-                        Iniciar Subida ({files.length})
+                        {t("upload.modal.start").replace("{count}", files.length.toString())}
                     </Button>
                 </ModalFooter>
             </div>

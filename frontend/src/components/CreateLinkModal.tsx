@@ -185,10 +185,10 @@ export function CreateLinkModal({ isOpen, onClose, fileId, onSuccess }: CreateLi
                                             /{l.id}
                                         </p>
                                         <div className="flex flex-wrap items-center gap-2 mt-1 text-[10px] font-bold text-muted-foreground">
-                                            {l.isEmbed && <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600">Embed</span>}
-                                            {l.directDownload && <span className="px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-600">Direct</span>}
+                                            {l.isEmbed && <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600">{t("share.modal.embed")}</span>}
+                                            {l.directDownload && <span className="px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-600">{t("share.modal.direct")}</span>}
                                             {l.isPasswordProtected && <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary">{t("share.badge.password")}</span>}
-                                            {l.expiresAt && <span className="px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-600">Expiry</span>}
+                                            {l.expiresAt && <span className="px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-600">{t("share.modal.expiry")}</span>}
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-1.5 shrink-0">
@@ -196,7 +196,7 @@ export function CreateLinkModal({ isOpen, onClose, fileId, onSuccess }: CreateLi
                                             type="button"
                                             onClick={() => copyToClipboard(l.isEmbed ? embedUrlFor(l.id) : shareUrlFor(l.id))}
                                             className="p-2 rounded-xl bg-muted/40 hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
-                                            title="Copy"
+                                            title={t("share.modal.copy")}
                                         >
                                             <Copy className="w-4 h-4" />
                                         </button>
@@ -295,9 +295,9 @@ export function CreateLinkModal({ isOpen, onClose, fileId, onSuccess }: CreateLi
                                     {t("share.modal.quick")}
                                 </span>
                                 {[
-                                    { label: "15 min", value: "15" },
-                                    { label: "1 h", value: "60" },
-                                    { label: "24 h", value: "1440" },
+                                    { label: t("share.modal.presets.15m"), value: "15" },
+                                    { label: t("share.modal.presets.1h"), value: "60" },
+                                    { label: t("share.modal.presets.24h"), value: "1440" },
                                 ].map(preset => (
                                     <button
                                         key={preset.value}

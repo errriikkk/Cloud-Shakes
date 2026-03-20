@@ -8,9 +8,11 @@ import {
     ChevronDown, X, Loader2, File
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useTranslation } from '@/lib/i18n';
 
 export function UploadProgress({ hasSelection }: { hasSelection?: boolean }) {
     const { uploads, totalProgress, clearCompleted, isUploading } = useUploads();
+    const { t, locale } = useTranslation();
     const [isExpanded, setIsExpanded] = useState(false);
     const [isDismissed, setIsDismissed] = useState(false);
     const [mounted, setMounted] = useState(false);
@@ -50,7 +52,7 @@ export function UploadProgress({ hasSelection }: { hasSelection?: boolean }) {
                     // sit above NotificationPanel (it uses bottom-4 right-4)
                     "mb-16"
                 )}
-                title="Uploads"
+                title={t("upload.progress.title")}
             >
                 {/* Progress ring */}
                 <svg className="absolute inset-0" viewBox="0 0 48 48">
@@ -120,10 +122,18 @@ export function UploadProgress({ hasSelection }: { hasSelection?: boolean }) {
                         )}
                         <div>
                             <span className="text-sm font-bold text-foreground uppercase tracking-wider">
-                                {isUploading ? 'Subiendo archivos...' : 'Subida completada'}
+                                {isUploading ? t("upload.progress.uploading") : t("upload.progress.completed")}
                             </span>
                             <p className="text-xs text-muted-foreground font-medium">
-                                {active > 0 ? `${active} archivo${active > 1 ? 's' : ''} en proceso` : `${completed} de ${uploads.length} completado${completed > 1 ? 's' : ''}`}
+                                {active > 0 
+                                    ? t("upload.progress.status.processing")
+                                        .replace("{count}", active.toString())
+                                        .replace("{plural}", active > 1 ? 's' : '')
+                                    : t("upload.progress.status.summary")
+                                        .replace("{completed}", completed.toString())
+                                        .replace("{total}", uploads.length.toString())
+                                        .replace("{plural}", completed > 1 ? (locale === 'es' ? 's' : '') : '')
+                                }
                             </p>
                         </div>
                     </div>
@@ -138,7 +148,7 @@ export function UploadProgress({ hasSelection }: { hasSelection?: boolean }) {
                             <button
                                 onClick={clearCompleted}
                                 className="p-2 hover:bg-muted rounded-xl transition-colors"
-                                title="Clear"
+                                 title={t("common.clear")}
                             >
                                 <X className="w-4 h-4" />
                             </button>
@@ -147,7 +157,7 @@ export function UploadProgress({ hasSelection }: { hasSelection?: boolean }) {
                             <button
                                 onClick={() => { setIsExpanded(false); setIsDismissed(true); }}
                                 className="p-2 hover:bg-muted rounded-xl transition-colors"
-                                title="Dismiss"
+                                 title={t("common.close")}
                             >
                                 <X className="w-4 h-4" />
                             </button>
@@ -159,7 +169,7 @@ export function UploadProgress({ hasSelection }: { hasSelection?: boolean }) {
                 <div className="px-5 py-4 space-y-3">
                     <div className="flex justify-between items-center">
                         <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
-                            Progreso total
+                            {t("upload.progress.total")}
                         </span>
                         <span className="text-sm font-bold text-primary">{totalProgress}%</span>
                     </div>
@@ -177,9 +187,14 @@ export function UploadProgress({ hasSelection }: { hasSelection?: boolean }) {
                         </motion.div>
                     </div>
                     <div className="flex justify-between text-xs text-muted-foreground">
-                        <span>{completed} completado{completed > 1 ? 's' : ''}</span>
-                        <span>{errors} error{errors > 1 ? 'es' : ''}</span>
-                        <span>{active} en proceso</span>
+                        <span>{t("upload.progress.counts.completed")
+                            .replace("{count}", completed.toString())
+                            .replace("{plural}", completed !== 1 ? (locale === 'es' ? 's' : '') : '')}</span>
+                        <span>{t("upload.progress.counts.errors")
+                            .replace("{count}", errors.toString())
+                            .replace("{plural}", errors !== 1 ? (locale === 'es' ? 'es' : 's') : '')}</span>
+                        <span>{t("upload.progress.counts.processing")
+                            .replace("{count}", active.toString())}</span>
                     </div>
                 </div>
 
@@ -222,9 +237,9 @@ export function UploadProgress({ hasSelection }: { hasSelection?: boolean }) {
                                         <div className="min-w-0 flex-1">
                                             <p className="font-semibold text-foreground truncate text-xs">{upload.file.name}</p>
                                             <p className="text-[10px] text-muted-foreground truncate">
-                                                {upload.status === 'creating_folders' ? 'Creando carpeta...' :
+                                                {upload.status === 'creating_folders' ? t("upload.progress.creatingFolders") :
                                                     upload.status === 'error' ? upload.error :
-                                                        upload.path ? `en ${upload.path}` : 'Raíz'}
+                                                        upload.path ? t("upload.modal.inPath").replace("{path}", upload.path) : t("upload.progress.root")}
                                             </p>
                                         </div>
                                         {upload.status === 'uploading' && (

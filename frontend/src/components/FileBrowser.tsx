@@ -92,7 +92,7 @@ export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserPro
     const searchParams = useSearchParams();
     const folderParam = searchParams.get('folder');
     const previewParam = searchParams.get('preview');
-    const [path, setPath] = useState<{ id: string | null, name: string }[]>([{ id: null, name: "Mis Archivos" }]);
+    const [path, setPath] = useState<{ id: string | null, name: string }[]>([{ id: null, name: t("files.myUnit") }]);
 
     // Modal states
     const [deleteModalOpen, setDeleteModalOpen] = useState(false);
@@ -217,7 +217,7 @@ export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserPro
                     console.error("Failed to sync folder path:", err);
                 }
             } else {
-                setPath([{ id: null, name: "Mis Archivos" }]);
+                setPath([{ id: null, name: t("files.myUnit") }]);
             }
         };
         syncPath();
@@ -478,7 +478,7 @@ export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserPro
              const message = err.response?.data?.message || err.message;
              console.error("Failed to rename:", err);
              // Use a more elegant notification if possible, otherwise alert
-             alert(`No se pudo renombrar: ${message}`);
+             alert(`${t("common.updateFailed")}: ${message}`);
         }
     };
 
@@ -729,7 +729,7 @@ export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserPro
                                     ? "bg-primary text-white shadow-md shadow-primary/20"
                                     : "text-muted-foreground hover:bg-muted/60"
                             )}
-                            title="Cuadrícula"
+                             title={t("files.viewGrid")}
                         >
                             <Grid className="w-4 h-4" />
                         </button>
@@ -741,7 +741,7 @@ export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserPro
                                     ? "bg-primary text-white shadow-md shadow-primary/20"
                                     : "text-muted-foreground hover:bg-muted/60"
                             )}
-                            title="Lista"
+                             title={t("files.viewList")}
                         >
                             <ListIcon className="w-4 h-4" />
                         </button>
@@ -752,7 +752,7 @@ export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserPro
                     <button
                         onClick={() => setCreateFolderOpen(true)}
                         className="p-2.5 rounded-xl bg-background border border-border/40 text-muted-foreground hover:text-primary hover:border-primary/40 hover:shadow-lg transition-all"
-                        title="Nueva Carpeta"
+                         title={t("files.newFolder")}
                     >
                         <Plus className="w-5 h-5" />
                     </button>
@@ -773,10 +773,10 @@ export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserPro
                         {viewMode === "list" ? (
                             <div className="notion-card overflow-hidden">
                                 <div className="grid grid-cols-[1fr_120px_140px_140px] gap-4 px-6 py-4 border-b border-border/40 text-[10px] font-bold text-muted-foreground uppercase tracking-widest bg-muted/20">
-                                    <span>Name</span>
-                                    <span>Size</span>
-                                    <span>Modified</span>
-                                    <span className="text-right">Options</span>
+                                     <span>{t("files.name")}</span>
+                                    <span>{t("files.size")}</span>
+                                    <span>{t("files.modified")}</span>
+                                    <span className="text-right">{t("files.options")}</span>
                                 </div>
                                 {[...Array(5)].map((_, i) => (
                                     <div key={i} className="grid grid-cols-[1fr_120px_140px_140px] gap-4 px-6 py-4 items-center border-b border-border/40 last:border-0">
@@ -811,8 +811,8 @@ export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserPro
                         <div className="w-24 h-24 rounded-[2.5rem] bg-muted/40 flex items-center justify-center mx-auto mb-8 shadow-inner">
                             <FolderIcon className="w-12 h-12 text-muted-foreground/20" />
                         </div>
-                        <h3 className="text-2xl font-bold text-foreground tracking-tight">Carpeta Vacía</h3>
-                        <p className="text-muted-foreground text-sm mt-3 max-w-[280px] mx-auto leading-relaxed font-medium">Este directorio está en silencio. Es hora de subir algunos recuerdos o crear una subcarpeta.</p>
+                        <h3 className="text-2xl font-bold text-foreground tracking-tight">{t("files.emptyFolder.title")}</h3>
+                        <p className="text-muted-foreground text-sm mt-3 max-w-[280px] mx-auto leading-relaxed font-medium">{t("files.emptyFolder.subtitle")}</p>
                     </div>
                 ) : (
                     <div className="space-y-6">
@@ -840,10 +840,10 @@ export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserPro
                                     >
                                         {selectedItems.length > 0 && <CheckCircle className="w-3 h-3" />}
                                     </div>
-                                    <span>Name</span>
-                                    <span className="hidden sm:block">Size</span>
-                                    <span className="hidden lg:block">Modified</span>
-                                    <span className="text-right pr-4 sm:pr-0">Options</span>
+                                    <span>{t("files.name")}</span>
+                                    <span className="hidden sm:block">{t("files.size")}</span>
+                                    <span className="hidden lg:block">{t("files.modified")}</span>
+                                    <span className="text-right pr-4 sm:pr-0">{t("files.options")}</span>
                                 </div>
                                 {filteredFolders.map(folder => (
                                     <div
@@ -878,13 +878,13 @@ export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserPro
                                             </div>
                                             <span className="text-sm text-foreground truncate font-semibold">{folder.name}</span>
                                         </div>
-                                        <span className="hidden sm:block text-xs text-muted-foreground font-medium">Folder</span>
+                                        <span className="hidden sm:block text-xs text-muted-foreground font-medium">{t("common.folder")}</span>
                                         <span className="hidden lg:block text-[11px] text-muted-foreground font-medium uppercase tracking-tight">{new Date(folder.createdAt).toLocaleDateString()}</span>
                                             <button onClick={(e) => { e.stopPropagation(); navigateToFolder(folder); }} className="px-3 py-1.5 sm:p-2.5 bg-primary/10 sm:glass-subtle rounded-xl text-primary hover:bg-primary/20 sm:hover:bg-background transition-all text-[10px] sm:text-xs font-bold shrink-0">
-                                                Abrir
+                                                {t("common.open")}
                                             </button>
                                             {canRename && (
-                                                <button onClick={(e) => { e.stopPropagation(); confirmRename(folder.id, folder.name, 'folder'); }} className="p-2 text-muted-foreground hover:text-primary transition-colors shrink-0" title="Renombrar">
+                                                <button onClick={(e) => { e.stopPropagation(); confirmRename(folder.id, folder.name, 'folder'); }} className="p-2 text-muted-foreground hover:text-primary transition-colors shrink-0" title={t("common.rename")}>
                                                     <Edit2 className="w-4 h-4" />
                                                 </button>
                                             )}
@@ -966,7 +966,7 @@ export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserPro
                                                 <LinkIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                                             </button>
                                             {canRename && (
-                                                <button onClick={(e) => { e.stopPropagation(); confirmRename(file.id, file.originalName, 'file'); }} className="p-2 sm:p-2.5 glass-subtle rounded-xl text-foreground hover:bg-muted transition-all shrink-0 touch-manipulation" title="Renombrar">
+                                                <button onClick={(e) => { e.stopPropagation(); confirmRename(file.id, file.originalName, 'file'); }} className="p-2 sm:p-2.5 glass-subtle rounded-xl text-foreground hover:bg-muted transition-all shrink-0 touch-manipulation" title={t("common.rename")}>
                                                     <Edit2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                                                 </button>
                                             )}
@@ -1021,7 +1021,7 @@ export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserPro
                                                     <ChevronRight className="w-5 h-5 md:w-4 md:h-4" />
                                                 </button>
                                                 {canRename && (
-                                                    <button onClick={(e) => { e.stopPropagation(); confirmRename(folder.id, folder.name, 'folder'); }} className="p-2.5 md:p-2 glass-subtle rounded-xl shadow-sm hover:bg-background text-foreground transition-colors touch-manipulation" title="Renombrar">
+                                                    <button onClick={(e) => { e.stopPropagation(); confirmRename(folder.id, folder.name, 'folder'); }} className="p-2.5 md:p-2 glass-subtle rounded-xl shadow-sm hover:bg-background text-foreground transition-colors touch-manipulation" title={t("common.rename")}>
                                                         <Edit2 className="w-4 h-4" />
                                                     </button>
                                                 )}
@@ -1034,7 +1034,7 @@ export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserPro
                                         </div>
                                         <div className="w-full px-2 py-3 sm:px-3 sm:py-4 text-center">
                                             <h3 className="text-[12px] sm:text-[13px] font-semibold text-foreground truncate w-full mb-0.5">{folder.name}</h3>
-                                            <p className="text-[9px] sm:text-[10px] text-muted-foreground font-bold uppercase tracking-widest leading-none">Carpeta</p>
+                                            <p className="text-[9px] sm:text-[10px] text-muted-foreground font-bold uppercase tracking-widest leading-none">{t("common.folder")}</p>
                                         </div>
                                     </motion.div>
                                 ))}
@@ -1085,7 +1085,7 @@ export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserPro
                                                     <LinkIcon className="w-4 h-4" />
                                                 </button>
                                                 {canRename && (
-                                                    <button onClick={(e) => { e.stopPropagation(); confirmRename(file.id, file.originalName, 'file'); }} className="p-2.5 md:p-2 glass-subtle rounded-xl shadow-sm hover:bg-background text-foreground transition-colors touch-manipulation" title="Renombrar">
+                                                    <button onClick={(e) => { e.stopPropagation(); confirmRename(file.id, file.originalName, 'file'); }} className="p-2.5 md:p-2 glass-subtle rounded-xl shadow-sm hover:bg-background text-foreground transition-colors touch-manipulation" title={t("common.rename")}>
                                                         <Edit2 className="w-4 h-4" />
                                                     </button>
                                                 )}
@@ -1128,17 +1128,17 @@ export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserPro
             <Modal
                 isOpen={deleteModalOpen}
                 onClose={() => setDeleteModalOpen(false)}
-                title={`Eliminar ${itemToDelete?.type === 'file' ? 'Archivo' : 'Carpeta'}`}
+                title={t("common.renameItem").replace("{type}", itemToDelete?.type === 'file' ? t("common.itemType.file") : t("common.itemType.folder"))}
             >
                 <div className="space-y-4">
                     <p className="text-sm text-muted-foreground font-medium">
-                        ¿Estás seguro de que quieres eliminar <span className="text-foreground font-bold">{itemToDelete?.name}</span>?
-                        {itemToDelete?.type === 'folder' && " Todos los contenidos serán eliminados permanentemente."}
-                        Esta acción es irreversible.
+                        {t("common.confirmDelete").replace("{name}", itemToDelete?.name || "")}
+                        {itemToDelete?.type === 'folder' && t("common.folderDeleteWarning")}
+                        {t("common.irreversibleAction")}
                     </p>
                     <ModalFooter>
-                        <Button variant="ghost" className="rounded-xl" onClick={() => setDeleteModalOpen(false)}>Cancelar</Button>
-                        <Button variant="destructive" className="rounded-xl" onClick={handleDelete}>Eliminar Permanentemente</Button>
+                        <Button variant="ghost" className="rounded-xl" onClick={() => setDeleteModalOpen(false)}>{t("common.cancel")}</Button>
+                        <Button variant="destructive" className="rounded-xl" onClick={handleDelete}>{t("common.deletePermanently")}</Button>
                     </ModalFooter>
                 </div>
             </Modal>
@@ -1147,7 +1147,7 @@ export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserPro
             <Modal
                 isOpen={renameModalOpen}
                 onClose={() => setRenameModalOpen(false)}
-                title={`Renombrar ${itemToRename?.type === 'file' ? 'Archivo' : 'Carpeta'}`}
+                title={t("common.renameItem").replace("{type}", itemToRename?.type === 'file' ? t("common.itemType.file") : t("common.itemType.folder"))}
             >
                 <div className="space-y-6">
                     <div className="flex items-center gap-4 p-4 bg-primary/5 rounded-2xl border border-primary/10">
@@ -1155,13 +1155,13 @@ export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserPro
                             {itemToRename?.type === 'file' ? <FileIcon className="w-6 h-6" /> : <FolderIcon className="w-6 h-6" />}
                         </div>
                         <div className="min-w-0">
-                            <p className="text-[10px] font-bold text-primary uppercase tracking-widest">{itemToRename?.type === 'file' ? 'Nombre actual del archivo' : 'Nombre actual de la carpeta'}</p>
+                            <p className="text-[10px] font-bold text-primary uppercase tracking-widest">{itemToRename?.type === 'file' ? t("files.currentName") : t("files.currentName")}</p>
                             <p className="text-sm font-semibold text-foreground truncate">{itemToRename?.name}</p>
                         </div>
                     </div>
 
                     <div className="space-y-2">
-                        <label className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider px-1">Nuevo Nombre</label>
+                        <label className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider px-1">{t("common.newName")}</label>
                         <div className="relative group">
                             <input
                                 type="text"
@@ -1169,7 +1169,7 @@ export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserPro
                                 onChange={(e) => setNewName(e.target.value)}
                                 onKeyDown={(e) => e.key === 'Enter' && handleRename()}
                                 className="w-full bg-muted/30 p-4 pl-12 rounded-2xl border border-border/60 focus:border-primary focus:ring-4 focus:ring-primary/5 outline-none transition-all font-medium text-foreground"
-                                placeholder={`Ingresa el nuevo nombre...`}
+                                placeholder={t("common.enterNewName")}
                                 autoFocus
                             />
                             <div className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground/40 group-focus-within:text-primary transition-colors">
@@ -1184,24 +1184,24 @@ export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserPro
                             className="rounded-xl h-12 px-6 font-bold" 
                             onClick={() => setRenameModalOpen(false)}
                         >
-                            Cancelar
+                            {t("common.cancel")}
                         </Button>
                         <Button 
                             className="rounded-xl px-8 h-12 font-bold shadow-lg shadow-primary/20" 
                             onClick={handleRename}
                             disabled={!newName.trim() || newName === itemToRename?.name}
                         >
-                            Guardar Cambios
+                            {t("common.saveChanges")}
                         </Button>
                     </ModalFooter>
                 </div>
             </Modal>
 
             {/* Link Success Modal */}
-            <Modal isOpen={successModalOpen} onClose={() => setSuccessModalOpen(false)} title="¡Listo para Compartir!">
+            <Modal isOpen={successModalOpen} onClose={() => setSuccessModalOpen(false)} title={t("share.success.title")}>
                 <div className="space-y-6">
                     <p className="text-sm text-muted-foreground font-medium leading-relaxed">
-                        El enlace público ha sido creado y copiado al portapapeles.
+                        {t("share.success.subtitle")}
                     </p>
                     <div className="flex items-center gap-2">
                         <input
@@ -1216,13 +1216,13 @@ export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserPro
                                 navigator.clipboard.writeText(createdLink);
                             }}
                             className="p-3 rounded-xl bg-primary/10 text-primary hover:bg-primary/20 transition-all shrink-0 shadow-sm shadow-primary/5"
-                            title="Copiar de nuevo"
+                            title={t("common.copyAgain")}
                         >
                             <Copy className="w-5 h-5" />
                         </button>
                     </div>
                     <ModalFooter>
-                        <Button className="rounded-xl w-full h-11 font-bold" onClick={() => setSuccessModalOpen(false)}>Hecho</Button>
+                        <Button className="rounded-xl w-full h-11 font-bold" onClick={() => setSuccessModalOpen(false)}>{t("common.done")}</Button>
                     </ModalFooter>
                 </div>
             </Modal>
@@ -1254,7 +1254,7 @@ export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserPro
                                 <span className="text-[10px] font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-full">
                                     {selectedItems.length}
                                 </span>
-                                <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest">Seleccionado</span>
+                                <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest">{t("common.selected")}</span>
                             </div>
 
                             <div className="flex items-center gap-4">
@@ -1265,7 +1265,7 @@ export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserPro
                                     className="h-9 px-4 rounded-xl hover:bg-red-500/10 hover:text-red-500 transition-all gap-2"
                                 >
                                     <Trash2 className="w-4 h-4" />
-                                    <span className="text-[11px] font-bold uppercase tracking-widest">Eliminar</span>
+                                    <span className="text-[11px] font-bold uppercase tracking-widest">{t("common.delete")}</span>
                                 </Button>
 
                                 <Button
@@ -1274,7 +1274,7 @@ export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserPro
                                     onClick={() => setSelectedItems([])}
                                     className="h-9 px-4 rounded-xl transition-all font-bold uppercase tracking-widest text-[11px]"
                                 >
-                                    Cancelar
+                                    {t("common.cancel")}
                                 </Button>
                             </div>
                         </motion.div>

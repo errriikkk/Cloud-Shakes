@@ -39,7 +39,29 @@
     "viewAll": "View all"
     ,
     "refresh": "Refresh",
-    "saved": "Saved"
+    "saved": "Saved",
+    "open": "Open",
+    "rename": "Rename",
+    "folder": "Folder",
+    "confirmDelete": "Are you sure you want to delete {name}?",
+    "folderDeleteWarning": " All contents will be permanently deleted.",
+    "irreversibleAction": "This action is irreversible.",
+    "deletePermanently": "Delete Permanently",
+    "renameItem": "Rename {type}",
+    "newName": "New Name",
+    "enterNewName": "Enter the new name...",
+    "saveChanges": "Save Changes",
+    "selected": "Selected",
+    "done": "Done",
+    "copyAgain": "Copy Again",
+    "remove": "Remove",
+    "itemType": {
+      "file": "File",
+      "folder": "Folder",
+      "document": "Document",
+      "note": "Note",
+      "calendar": "Event"
+    }
   },
   "share": {
     "badge": {
@@ -69,7 +91,46 @@
       "embedTitle": "Embed URL",
       "embedHelp": "For iframes, players and external embeds. No password or expiry.",
       "creating": "Creating...",
-      "create": "Create link"
+      "create": "Create link",
+      "embed": "Embed",
+      "direct": "Direct",
+      "expiry": "Expiry",
+      "copy": "Copy",
+      "presets": {
+        "15m": "15 min",
+        "1h": "1 h",
+        "24h": "24 h"
+      }
+    }
+  },
+  "upload": {
+    "modal": {
+      "title": "Prepare Upload",
+      "selectedItems": "Selected Items",
+      "clearFiles": "Clear All",
+      "moreFiles": "...and {count} more files",
+      "dragDrop": "Drag and drop folders or files here",
+      "clickBrowse": "or click to browse",
+      "inPath": "in {path}",
+      "note": "When you click \"Start Upload\", the files will be processed in the background. You can continue browsing without interrupting the process.",
+      "start": "Start Upload ({count})"
+    },
+    "progress": {
+      "title": "Uploads",
+      "uploading": "Uploading files...",
+      "completed": "Upload completed",
+      "total": "Total progress",
+      "status": {
+        "processing": "{count} file{plural} in progress",
+        "summary": "{completed} of {total} completed"
+      },
+      "counts": {
+        "completed": "{count} completed",
+        "errors": "{count} error{plural}",
+        "processing": "{count} in progress"
+      },
+      "creatingFolders": "Creating folder...",
+      "root": "Root"
     }
   },
   "auth": {
@@ -83,6 +144,8 @@
     "passwordPlaceholder": "Enter your password",
     "authFailed": "Authentication failed.",
     "tooManyAttempts": "Too many attempts. Please try again later.",
+    "tooManyRequests": "Too many requests. Try again in {time}.",
+    "waitBeforeRetry": "Too many attempts. Please wait before trying again.",
     "privateInfrastructure": "Private Secure Infrastructure",
     "endToEndEncrypted": "End-to-End Encrypted",
     "allRightsReserved": "All rights reserved."
@@ -318,12 +381,19 @@
     "size": "Size",
     "modified": "Modified",
     "owner": "Owner",
+    "options": "Options",
     "confirmDelete": "Are you sure you want to delete this?",
     "confirmDeleteMultiple": "Are you sure you want to delete these items?",
     "dropToUpload": "Drop here to upload",
     "dropToUploadDesc": "Release your files to start the magic",
     "viewGrid": "Grid View",
-    "viewList": "List View"
+    "viewList": "List View",
+    "emptyFolder": {
+      "title": "Empty Folder",
+      "subtitle": "This directory is silent. It's time to upload some memories or create a subfolder."
+    },
+    "recentActivity": "Recent activity",
+    "currentName": "Current name"
   },
   "documents": {
     "title": "Documents",

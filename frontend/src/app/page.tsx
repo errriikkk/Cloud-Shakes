@@ -41,17 +41,17 @@ function LoginContent() {
         const retryAfter = err.response.headers['retry-after'];
         const resetTime = err.response.headers['ratelimit-reset'];
 
-        let message = "Too many attempts. Please try again later.";
+        let message = t("auth.tooManyAttempts");
 
         if (retryAfter) {
           const seconds = parseInt(retryAfter);
           if (!isNaN(seconds)) {
             const mins = Math.floor(seconds / 60);
             const secs = seconds % 60;
-            message = `Too many requests. Try again in ${mins > 0 ? `${mins}m ` : ""}${secs}s.`;
+            message = t("auth.tooManyRequests").replace("{time}", `${mins > 0 ? `${mins}m ` : ""}${secs}s`);
           }
         } else if (resetTime) {
-          message = "Too many attempts. Please wait before trying again.";
+          message = t("auth.waitBeforeRetry");
         }
         setError(message);
       } else {

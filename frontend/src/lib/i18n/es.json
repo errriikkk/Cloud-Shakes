@@ -31,7 +31,29 @@
         "of": "de",
         "accessDenied": "Acceso denegado",
         "refresh": "Actualizar",
-        "saved": "Guardado"
+        "saved": "Guardado",
+        "open": "Abrir",
+        "rename": "Renombrar",
+        "folder": "Carpeta",
+        "confirmDelete": "¿Estás seguro de que quieres eliminar {name}?",
+        "folderDeleteWarning": " Todos los contenidos serán eliminados permanentemente.",
+        "irreversibleAction": "Esta acción es irreversible.",
+        "deletePermanently": "Eliminar Permanentemente",
+        "renameItem": "Renombrar {type}",
+        "newName": "Nuevo Nombre",
+        "enterNewName": "Ingresa el nuevo nombre...",
+        "saveChanges": "Guardar Cambios",
+        "selected": "Seleccionado",
+        "done": "Hecho",
+        "copyAgain": "Copiar de nuevo",
+        "remove": "Quitar",
+        "itemType": {
+            "file": "Archivo",
+            "folder": "Carpeta",
+            "document": "Documento",
+            "note": "Nota",
+            "calendar": "Evento"
+        }
     },
     "share": {
         "badge": {
@@ -61,7 +83,46 @@
             "embedTitle": "URL de incrustación",
             "embedHelp": "Para iframes, reproductores y uso externo. Sin contraseña ni expiración.",
             "creating": "Creando...",
-            "create": "Generar enlace"
+            "create": "Generar enlace",
+            "embed": "Incrustar",
+            "direct": "Directo",
+            "expiry": "Expiración",
+            "copy": "Copiar",
+            "presets": {
+                "15m": "15 min",
+                "1h": "1 h",
+                "24h": "24 h"
+            }
+        }
+    },
+    "upload": {
+        "modal": {
+            "title": "Preparar Subida",
+            "selectedItems": "Elementos Seleccionados",
+            "clearFiles": "Limpiar todo",
+            "moreFiles": "...y {count} archivos más",
+            "dragDrop": "Arrastra carpetas o archivos aquí",
+            "clickBrowse": "o haz clic para explorar",
+            "inPath": "en {path}",
+            "note": "Al pulsar \"Iniciar Subida\", los archivos se procesarán en segundo plano. Podrás seguir navegando sin interrumpir el proceso.",
+            "start": "Iniciar Subida ({count})"
+        },
+        "progress": {
+            "title": "Subidas",
+            "uploading": "Subiendo archivos...",
+            "completed": "Subida completada",
+            "total": "Progreso total",
+            "status": {
+                "processing": "{count} archivo{plural} en proceso",
+                "summary": "{completed} de {total} completado{plural}"
+            },
+            "counts": {
+                "completed": "{count} completado{plural}",
+                "errors": "{count} error{plural}",
+                "processing": "{count} en proceso"
+            },
+            "creatingFolders": "Creando carpeta...",
+            "root": "Raíz"
         }
     },
     "auth": {
@@ -75,6 +136,8 @@
         "passwordPlaceholder": "Introduce tu contrasena",
         "authFailed": "Autenticacion fallida.",
         "tooManyAttempts": "Demasiados intentos. Intentalo de nuevo mas tarde.",
+        "tooManyRequests": "Demasiadas peticiones. Intenta de nuevo en {time}.",
+        "waitBeforeRetry": "Demasiados intentos. Por favor espera antes de intentar de nuevo.",
         "privateInfrastructure": "Infraestructura Segura Privada",
         "endToEndEncrypted": "Cifrado de Extremo a Extremo",
         "allRightsReserved": "Todos los derechos reservados."
@@ -106,7 +169,13 @@
         "myUnit": "Mi Unidad",
         "noFiles": "No hay archivos",
         "dropHere": "Suelta aquí para subir",
-        "releaseFiles": "Libera tus archivos para comenzar la magia"
+        "releaseFiles": "Libera tus archivos para comenzar la magia",
+        "emptyFolder": {
+            "title": "Carpeta Vacía",
+            "subtitle": "Este directorio está en silencio. Es hora de subir algunos recuerdos o crear una subcarpeta."
+        },
+        "recentActivity": "Actividad reciente",
+        "currentName": "Nombre actual"
     },
     "permissions": {
         "adminFull": "Administrador Completo",

@@ -193,11 +193,11 @@ export function SearchModal({ isOpen, onClose }: SearchModalProps) {
 
     const getTypeLabel = (type: string) => {
         const labels: Record<string, string> = {
-            'file': 'Archivo',
-            'folder': 'Carpeta',
-            'document': 'Documento',
-            'note': 'Nota',
-            'calendar': 'Evento',
+            'file': t("common.itemType.file"),
+            'folder': t("common.itemType.folder"),
+            'document': t("common.itemType.document"),
+            'note': t("common.itemType.note"),
+            'calendar': t("common.itemType.calendar"),
         };
         return labels[type] || 'Item';
     };
@@ -354,7 +354,7 @@ export function SearchModal({ isOpen, onClose }: SearchModalProps) {
                                                     {item.type === 'calendar' && item.startDate && (
                                                         <>
                                                             <Calendar className="w-3 h-3 mr-1" />
-                                                            <span>{new Date(item.startDate).toLocaleDateString('es-ES')}</span>
+                                                            <span>{new Date(item.startDate).toLocaleDateString(undefined)}</span>
                                                         </>
                                                     )}
                                                     {item.type !== 'calendar' && (
