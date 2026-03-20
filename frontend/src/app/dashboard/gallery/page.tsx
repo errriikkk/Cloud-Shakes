@@ -76,17 +76,9 @@ export default function GalleryPage() {
         }
     };
 
-    const handleImageClick = async (image: ImageFile) => {
+    const handleImageClick = (image: ImageFile) => {
         setSelectedImage(image);
-        try {
-            const res = await axios.get(
-                `${API_BASE}/api/files/${image.id}/preview`,
-                { withCredentials: true }
-            );
-            setPreviewUrl(res.data.url);
-        } catch (err) {
-            console.error('Error loading image preview:', err);
-        }
+        setPreviewUrl(image.previewUrl || `${API_BASE}/api/files/${image.id}/preview`);
     };
 
     const handleDownload = async (image: ImageFile) => {

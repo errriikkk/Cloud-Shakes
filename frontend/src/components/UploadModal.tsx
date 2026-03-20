@@ -7,6 +7,9 @@ import { cn } from "@/lib/utils";
 import { scanItems, ScannedFile } from "@/lib/fileScanner";
 import { useUploads } from "@/context/UploadContext";
 import { useTranslation } from "@/lib/i18n";
+import axios from "axios";
+import { API_ENDPOINTS } from "@/lib/api";
+import { ConfirmModal } from "./ConfirmModal";
 
 interface UploadModalProps {
     isOpen: boolean;
@@ -22,6 +25,35 @@ export function UploadModal({ isOpen, onClose, currentFolderId, initialFiles }: 
     const fileInputRef = useRef<HTMLInputElement>(null);
     const { addUploads } = useUploads();
     const { t } = useTranslation();
+    const [existingFilenames, setExistingFilenames] = useState<string[]>([]);
+    const [showConfirmModal, setShowConfirmModal] = useState(false);
+    const [pendingFiles, setPendingFiles] = useState<ScannedFile[]>([]);
+    const [conflictingNames, setConflictingNames] = useState<string[]>([]);
+
+    useEffect(() => {
+        if (isOpen) {
+            fetchExistingFiles();
+        }
+    }, [isOpen, currentFolderId]);
+
+    const fetchExistingFiles = async () => {
+        try {
+            const params: any = {};
+            if (currentFolderId) params.folder = currentFolderId;
+            
+            const res = await axios.get(API_ENDPOINTS.FILES.BASE, { 
+                params,
+                withCredentials: true 
+            });
+            
+            const files = res.data.data || res.data || [];
+            setExistingFilenames(files.map((f: any) => f.originalName));
+        } catch (err) {
+            console.error("Error fetching existing files:", err);
+            // We don't block the user if this fails, just proceed without collision check
+            setExistingFilenames([]);
+        }
+    };
 
     useEffect(() => {
         if (initialFiles && initialFiles.length > 0) {
@@ -66,9 +98,25 @@ export function UploadModal({ isOpen, onClose, currentFolderId, initialFiles }: 
             return { file: f, path: "" };
         });
 
-        addUploads(normalizedFiles, currentFolderId);
+        // Check for collisions
+        const collisions = normalizedFiles.filter(f => 
+            existingFilenames.includes(f.file.name)
+        ).map(f => f.file.name);
+
+        if (collisions.length > 0) {
+            setConflictingNames(collisions);
+            setPendingFiles(normalizedFiles);
+            setShowConfirmModal(true);
+        } else {
+            processUpload(normalizedFiles);
+        }
+    };
+
+    const processUpload = (filesToUpload: ScannedFile[]) => {
+        addUploads(filesToUpload, currentFolderId);
         onClose();
         setFiles([]);
+        setShowConfirmModal(false);
     };
 
     const removeFile = (index: number) => {
@@ -187,6 +235,16 @@ export function UploadModal({ isOpen, onClose, currentFolderId, initialFiles }: 
                     </Button>
                 </ModalFooter>
             </div>
+            <ConfirmModal
+                isOpen={showConfirmModal}
+                onClose={() => setShowConfirmModal(false)}
+                onConfirm={() => processUpload(pendingFiles)}
+                title={t("upload.modal.collisionTitle") || "Archivo Existente"}
+                message={`${t("upload.modal.collisionMessage") || "Los siguientes archivos ya existen en esta carpeta. ¿Deseas reemplazarlos?"} \n\n ${conflictingNames.join(", ")}`}
+                type="warning"
+                confirmText={t("common.replace") || "Reemplazar"}
+                cancelText={t("common.cancel") || "Cancelar"}
+            />
         </Modal>
     );
 }

@@ -20,6 +20,7 @@
         "share": "Compartir",
         "download": "Descargar",
         "upload": "Subir",
+        "replace": "Reemplazar",
         "uploading": "Subiendo...",
         "saving": "Guardando...",
         "loadingContent": "Cargando contenido...",
@@ -105,7 +106,9 @@
             "clickBrowse": "o haz clic para explorar",
             "inPath": "en {path}",
             "note": "Al pulsar \"Iniciar Subida\", los archivos se procesarán en segundo plano. Podrás seguir navegando sin interrumpir el proceso.",
-            "start": "Iniciar Subida ({count})"
+            "start": "Iniciar Subida ({count})",
+            "collisionTitle": "Archivo Ya Existe",
+            "collisionMessage": "Los siguientes archivos ya existen en esta carpeta. ¿Deseas reemplazarlos?"
         },
         "progress": {
             "title": "Subidas",

@@ -20,6 +20,7 @@
     "share": "Share",
     "download": "Download",
     "upload": "Upload",
+    "replace": "Replace",
     "uploading": "Uploading...",
     "saving": "Saving...",
     "loadingContent": "Loading content...",
@@ -113,7 +114,9 @@
       "clickBrowse": "or click to browse",
       "inPath": "in {path}",
       "note": "When you click \"Start Upload\", the files will be processed in the background. You can continue browsing without interrupting the process.",
-      "start": "Start Upload ({count})"
+      "start": "Start Upload ({count})",
+      "collisionTitle": "File Already Exists",
+      "collisionMessage": "The following files already exist in this folder. Do you want to replace them?"
     },
     "progress": {
       "title": "Uploads",
