@@ -52,5 +52,11 @@
     "tailwindcss"
   ],
   "author": "Cloud Shakes Team",
-  "license": "MIT"
+  "license": "MIT",
+  "optionalDependencies": {
+    "@tailwindcss/oxide-linux-x64-gnu": "latest",
+    "@tailwindcss/oxide-linux-arm64-gnu": "latest",
+    "@tailwindcss/oxide-darwin-x64": "latest",
+    "@tailwindcss/oxide-darwin-arm64": "latest"
+  }
 }

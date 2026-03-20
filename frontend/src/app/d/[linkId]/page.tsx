@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, use } from "react";
+import { useState, useEffect, use, useCallback } from "react";
 import { motion } from "framer-motion";
 import { FileText, Lock, Loader2, AlertTriangle, Shield, Calendar, ExternalLink, LogIn, Sparkles, Cloud } from "lucide-react";
 import { Button } from "@/components/ui/Button";
@@ -25,6 +25,15 @@ interface DocumentData {
     updatedAt: string;
 }
 
+interface LinkError {
+    response?: {
+        status?: number;
+        data?: {
+            message?: string;
+        };
+    };
+}
+
 export default function PublicDocumentPage({ params }: { params: Promise<{ linkId: string }> }) {
     const { linkId } = use(params);
     const [linkData, setLinkData] = useState<LinkData | null>(null);
@@ -36,6 +45,21 @@ export default function PublicDocumentPage({ params }: { params: Promise<{ linkI
     const [expired, setExpired] = useState(false);
     const [notFound, setNotFound] = useState(false);
 
+    const fetchDocument = useCallback(async () => {
+        try {
+            const res = await axios.post(
+                `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'}/api/links/${linkId}/verify`,
+                { password: password || undefined }
+            );
+            if (res.data.document) {
+                setDocumentData(res.data.document);
+            }
+        } catch (err: unknown) {
+            const error = err as LinkError;
+            setError(error.response?.data?.message || "Error al cargar el documento");
+        }
+    }, [linkId, password]);
+
     useEffect(() => {
         const fetchLink = async () => {
             try {
@@ -46,29 +70,16 @@ export default function PublicDocumentPage({ params }: { params: Promise<{ linkI
                 if (!res.data.isPasswordProtected && res.data.type === 'document') {
                     await fetchDocument();
                 }
-            } catch (err: any) {
-                if (err.response?.status === 410) setExpired(true);
+            } catch (err: unknown) {
+                const error = err as LinkError;
+                if (error.response?.status === 410) setExpired(true);
                 else setNotFound(true);
             } finally {
                 setLoading(false);
             }
         };
         fetchLink();
-    }, [linkId]);
-
-    const fetchDocument = async () => {
-        try {
-            const res = await axios.post(
-                `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'}/api/links/${linkId}/verify`,
-                { password: password || undefined }
-            );
-            if (res.data.document) {
-                setDocumentData(res.data.document);
-            }
-        } catch (err: any) {
-            setError(err.response?.data?.message || "Error al cargar el documento");
-        }
-    };
+    }, [linkId, fetchDocument]);
 
     const handleVerify = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -76,8 +87,9 @@ export default function PublicDocumentPage({ params }: { params: Promise<{ linkI
         setError("");
         try {
             await fetchDocument();
-        } catch (err: any) {
-            setError(err.response?.data?.message || "Verificación fallida");
+        } catch (err: unknown) {
+            const error = err as LinkError;
+            setError(error.response?.data?.message || "Verificación fallida");
         } finally {
             setVerifying(false);
         }
