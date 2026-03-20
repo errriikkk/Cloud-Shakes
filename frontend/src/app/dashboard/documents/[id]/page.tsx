@@ -3,18 +3,19 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { useRouter, useParams } from "next/navigation";
-import { ArrowLeft, Save, Loader2, MoreHorizontal, Trash2, Bold as BoldIcon, Italic as ItalicIcon, List, Heading1, Heading2, Underline as UnderlineIcon, Share2 } from "lucide-react";
+import { ArrowLeft, Save, Loader2, MoreHorizontal, Trash2, Bold as BoldIcon, Italic as ItalicIcon, List, Heading1, Heading2, Underline as UnderlineIcon, Share2, Check } from "lucide-react";
 import { ShareDocumentModal } from "@/components/ShareDocumentModal";
 import { Button } from "@/components/ui/Button";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import axios from "axios";
 import { API_ENDPOINTS } from "@/lib/api";
-import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { useModal } from "@/hooks/useModal";
+import { useTranslation } from "@/lib/i18n";
 
 export default function DocumentEditorPage() {
     const { user } = useAuth();
+    const { t } = useTranslation();
     const { confirm, alert, ModalComponents } = useModal();
     const router = useRouter();
     const params = useParams();
@@ -23,6 +24,7 @@ export default function DocumentEditorPage() {
     const [title, setTitle] = useState("");
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
+    const [isDirty, setIsDirty] = useState(false);
     const [lastSaved, setLastSaved] = useState<Date | null>(null);
     const [isShareOpen, setIsShareOpen] = useState(false);
     const [existingLink, setExistingLink] = useState<any>(null);
@@ -37,7 +39,7 @@ export default function DocumentEditorPage() {
     const fetchDocument = async () => {
         try {
             const res = await axios.get(API_ENDPOINTS.DOCUMENTS.DETAIL(id), { withCredentials: true });
-            setTitle(res.data.title);
+            setTitle(res.data.title || "");
 
             if (editorRef.current) {
                 const c = res.data.content;
@@ -65,15 +67,16 @@ export default function DocumentEditorPage() {
                 content: { type: 'rich-text', html }
             }, { withCredentials: true });
             setLastSaved(new Date());
+            setIsDirty(false);
         } catch (err) {
             console.error("Failed to save:", err);
-            // Optional: alert user or show error state
         } finally {
             setSaving(false);
         }
     };
 
     const debouncedSave = (newTitle: string, html: string) => {
+        setIsDirty(true);
         if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
         saveTimeoutRef.current = setTimeout(() => {
             saveDocument(newTitle, html);
@@ -94,6 +97,25 @@ export default function DocumentEditorPage() {
         }
     };
 
+    const handleManualSave = () => {
+        if (editorRef.current) {
+            if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+            saveDocument(title, editorRef.current.innerHTML);
+        }
+    };
+
+    const handleBack = async () => {
+        if (isDirty || saving) {
+            const confirmed = await confirm(
+                t('documents.title'),
+                t('documents.unsavedChanges'),
+                { type: 'warning', confirmText: t('common.yes'), cancelText: t('common.no') }
+            );
+            if (!confirmed) return;
+        }
+        router.push("/dashboard/documents");
+    };
+
     const execCommand = (command: string, value: string | undefined = undefined) => {
         document.execCommand(command, false, value);
         if (editorRef.current) {
@@ -102,23 +124,23 @@ export default function DocumentEditorPage() {
         }
     };
 
-    // Warn if leaving with unsaved changes
+    // Warn if leaving with unsaved changes (browser level)
     useEffect(() => {
         const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-            if (saving) {
+            if (isDirty || saving) {
                 e.preventDefault();
                 e.returnValue = '';
             }
         };
         window.addEventListener('beforeunload', handleBeforeUnload);
         return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-    }, [saving]);
+    }, [isDirty, saving]);
 
     const handleDelete = async () => {
         const confirmed = await confirm(
-            "Eliminar Documento",
-            "¿Estás seguro de que quieres eliminar este documento permanentemente? Esta acción no se puede deshacer.",
-            { type: 'danger', confirmText: 'Eliminar', cancelText: 'Cancelar' }
+            t('documents.delete'),
+            t('documents.confirmDelete'),
+            { type: 'danger', confirmText: t('common.delete'), cancelText: t('common.cancel') }
         );
         if (!confirmed) return;
         try {
@@ -126,7 +148,7 @@ export default function DocumentEditorPage() {
             router.push("/dashboard/documents");
         } catch (err) {
             console.error("Delete failed:", err);
-            await alert("Error", "No se pudo eliminar el documento. Por favor, intenta de nuevo.", { type: 'danger' });
+            await alert(t('common.error'), t('common.error'), { type: 'danger' });
         }
     };
 
@@ -136,27 +158,48 @@ export default function DocumentEditorPage() {
 
     return (
         <div className="max-w-4xl mx-auto h-full flex flex-col min-h-[calc(100dvh-4rem)]">
+            <ModalComponents />
             {/* Toolbar Top */}
             <div className="flex items-center justify-between py-4 shrink-0 px-2 sm:px-0">
                 <div className="flex items-center gap-2 text-muted-foreground">
-                    <Link href="/dashboard/documents" className="p-2 hover:bg-muted rounded-xl transition-colors">
+                    <button 
+                        onClick={handleBack}
+                        className="p-2 hover:bg-muted rounded-xl transition-colors"
+                        title={t('common.back')}
+                    >
                         <ArrowLeft className="w-5 h-5" />
-                    </Link>
+                    </button>
                     <div className="flex flex-col">
-                        <span className="text-[10px] font-bold uppercase tracking-wider opacity-50">Documentos</span>
-                        <span className="text-sm font-semibold text-foreground truncate max-w-[150px]">{title || "Sin título"}</span>
+                        <span className="text-[10px] font-bold uppercase tracking-wider opacity-50">{t('documents.title')}</span>
+                        <span className="text-sm font-semibold text-foreground truncate max-w-[150px]">{title || t('documents.untitled')}</span>
                     </div>
                 </div>
-                <div className="flex items-center gap-4">
-                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest bg-muted/50 px-2 py-1 rounded-md">
-                        {saving ? "Guardando..." : lastSaved ? `Guardado ${lastSaved.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : "Guardado"}
-                    </span>
+                <div className="flex items-center gap-2 sm:gap-4">
+                    <div className="hidden sm:flex items-center gap-2 pr-2 border-r border-border/40">
+                        <span className={cn(
+                            "text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded-md transition-all",
+                            saving ? "bg-primary/10 text-primary animate-pulse" : isDirty ? "bg-amber-500/10 text-amber-600" : "bg-muted/50 text-muted-foreground"
+                        )}>
+                            {saving ? t('common.saving') : isDirty ? t('common.save') : lastSaved ? t('common.saved') : t('common.saved')}
+                        </span>
+                        {lastSaved && !isDirty && !saving && <Check className="w-3 h-3 text-emerald-500" />}
+                    </div>
+
+                    <Button 
+                        size="sm"
+                        variant={isDirty ? "default" : "outline"}
+                        onClick={handleManualSave}
+                        disabled={saving || (!isDirty && lastSaved !== null)}
+                        className="h-9 rounded-xl font-bold shadow-sm"
+                    >
+                        {saving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />}
+                        <span className="hidden sm:inline">{t('common.save')}</span>
+                    </Button>
+
                     <button 
                         onClick={() => {
-                            // Check for existing link
                             axios.get(API_ENDPOINTS.LINKS.BASE, { withCredentials: true })
                                 .then(res => {
-                                    // Handle both old array and new {data, pagination} format
                                     const links = res.data.data || res.data || [];
                                     const docLink = links.find((l: any) => l.documentId === id);
                                     setExistingLink(docLink || null);
@@ -168,10 +211,15 @@ export default function DocumentEditorPage() {
                                 });
                         }}
                         className="p-2 text-muted-foreground/40 hover:text-primary hover:bg-primary/10 rounded-xl transition-all active:scale-90"
+                        title={t('common.share')}
                     >
                         <Share2 className="w-4 h-4" />
                     </button>
-                    <button onClick={handleDelete} className="p-2 text-muted-foreground/40 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all active:scale-90">
+                    <button 
+                        onClick={handleDelete} 
+                        className="p-2 text-muted-foreground/40 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all active:scale-90"
+                        title={t('common.delete')}
+                    >
                         <Trash2 className="w-4 h-4" />
                     </button>
                 </div>
@@ -196,14 +244,14 @@ export default function DocumentEditorPage() {
                         type="text"
                         value={title}
                         onChange={handleTitleChange}
-                        placeholder="Título del documento..."
+                        placeholder={t('documents.untitled')}
                         className="w-full text-4xl sm:text-5xl font-extrabold bg-transparent border-none outline-none placeholder:text-muted-foreground/20 mb-12 tracking-tight selection:bg-primary/20"
                     />
                     <div
                         ref={editorRef}
                         contentEditable
                         onInput={handleInput}
-                        data-placeholder="Comienza a escribir aquí..."
+                        data-placeholder={t('documents.placeholder')}
                         className="prose prose-slate max-w-none w-full outline-none text-lg sm:text-xl leading-relaxed text-foreground/80 selection:bg-primary/20 min-h-[600px]"
                         spellCheck={false}
                     />

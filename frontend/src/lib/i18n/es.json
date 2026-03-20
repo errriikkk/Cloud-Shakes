@@ -276,16 +276,15 @@
     },
     "documents": {
         "title": "Documentos",
-        "newDocument": "Nuevo documento",
         "search": "Buscar documentos...",
-        "noDocuments": "No hay documentos",
-        "untitled": "Sin titulo",
-        "edit": "Editar",
-        "delete": "Eliminar",
-        "share": "Compartir",
-        "created": "Creado",
-        "updated": "Actualizado",
-        "confirmDelete": "Estas seguro de que quieres eliminar este documento?"
+        "newDocument": "Nuevo Documento",
+        "noDocuments": "Aún no hay documentos.",
+        "untitled": "Documento sin título",
+        "delete": "Eliminar Documento",
+        "confirmDelete": "¿Estás seguro de que quieres eliminar este documento permanentemente? Esta acción no se puede deshacer.",
+        "unsavedChanges": "Tienes cambios sin guardar. ¿Estás seguro de que quieres salir?",
+        "lastSavedAt": "Último guardado {time}",
+        "placeholder": "Comienza a escribir aquí..."
     },
     "notes": {
         "title": "Notas",
