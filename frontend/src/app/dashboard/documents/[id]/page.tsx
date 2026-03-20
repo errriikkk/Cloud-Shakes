@@ -202,6 +202,7 @@ export default function DocumentEditorPage() {
                         ref={editorRef}
                         contentEditable
                         onInput={handleInput}
+                        data-placeholder="Comienza a escribir aquí..."
                         className="prose prose-slate max-w-none w-full outline-none text-lg sm:text-xl leading-relaxed text-foreground/80 selection:bg-primary/20 min-h-[600px]"
                         spellCheck={false}
                     />

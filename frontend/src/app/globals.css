@@ -157,7 +157,7 @@
 
 /* Typography for contentEditable */
 [contenteditable]:empty:before {
-  content: attr(placeholder);
+  content: attr(data-placeholder);
   color: var(--muted-foreground);
   opacity: 0.3;
   cursor: text;
