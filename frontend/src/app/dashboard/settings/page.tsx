@@ -24,7 +24,7 @@ export default function SettingsPage() {
     const { user, loading: authLoading } = useAuth();
     const { alert, ModalComponents } = useModal();
     const { t, locale, setLocale } = useTranslation();
-    const { isSupported, permission, requestPermission, isIOSDevice, isPWA } = useNotifications();
+    const { isSupported, permission, requestPermission, setPermission, isIOSDevice, isPWA } = useNotifications();
     const canManageSettings = !!(user?.isAdmin || user?.permissions?.includes('manage_settings'));
     const [loading, setLoading] = useState(false);
     const [uploadingAvatar, setUploadingAvatar] = useState(false);
@@ -288,8 +288,18 @@ export default function SettingsPage() {
                 withCredentials: true,
                 headers: { 'Content-Type': 'multipart/form-data' },
             });
-            setProfile(prev => ({ ...prev, avatarUrl: res.data.avatarUrl }));
-            window.location.reload();
+            // Add timestamp to prevent browser caching
+            const timestamp = Date.now();
+            const newAvatarUrl = `${API_BASE}/api/profile/avatar?t=${timestamp}`;
+            setProfile(prev => ({ ...prev, avatarUrl: newAvatarUrl }));
+            // Also update in localStorage for AuthContext to pick up
+            const userData = localStorage.getItem('shakes_user');
+            if (userData) {
+                const user = JSON.parse(userData);
+                user.avatarUrl = newAvatarUrl;
+                localStorage.setItem('shakes_user', JSON.stringify(user));
+            }
+            alert(t("common.success"), t("settings.profileUpdated"), { type: 'success' });
         } catch (err: any) {
             alert(t("common.error"), err.response?.data?.message || t("settings.uploadFailed"), { type: 'danger' });
         } finally {
@@ -956,8 +966,19 @@ export default function SettingsPage() {
                             <button
                                 onClick={async () => {
                                     if (permission === "granted") {
-                                        // Already granted, do nothing or could add unsubscribe logic
-                                        alert(t("common.info"), "Las notificaciones ya están activadas", { type: 'info' });
+                                        // Desactivar notificaciones - revoke permission
+                                        if ('permissions' in Notification) {
+                                            // @ts-ignore - Notification API has different methods
+                                            const result = await Notification.requestPermission();
+                                            setPermission(result);
+                                            if (result === 'denied') {
+                                                alert(t("common.info"), "Notificaciones desactivadas", { type: 'info' });
+                                            } else {
+                                                alert(t("common.info"), "Para desactivar completamente las notificaciones, configura los permisos del navegador", { type: 'info' });
+                                            }
+                                        } else {
+                                            alert(t("common.info"), "Para desactivar las notificaciones, configura los permisos del navegador", { type: 'info' });
+                                        }
                                     } else {
                                         const granted = await requestPermission();
                                         if (granted) {

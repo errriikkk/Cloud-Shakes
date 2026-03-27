@@ -357,6 +357,7 @@ export function useNotifications() {
     return {
         isSupported,
         permission,
+        setPermission,
         requestPermission,
         subscribeToPush,
         checkUpcomingEvents,
