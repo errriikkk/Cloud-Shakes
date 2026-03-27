@@ -215,6 +215,7 @@
     "morning": "Good morning",
     "afternoon": "Good afternoon",
     "night": "Good evening",
+    "storage": "Storage",
     "user": "User",
     "synced": "Synced",
     "sync": "Sync",
@@ -240,6 +241,7 @@
     "profile": "Profile",
     "security": "Security",
     "language": "Language",
+    "notifications": "Notifications",
     "profilePhoto": "Profile Photo",
     "profilePhotoDesc": "Upload an image to personalize your profile. Max 5MB.",
     "changePhoto": "Change Photo",
@@ -358,8 +360,10 @@
     "deleted": "Conversation deleted"
   },
   "files": {
-    "title": "Files",
+    "title": "My Drive",
     "subtitle": "Access and manage your private cloud storage.",
+    "viewGrid": "Grid view",
+    "viewList": "List view",
     "upload": "Upload",
     "newFolder": "New Folder",
     "search": "Search files...",

@@ -3,7 +3,8 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
-import { Settings, User, Lock, Camera, Save, X, Loader2, Globe, Shield, Users, Database, ServerCog, RotateCcw } from "lucide-react";
+import { Settings, User, Lock, Camera, Save, X, Loader2, Globe, Shield, Users, Database, ServerCog, RotateCcw, Bell, BellOff } from "lucide-react";
+import { useNotifications } from "@/hooks/useNotifications";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { motion, AnimatePresence } from "framer-motion";
@@ -23,6 +24,7 @@ export default function SettingsPage() {
     const { user, loading: authLoading } = useAuth();
     const { alert, ModalComponents } = useModal();
     const { t, locale, setLocale } = useTranslation();
+    const { isSupported, permission, requestPermission, isIOSDevice, isPWA } = useNotifications();
     const canManageSettings = !!(user?.isAdmin || user?.permissions?.includes('manage_settings'));
     const [loading, setLoading] = useState(false);
     const [uploadingAvatar, setUploadingAvatar] = useState(false);
@@ -926,6 +928,56 @@ export default function SettingsPage() {
                                 </div>
                             </div>
                         )}
+                    </motion.div>
+                )}
+
+                {/* Notifications Section */}
+                {isSupported && (
+                    <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.05 }}
+                        className="bg-background border border-border/60 rounded-2xl p-6 shadow-sm"
+                    >
+                        <div className="flex items-center gap-3 mb-6">
+                            <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+                                {permission === "granted" ? (
+                                    <Bell className="w-5 h-5 text-primary" />
+                                ) : (
+                                    <BellOff className="w-5 h-5 text-muted-foreground" />
+                                )}
+                            </div>
+                            <div className="flex-1">
+                                <h2 className="text-xl font-bold text-foreground">{t("settings.notifications") || "Notificaciones"}</h2>
+                                <p className="text-xs text-muted-foreground">
+                                    {isIOSDevice && !isPWA ? "Instala la app para recibir notificaciones en background" : "Recibe notificaciones de mensajes y eventos"}
+                                </p>
+                            </div>
+                            <button
+                                onClick={async () => {
+                                    if (permission === "granted") {
+                                        // Already granted, do nothing or could add unsubscribe logic
+                                        alert(t("common.info"), "Las notificaciones ya están activadas", { type: 'info' });
+                                    } else {
+                                        const granted = await requestPermission();
+                                        if (granted) {
+                                            alert(t("common.success"), "Notificaciones activadas", { type: 'success' });
+                                        }
+                                    }
+                                }}
+                                className={cn(
+                                    "relative inline-flex h-6 w-11 items-center rounded-full transition-colors",
+                                    permission === "granted" ? "bg-primary" : "bg-muted"
+                                )}
+                            >
+                                <span
+                                    className={cn(
+                                        "inline-block h-4 w-4 transform rounded-full bg-white transition-transform",
+                                        permission === "granted" ? "translate-x-6" : "translate-x-1"
+                                    )}
+                                />
+                            </button>
+                        </div>
                     </motion.div>
                 )}
 

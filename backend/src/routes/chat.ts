@@ -2,9 +2,20 @@ import express from 'express';
 import { z } from 'zod';
 import prisma from '../config/db';
 import { protect, requirePermission, AuthRequest } from '../middleware/authMiddleware';
+import webpush from 'web-push';
 
 const router = express.Router();
 const prismaAny = prisma as any;
+
+// Configure web-push VAPID keys
+const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY || 'BEl62iUYgUivxIkv69yViEuiBIa-Ib9-SkvMeAtA3LFgDzkrxZJjSgSnfckjBJuBkr3qBUYIHBQFLXYp5Nksh8U';
+const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || 'UUxI4O8-FbRouAf7-7OTt9GH4o-4I9PZmT3YHyF7fKc';
+
+webpush.setVapidDetails(
+    'mailto:admin@shakes.cloud',
+    VAPID_PUBLIC_KEY,
+    VAPID_PRIVATE_KEY
+);
 
 const createConversationSchema = z.object({
     name: z.string().optional(),
@@ -380,12 +391,36 @@ router.post('/conversations/:id/messages', protect, requirePermission('send_mess
 
                 // Send push notification to each subscription
                 for (const sub of subscriptions) {
-                    // In production, use web-push library to send actual notification
-                    console.log(`[Push] Would send message notification to ${sub.endpoint}:`, {
-                        title: senderName,
-                        body: content.substring(0, 100),
-                        data: { type: 'chat_message', conversationId: req.params.id }
-                    });
+                    try {
+                        const notificationPayload = JSON.stringify({
+                            title: senderName,
+                            body: content.substring(0, 100),
+                            icon: '/logo-192.png',
+                            badge: '/logo-192.png',
+                            tag: 'chat-message',
+                            data: { type: 'chat_message', conversationId: req.params.id }
+                        });
+                        
+                        await webpush.sendNotification(
+                            {
+                                endpoint: sub.endpoint,
+                                keys: {
+                                    p256dh: sub.p256dh,
+                                    auth: sub.auth,
+                                },
+                            },
+                            notificationPayload
+                        );
+                        console.log(`[Push] Notification sent to user ${recipientId}`);
+                    } catch (error: any) {
+                        console.error('[Push] Error sending notification:', error.message);
+                        // If subscription is invalid (410), delete it
+                        if (error.statusCode === 410) {
+                            await prismaAny.pushSubscription.deleteMany({
+                                where: { userId: recipientId, endpoint: sub.endpoint }
+                            });
+                        }
+                    }
                 }
             }
         }
