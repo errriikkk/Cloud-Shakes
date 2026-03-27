@@ -15,7 +15,7 @@ router.get('/', protect, async (req: AuthRequest, res, next) => {
             return res.json({ files: [], folders: [] });
         }
 
-        const [files, folders, documents, notes, calendarEvents] = await Promise.all([
+        const [files, folders, notes, calendarEvents] = await Promise.all([
             prisma.file.findMany({
                 where: {
                     originalName: {
@@ -58,26 +58,21 @@ router.get('/', protect, async (req: AuthRequest, res, next) => {
                 take: 10,
                 orderBy: { createdAt: 'desc' },
             }),
-            prisma.document.findMany({
-                where: {
-                    title: {
-                        contains: query,
-                        mode: 'insensitive',
-                    },
-                },
-                include: {
-                    owner: {
-                        select: { id: true, username: true, displayName: true, avatar: true }
-                    },
-                },
-                take: 10,
-                orderBy: { updatedAt: 'desc' },
-            }),
             prisma.note.findMany({
                 where: {
-                    OR: [
-                        { title: { contains: query, mode: 'insensitive' } },
-                        { content: { contains: query, mode: 'insensitive' } },
+                    AND: [
+                        {
+                            OR: [
+                                { scope: 'workspace' },
+                                { scope: 'private', ownerId: req.user.id },
+                            ],
+                        },
+                        {
+                            OR: [
+                                { title: { contains: query, mode: 'insensitive' } },
+                                { content: { contains: query, mode: 'insensitive' } },
+                            ],
+                        },
                     ],
                 },
                 include: {
@@ -135,10 +130,6 @@ router.get('/', protect, async (req: AuthRequest, res, next) => {
             folders: folders.map(f => ({
                 ...withOwnerAvatarUrl(f),
                 type: 'folder',
-            })),
-            documents: documents.map(d => ({
-                ...withOwnerAvatarUrl(d),
-                type: 'document',
             })),
             notes: notes.map(n => ({
                 ...withOwnerAvatarUrl(n),

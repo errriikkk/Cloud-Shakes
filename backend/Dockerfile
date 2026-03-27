@@ -9,8 +9,9 @@ RUN apk add --no-cache openssl netcat-openbsd wget postgresql-client gzip
 COPY package*.json ./
 COPY prisma ./prisma/
 
-# Install dependencies
-RUN npm install
+# Install dependencies (including web-push for push notifications)
+RUN npm install web-push --save
+RUN npm install --save-dev @types/web-push
 
 # Copy all backend files
 COPY . .

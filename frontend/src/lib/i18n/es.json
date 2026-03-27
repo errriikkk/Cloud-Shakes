@@ -51,7 +51,6 @@
         "itemType": {
             "file": "Archivo",
             "folder": "Carpeta",
-            "document": "Documento",
             "note": "Nota",
             "calendar": "Evento"
         }
@@ -148,7 +147,6 @@
     "nav": {
         "home": "Inicio",
         "files": "Archivos",
-        "documents": "Documentos",
         "notes": "Notas",
         "calendar": "Calendario",
         "shared": "Compartidos",
@@ -214,8 +212,8 @@
     },
     "search": {
         "quickSearch": "Busqueda Rapida",
-        "placeholder": "Buscar archivos, documentos, notas, eventos...",
-        "description": "Busca archivos, documentos, notas y eventos.",
+        "placeholder": "Buscar archivos, notas, eventos...",
+        "description": "Busca archivos, notas y eventos.",
         "navigate": "Navegar",
         "select": "Seleccionar",
         "noResults": "No se encontraron resultados para",
@@ -227,6 +225,11 @@
         "newEvent": "Nuevo Evento",
         "today": "Hoy",
         "events": "Eventos",
+        "views": {
+            "month": "Mes",
+            "week": "Semana",
+            "agenda": "Agenda"
+        },
         "shortCal": "Cal",
         "shortList": "Lista",
         "noEventsYet": "No tienes eventos aun.",
@@ -244,6 +247,7 @@
         "save": "Guardar",
         "cancel": "Cancelar",
         "confirmDelete": "Estas seguro de que quieres eliminar este evento?",
+        "deleteFailed": "No se pudo eliminar el evento. Por favor, intenta de nuevo.",
         "days": {
             "mon": "Lun",
             "tue": "Mar",
@@ -276,18 +280,6 @@
         "usage": "Uso de almacenamiento",
         "storageWarning": "Estas cerca del limite de almacenamiento",
         "storageCritical": "Almacenamiento casi lleno"
-    },
-    "documents": {
-        "title": "Documentos",
-        "search": "Buscar documentos...",
-        "newDocument": "Nuevo Documento",
-        "noDocuments": "Aún no hay documentos.",
-        "untitled": "Documento sin título",
-        "delete": "Eliminar Documento",
-        "confirmDelete": "¿Estás seguro de que quieres eliminar este documento permanentemente? Esta acción no se puede deshacer.",
-        "unsavedChanges": "Tienes cambios sin guardar. ¿Estás seguro de que quieres salir?",
-        "lastSavedAt": "Último guardado {time}",
-        "placeholder": "Comienza a escribir aquí..."
     },
     "notes": {
         "title": "Notas",
@@ -390,7 +382,6 @@
         "storage": "Almacenamiento",
         "users": "Usuarios",
         "files": "Archivos",
-        "documents": "Documentos",
         "notes": "Notas",
         "links": "Enlaces",
         "period": "Periodo",
@@ -669,5 +660,67 @@
         "autoGainControl": "Control Automatico de Ganancia",
         "gainDesc": "Ajusta el volumen automaticamente",
         "minimalSecure": "Minimal & Secure"
+    },
+    "permissions": {
+        "accessDenied": "Acceso Denegado",
+        "noAccess": "No tienes permisos para {action}",
+        "required": "Permiso requerido",
+        "contactAdmin": "Contacta a un administrador",
+        "goBack": "Volver",
+        "close": "Cerrar",
+        "blockedAction": "Acción bloqueada",
+        "youCannot": "No puedes realizar esta acción",
+        "labels": {
+            "admin": "Administrador total",
+            "manage_users": "Gestionar usuarios",
+            "manage_roles": "Gestionar roles",
+            "manage_settings": "Configuración del sistema",
+            "manage_integrations": "Gestionar integraciones",
+            "view_files": "Ver mis archivos",
+            "view_shared_files": "Ver archivos compartidos",
+            "view_workspace_files": "Ver todos los archivos",
+            "upload_files": "Subir archivos",
+            "delete_files": "Eliminar archivos",
+            "download_files": "Descargar archivos",
+            "share_files": "Compartir archivos",
+            "preview_files": "Vista previa",
+            "create_folders": "Crear carpetas",
+            "delete_folders": "Eliminar carpetas",
+            "organize_folders": "Organizar carpetas",
+            "view_notes": "Ver notas",
+            "create_notes": "Crear notas",
+            "edit_notes": "Editar notas",
+            "delete_notes": "Eliminar notas",
+            "view_calendar": "Ver calendario",
+            "create_events": "Crear eventos",
+            "edit_events": "Editar eventos",
+            "delete_events": "Eliminar eventos",
+            "view_links": "Ver enlaces",
+            "create_links": "Crear enlaces",
+            "delete_links": "Eliminar enlaces",
+            "view_gallery": "Ver galería",
+            "upload_images": "Subir imágenes",
+            "delete_images": "Eliminar imágenes",
+            "view_chat": "Ver chat",
+            "send_messages": "Enviar mensajes",
+            "edit_messages": "Editar mensajes",
+            "delete_messages": "Eliminar mensajes",
+            "create_chats": "Crear chats",
+            "create_group_chats": "Crear grupos",
+            "mention_users": "Mencionar usuarios",
+            "send_attachments": "Enviar archivos",
+            "view_calls": "Ver videollamadas",
+            "create_calls": "Crear videollamadas",
+            "manage_calls": "Gestionar videollamadas",
+            "join_calls": "Unirse a videollamadas",
+            "view_statistics": "Ver estadísticas",
+            "export_statistics": "Exportar estadísticas",
+            "view_activity": "Ver actividad",
+            "export_activity": "Exportar actividad"
+        }
+    },
+    "preview": {
+        "pdfNotSupported": "Los PDFs no se pueden previsualizar de momento. ¡Intenta descargarlo y verlo!",
+        "download": "Descargar PDF"
     }
 }

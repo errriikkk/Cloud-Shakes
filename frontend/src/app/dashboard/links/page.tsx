@@ -484,7 +484,7 @@ function SharedLinksContent() {
                                             <div className="min-w-0 flex-1">
                                                 <div className="flex items-center gap-2 mb-1">
                                                     <h3 className="text-sm font-bold text-foreground truncate">
-                                                        {firstLink.file?.originalName || t('documents.untitled')}
+                                                        {firstLink.file?.originalName || t('common.itemType.file')}
                                                     </h3>
                                                     <span className="text-[10px] font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-full">
                                                         {group.links.length} {t('links.title')}
@@ -644,7 +644,7 @@ function SharedLinksContent() {
                                     </div>
                                     <div className="min-w-0 flex-1">
                                         <h3 className="text-sm font-bold text-foreground truncate mb-1">
-                                            {link.file?.originalName || t('documents.untitled')}
+                                            {link.file?.originalName || t('common.itemType.file')}
                                         </h3>
                                         <div className={cn(
                                             "flex flex-wrap items-center gap-x-4 gap-y-1",

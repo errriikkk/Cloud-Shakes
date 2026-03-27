@@ -146,7 +146,9 @@ router.put('/:id', protect, requirePermission('edit_events'), async (req: AuthRe
             return res.status(404).json({ message: 'Evento no encontrado' });
         }
 
-        if (existing.ownerId !== req.user.id && !req.user.isAdmin && !(req.user.permissions || []).includes('view_calendar')) {
+        // Authorization:
+        // Calendar is visible to the instance, but only owner/admin can edit.
+        if (existing.ownerId !== req.user.id && !req.user.isAdmin) {
             return res.status(403).json({ message: 'No autorizado' });
         }
 
@@ -197,7 +199,9 @@ router.delete('/:id', protect, requirePermission('delete_events'), async (req: A
             return res.status(404).json({ message: 'Evento no encontrado' });
         }
 
-        if (event.ownerId !== req.user.id && !req.user.isAdmin && !(req.user.permissions || []).includes('view_calendar')) {
+        // Authorization:
+        // Calendar is visible to the instance, but only owner/admin can delete.
+        if (event.ownerId !== req.user.id && !req.user.isAdmin) {
             return res.status(403).json({ message: 'No autorizado' });
         }
 

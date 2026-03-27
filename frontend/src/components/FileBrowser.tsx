@@ -9,7 +9,7 @@ import { useAuth } from "@/context/AuthContext";
 import {
     File as FileIcon, Trash2, Link as LinkIcon, FileText,
     Image as ImageIcon, Video, Music, Download, Copy,
-    CheckCircle, Search, Clock, Edit2
+    CheckCircle, Search, Clock, Edit2, Check, X, Loader2
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
@@ -108,6 +108,10 @@ export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserPro
     const [renameModalOpen, setRenameModalOpen] = useState(false);
     const [itemToRename, setItemToRename] = useState<{ id: string, name: string, type: 'file' | 'folder' } | null>(null);
     const [newName, setNewName] = useState("");
+
+    // Delete state with progress
+    const [deleteProgress, setDeleteProgress] = useState<{ current: number; total: number; item: string } | null>(null);
+    const [deleteError, setDeleteError] = useState<string | null>(null);
 
     const [uploadInitialFiles, setUploadInitialFiles] = useState<(File | ScannedFile)[]>([]);
 
@@ -404,23 +408,68 @@ export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserPro
 
     const handleBulkDelete = async () => {
         if (selectedItems.length === 0) return;
+        
+        setDeleteProgress({ current: 0, total: selectedItems.length, item: `${selectedItems.length} elementos` });
+        setDeleteError(null);
+        
         try {
             const fileIds = selectedItems.filter(i => i.type === 'file').map(i => i.id);
             const folderIds = selectedItems.filter(i => i.type === 'folder').map(i => i.id);
 
-            if (fileIds.length > 0) {
-                await axios.post(`${API}/api/files/bulk-delete`, { ids: fileIds }, { withCredentials: true });
+            let successCount = 0;
+            let errorCount = 0;
+            let errors: string[] = [];
+
+            // Delete files one by one to handle individual errors
+            for (const id of fileIds) {
+                try {
+                    await axios.delete(`${API}/api/files/${id}`, { withCredentials: true });
+                    successCount++;
+                } catch (err: any) {
+                    errorCount++;
+                    const msg = err.response?.data?.message || err.message || 'Error';
+                    if (!msg.includes('NotFound') && !errors.includes(msg)) {
+                        errors.push(msg);
+                    }
+                }
+                setDeleteProgress({ current: successCount + errorCount, total: fileIds.length + folderIds.length, item: 'Eliminando archivos...' });
             }
-            if (folderIds.length > 0) {
-                await axios.post(`${API}/api/folders/bulk-delete`, { ids: folderIds }, { withCredentials: true });
+
+            // Delete folders one by one
+            for (const id of folderIds) {
+                try {
+                    await axios.delete(`${API}/api/folders/${id}`, { withCredentials: true });
+                    successCount++;
+                } catch (err: any) {
+                    errorCount++;
+                    const msg = err.response?.data?.message || err.message || 'Error';
+                    if (!errors.includes(msg)) {
+                        errors.push(msg);
+                    }
+                }
+                setDeleteProgress({ current: successCount + errorCount, total: fileIds.length + folderIds.length, item: 'Eliminando carpetas...' });
             }
 
             fetchItems(true);
             setSelectedItems([]);
-            if (folderIds.length > 0) {
-                window.dispatchEvent(new CustomEvent('folderUpdate'));
+            window.dispatchEvent(new CustomEvent('folderUpdate'));
+            
+            if (errorCount > 0 && successCount > 0) {
+                setDeleteError(`Eliminados ${successCount}. Errores: ${errorCount}`);
+            } else if (errorCount > 0) {
+                setDeleteError(errors[0] || 'Error al eliminar algunos archivos');
             }
-        } catch (err) {
+            
+            setDeleteProgress({ current: successCount + errorCount, total: fileIds.length + folderIds.length, item: 'Completado' });
+            
+            setTimeout(() => {
+                setDeleteModalOpen(false);
+                setDeleteProgress(null);
+                setDeleteError(null);
+            }, 1500);
+        } catch (err: any) {
+            const message = err.response?.data?.message || err.message || 'Error al eliminar';
+            setDeleteError(message);
             console.error("Bulk delete failed:", err);
         }
     };
@@ -433,9 +482,14 @@ export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserPro
 
     const handleDelete = async () => {
         if (!itemToDelete) return;
+        
+        setDeleteProgress({ current: 0, total: 1, item: itemToDelete.name });
+        setDeleteError(null);
+        
         try {
             const endpoint = itemToDelete.type === 'file' ? `files` : `folders`;
             await axios.delete(`${API}/api/${endpoint}/${itemToDelete.id}`, { withCredentials: true });
+            
             if (itemToDelete.type === 'file') {
                 setFiles(files.filter(f => f.id !== itemToDelete.id));
             } else {
@@ -443,11 +497,30 @@ export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserPro
                 window.dispatchEvent(new CustomEvent('folderUpdate'));
             }
             setSelectedFile(null);
-        } catch (err) {
-            console.error(err);
-        } finally {
-            setDeleteModalOpen(false);
-            setItemToDelete(null);
+            setDeleteProgress({ current: 1, total: 1, item: itemToDelete.name });
+            
+            // Close after short delay to show completion
+            setTimeout(() => {
+                setDeleteModalOpen(false);
+                setItemToDelete(null);
+                setDeleteProgress(null);
+            }, 500);
+        } catch (err: any) {
+            // Handle different error types
+            let message = 'Error al eliminar';
+            
+            if (err.response?.data?.message) {
+                message = err.response.data.message;
+            } else if (err.code === 'ERR_NETWORK' || err.message.includes('Network')) {
+                message = 'Error de conexión. Inténtalo de nuevo.';
+            } else if (err.message?.includes('NotFound') || err.message?.includes('S3Error')) {
+                message = 'El archivo no existe en el almacenamiento. Puede que ya haya sido eliminado.';
+            } else if (err.message) {
+                message = err.message;
+            }
+            
+            setDeleteError(message);
+            console.error("Delete failed:", err);
         }
     };
 
@@ -651,7 +724,7 @@ export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserPro
 
     return (
         <div
-            className="space-y-6 relative min-h-[400px] select-none"
+            className="relative min-h-[400px] select-none"
             onDragEnter={handleGlobalDrag}
             onDragOver={handleGlobalDrag}
             onDragLeave={handleGlobalDrag}
@@ -689,27 +762,29 @@ export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserPro
                 )}
             </AnimatePresence>
 
-            {/* iCloud Header Bar - STICKY */}
-            <div className="sticky top-0 z-20 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 py-4 border-b border-border/40 bg-background/80 backdrop-blur-md mb-2">
-                <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar max-w-full">
+            {/* Explorer header (enterprise, sticky) */}
+            <div className="sticky top-0 z-20 border-b border-border bg-background/90 backdrop-blur">
+                <div className="flex flex-col gap-3 px-4 py-4 sm:px-6">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar max-w-full">
                     {path.map((p, i) => (
                         <div
                             key={p.id || 'root'}
                             className={cn(
                                 "flex items-center shrink-0 rounded-lg transition-all",
-                                dragOverFolderId === p.id && "bg-primary/20 px-1"
+                                dragOverFolderId === p.id && "bg-primary/10 px-1"
                             )}
                             onDragOver={handleDragOver}
                             onDragEnter={() => setDragOverFolderId(p.id)}
                             onDragLeave={() => setDragOverFolderId(null)}
                             onDrop={(e) => handleDrop(e, p.id)}
                         >
-                            {i > 0 && <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/40 mx-0.5" />}
+                            {i > 0 && <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/50 mx-0.5" />}
                             <button
                                 onClick={() => navigateBack(i)}
                                 className={cn(
-                                    "px-1.5 py-1 rounded-md text-sm font-semibold transition-colors",
-                                    i === path.length - 1 ? "text-foreground cursor-default" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                                    "px-2 py-1 rounded-lg text-sm font-semibold transition-colors",
+                                    i === path.length - 1 ? "text-foreground cursor-default" : "text-muted-foreground hover:text-foreground hover:bg-muted/40"
                                 )}
                             >
                                 {p.name}
@@ -718,68 +793,65 @@ export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserPro
                     ))}
                 </div>
 
-                <div className="flex items-center gap-2 bg-muted/40 p-1.5 rounded-2xl border border-border/60 shadow-sm backdrop-blur-sm">
-                    {/* View mode toggle */}
-                    <div className="flex bg-background/50 rounded-xl p-0.5 border border-border/20 shadow-inner">
-                        <button
-                            onClick={() => setViewMode("grid")}
-                            className={cn(
-                                "p-2 rounded-[10px] transition-all",
-                                viewMode === "grid"
-                                    ? "bg-primary text-white shadow-md shadow-primary/20"
-                                    : "text-muted-foreground hover:bg-muted/60"
-                            )}
-                             title={t("files.viewGrid")}
-                        >
-                            <Grid className="w-4 h-4" />
-                        </button>
-                        <button
-                            onClick={() => setViewMode("list")}
-                            className={cn(
-                                "p-2 rounded-[10px] transition-all",
-                                viewMode === "list"
-                                    ? "bg-primary text-white shadow-md shadow-primary/20"
-                                    : "text-muted-foreground hover:bg-muted/60"
-                            )}
-                             title={t("files.viewList")}
-                        >
-                            <ListIcon className="w-4 h-4" />
-                        </button>
+                        <div className="flex items-center gap-2">
+                            <div className="flex items-center rounded-2xl border border-border bg-background p-1">
+                                <button
+                                    onClick={() => setViewMode("grid")}
+                                    className={cn(
+                                        "inline-flex h-9 w-9 items-center justify-center rounded-xl transition-colors",
+                                        viewMode === "grid" ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-muted/40 hover:text-foreground"
+                                    )}
+                                    title={t("files.viewGrid")}
+                                >
+                                    <Grid className="h-4 w-4" />
+                                </button>
+                                <button
+                                    onClick={() => setViewMode("list")}
+                                    className={cn(
+                                        "inline-flex h-9 w-9 items-center justify-center rounded-xl transition-colors",
+                                        viewMode === "list" ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-muted/40 hover:text-foreground"
+                                    )}
+                                    title={t("files.viewList")}
+                                >
+                                    <ListIcon className="h-4 w-4" />
+                                </button>
+                            </div>
+
+                            <button
+                                onClick={() => setCreateFolderOpen(true)}
+                                className="inline-flex h-10 items-center gap-2 rounded-2xl border border-border bg-background px-4 text-sm font-semibold text-foreground hover:bg-muted/40"
+                                title={t("files.newFolder")}
+                            >
+                                <Plus className="h-4 w-4" />
+                                <span className="hidden sm:inline">{t("files.newFolder")}</span>
+                            </button>
+
+                            <button
+                                onClick={() => setIsUploadOpen(true)}
+                                className="inline-flex h-10 items-center gap-2 rounded-2xl bg-foreground px-4 text-sm font-semibold text-background hover:opacity-95"
+                            >
+                                <Upload className="h-4 w-4" />
+                                <span>{t("files.upload")}</span>
+                            </button>
+                        </div>
                     </div>
-
-                    <div className="w-px h-6 bg-border/40 mx-1" />
-
-                    <button
-                        onClick={() => setCreateFolderOpen(true)}
-                        className="p-2.5 rounded-xl bg-background border border-border/40 text-muted-foreground hover:text-primary hover:border-primary/40 hover:shadow-lg transition-all"
-                         title={t("files.newFolder")}
-                    >
-                        <Plus className="w-5 h-5" />
-                    </button>
-
-                    <button
-                        onClick={() => setIsUploadOpen(true)}
-                        className="px-4 py-2.5 rounded-xl bg-primary text-white font-bold text-sm flex items-center gap-2 hover:brightness-110 shadow-lg shadow-primary/20 transition-all active:scale-[0.98]"
-                    >
-                        <Upload className="w-4 h-4" />
-                        <span>{t("files.upload")}</span>
-                    </button>
                 </div>
             </div>
 
             {
                 loading ? (
-                    <div className="space-y-6">
+                    <div className="px-4 py-6 sm:px-6">
+                        <div className="space-y-4">
                         {viewMode === "list" ? (
-                            <div className="notion-card overflow-hidden">
-                                <div className="grid grid-cols-[1fr_120px_140px_140px] gap-4 px-6 py-4 border-b border-border/40 text-[10px] font-bold text-muted-foreground uppercase tracking-widest bg-muted/20">
+                            <div className="overflow-hidden rounded-2xl border border-border bg-background">
+                                <div className="grid grid-cols-[1fr_120px_140px_140px] gap-4 px-6 py-4 border-b border-border text-[10px] font-bold text-muted-foreground uppercase tracking-widest bg-muted/30">
                                      <span>{t("files.name")}</span>
                                     <span>{t("files.size")}</span>
                                     <span>{t("files.modified")}</span>
                                     <span className="text-right">{t("files.options")}</span>
                                 </div>
                                 {[...Array(5)].map((_, i) => (
-                                    <div key={i} className="grid grid-cols-[1fr_120px_140px_140px] gap-4 px-6 py-4 items-center border-b border-border/40 last:border-0">
+                                    <div key={i} className="grid grid-cols-[1fr_120px_140px_140px] gap-4 px-6 py-4 items-center border-b border-border last:border-0">
                                         <div className="flex items-center gap-4">
                                             <Skeleton className="w-10 h-10 rounded-xl" />
                                             <Skeleton className="h-4 w-32" />
@@ -795,8 +867,8 @@ export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserPro
                         ) : (
                             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3 sm:gap-6">
                                 {[...Array(12)].map((_, i) => (
-                                    <div key={i} className="notion-card flex flex-col items-center p-1">
-                                        <Skeleton className="w-full aspect-square rounded-[1.25rem]" />
+                                    <div key={i} className="rounded-2xl border border-border bg-background overflow-hidden">
+                                        <Skeleton className="w-full aspect-square" />
                                         <div className="w-full px-3 py-4 space-y-2">
                                             <Skeleton className="h-4 w-3/4 mx-auto" />
                                             <Skeleton className="h-3 w-1/2 mx-auto" />
@@ -805,9 +877,10 @@ export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserPro
                                 ))}
                             </div>
                         )}
+                        </div>
                     </div>
                 ) : files.length === 0 && folders.length === 0 ? (
-                    <div className="py-20 text-center">
+                    <div className="px-4 py-20 text-center sm:px-6">
                         <div className="w-24 h-24 rounded-[2.5rem] bg-muted/40 flex items-center justify-center mx-auto mb-8 shadow-inner">
                             <FolderIcon className="w-12 h-12 text-muted-foreground/20" />
                         </div>
@@ -815,11 +888,11 @@ export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserPro
                         <p className="text-muted-foreground text-sm mt-3 max-w-[280px] mx-auto leading-relaxed font-medium">{t("files.emptyFolder.subtitle")}</p>
                     </div>
                 ) : (
-                    <div className="space-y-6">
+                    <div className="px-4 py-6 sm:px-6">
                         {/* Items Rendering */}
                         {viewMode === "list" ? (
-                            <div className="notion-card overflow-hidden selection-zone">
-                                <div className="grid grid-cols-[40px_1fr_115px] sm:grid-cols-[40px_1fr_120px_120px] lg:grid-cols-[40px_1fr_120px_140px_140px] gap-2 sm:gap-4 px-4 sm:px-6 py-4 border-b border-border/40 text-[10px] font-bold text-muted-foreground uppercase tracking-widest bg-muted/20 selection-zone">
+                            <div className="overflow-hidden rounded-2xl border border-border bg-background selection-zone">
+                                <div className="grid grid-cols-[40px_1fr_115px] sm:grid-cols-[40px_1fr_120px_120px] lg:grid-cols-[40px_1fr_120px_140px_140px] gap-2 sm:gap-4 px-4 sm:px-6 py-4 border-b border-border text-[10px] font-bold text-muted-foreground uppercase tracking-widest bg-muted/30 selection-zone">
                                     <div
                                         onClick={() => {
                                             if (selectedItems.length === (filteredFiles.length + filteredFolders.length)) {
@@ -855,8 +928,8 @@ export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserPro
                                         onDragLeave={() => setDragOverFolderId(null)}
                                         onDrop={(e) => handleDrop(e, folder.id)}
                                         className={cn(
-                                            "grid grid-cols-[40px_1fr_115px] sm:grid-cols-[40px_1fr_120px_120px] lg:grid-cols-[40px_1fr_120px_140px_140px] gap-2 sm:gap-4 px-4 sm:px-6 py-3 sm:py-4 items-center border-b border-border/40 last:border-0 hover:bg-muted/30 transition-all group cursor-default",
-                                            dragOverFolderId === folder.id && "bg-primary/10 scale-[1.01] border-primary/30",
+                                            "grid grid-cols-[40px_1fr_80px_80px] sm:grid-cols-[40px_1fr_100px_100px_100px] gap-2 sm:gap-4 px-4 sm:px-6 py-2.5 sm:py-3 items-center border-b border-border last:border-0 hover:bg-muted/30 transition-colors group cursor-default",
+                                            dragOverFolderId === folder.id && "bg-primary/5",
                                             selectedItems.find(i => i.id === folder.id) && "bg-primary/5"
                                         )}
                                         ref={(el) => { if (el) itemRefs.current.set(folder.id, el); else itemRefs.current.delete(folder.id); }}
@@ -872,27 +945,29 @@ export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserPro
                                                 {selectedItems.find(i => i.id === folder.id) && <CheckCircle className="w-3 h-3" />}
                                             </div>
                                         </div>
-                                        <div className="flex items-center gap-4 min-w-0">
-                                            <div className="w-10 h-10 flex items-center justify-center shrink-0 bg-primary/5 rounded-xl text-primary">
-                                                <FolderIcon className="w-5 h-5 fill-current/10" />
+                                        <div className="flex items-center gap-3 min-w-0">
+                                            <div className="w-8 h-8 flex items-center justify-center shrink-0 bg-primary/5 rounded-lg text-primary">
+                                                <FolderIcon className="w-4 h-4 fill-current/10" />
                                             </div>
-                                            <span className="text-sm text-foreground truncate font-semibold">{folder.name}</span>
+                                            <span className="text-sm text-foreground truncate font-medium">{folder.name}</span>
                                         </div>
-                                        <span className="hidden sm:block text-xs text-muted-foreground font-medium">{t("common.folder")}</span>
-                                        <span className="hidden lg:block text-[11px] text-muted-foreground font-medium uppercase tracking-tight">{new Date(folder.createdAt).toLocaleDateString()}</span>
-                                            <button onClick={(e) => { e.stopPropagation(); navigateToFolder(folder); }} className="px-3 py-1.5 sm:p-2.5 bg-primary/10 sm:glass-subtle rounded-xl text-primary hover:bg-primary/20 sm:hover:bg-background transition-all text-[10px] sm:text-xs font-bold shrink-0">
-                                                {t("common.open")}
+                                        <span className="hidden sm:block text-xs text-muted-foreground">{t("common.folder")}</span>
+                                        <span className="hidden lg:block text-[11px] text-muted-foreground">{new Date(folder.createdAt).toLocaleDateString()}</span>
+                                        <div className="flex items-center justify-end gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                                            <button onClick={(e) => { e.stopPropagation(); navigateToFolder(folder); }} className="p-1.5 rounded-lg text-primary hover:bg-primary/10 transition-colors" title={t("common.open")}>
+                                                <ChevronRight className="w-4 h-4" />
                                             </button>
                                             {canRename && (
-                                                <button onClick={(e) => { e.stopPropagation(); confirmRename(folder.id, folder.name, 'folder'); }} className="p-2 text-muted-foreground hover:text-primary transition-colors shrink-0" title={t("common.rename")}>
-                                                    <Edit2 className="w-4 h-4" />
+                                                <button onClick={(e) => { e.stopPropagation(); confirmRename(folder.id, folder.name, 'folder'); }} className="p-1.5 text-muted-foreground hover:text-primary hover:bg-muted rounded-lg transition-colors" title={t("common.rename")}>
+                                                    <Edit2 className="w-3.5 h-3.5" />
                                                 </button>
                                             )}
                                             {canDelete && (
-                                                <button onClick={(e) => { e.stopPropagation(); confirmDelete(folder.id, folder.name, 'folder'); }} className="p-2 text-muted-foreground hover:text-red-500 transition-colors shrink-0">
-                                                    <Trash2 className="w-4 h-4" />
+                                                <button onClick={(e) => { e.stopPropagation(); confirmDelete(folder.id, folder.name, 'folder'); }} className="p-1.5 text-muted-foreground hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors" title={t("common.delete")}>
+                                                    <Trash2 className="w-3.5 h-3.5" />
                                                 </button>
                                             )}
+                                        </div>
                                     </div>
                                 ))}
                                 {filteredFiles.map(file => (
@@ -901,7 +976,7 @@ export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserPro
                                         draggable
                                         onDragStart={(e) => handleDragStart(e, file.id, 'file')}
                                         className={cn(
-                                            "grid grid-cols-[40px_1fr_115px] sm:grid-cols-[40px_1fr_120px_120px] lg:grid-cols-[40px_1fr_120px_140px_140px] gap-2 sm:gap-4 px-4 sm:px-6 py-3 sm:py-4 items-center border-b border-border/40 last:border-0 hover:bg-muted/30 transition-colors group cursor-pointer",
+                                            "grid grid-cols-[40px_1fr_80px_80px] sm:grid-cols-[40px_1fr_100px_100px_100px] gap-2 sm:gap-4 px-4 sm:px-6 py-2.5 sm:py-3 items-center border-b border-border last:border-0 hover:bg-muted/30 transition-colors group cursor-pointer",
                                             selectedFile === file.id && "bg-accent/40",
                                             selectedItems.find(i => i.id === file.id) && "bg-primary/5"
                                         )}
@@ -918,65 +993,39 @@ export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserPro
                                                 {selectedItems.find(i => i.id === file.id) && <CheckCircle className="w-3 h-3" />}
                                             </div>
                                         </div>
-                                        <div className="flex items-center gap-4 min-w-0">
+                                        <div className="flex items-center gap-3 min-w-0">
                                             {previews[file.id] && file.mimeType.startsWith('image/') ? (
-                                                <div className="w-10 h-10 rounded-xl overflow-hidden shadow-sm border border-border/40">
-                                                    <img src={previews[file.id]} alt="" className="w-full h-full object-cover shrink-0" />
+                                                <div className="w-8 h-8 rounded-lg overflow-hidden shadow-sm border border-border/40 shrink-0">
+                                                    <img src={previews[file.id]} alt="" className="w-full h-full object-cover" />
                                                 </div>
                                             ) : previews[file.id] && file.mimeType.startsWith('video/') ? (
-                                                <div className="w-10 h-10 rounded-xl overflow-hidden shadow-sm border border-border/40 flex items-center justify-center bg-black">
-                                                    <video src={previews[file.id]} className="w-full h-full object-cover shrink-0" muted playsInline preload="metadata" />
+                                                <div className="w-8 h-8 rounded-lg overflow-hidden shadow-sm border border-border/40 flex items-center justify-center bg-black shrink-0">
+                                                    <video src={previews[file.id]} className="w-full h-full object-cover" muted playsInline preload="metadata" />
                                                 </div>
                                             ) : (
-                                                <div className="w-10 h-10 flex items-center justify-center shrink-0 bg-muted/60 rounded-xl">
-                                                    {getFileIcon(file.mimeType)}
+                                                <div className="w-8 h-8 flex items-center justify-center shrink-0 bg-muted/60 rounded-lg">
+                                                    {getFileIcon(file.mimeType, "w-4 h-4")}
                                                 </div>
                                             )}
-                                            <span className="text-sm text-foreground truncate font-semibold">{file.originalName}</span>
+                                            <span className="text-sm text-foreground truncate font-medium">{file.originalName}</span>
                                         </div>
-                                        <span className="hidden sm:flex items-center gap-2 text-[11px] text-muted-foreground font-bold uppercase tracking-wider">
-                                            {formatSize(file.size)}
-                                            {activities[file.id]?.length ? (
-                                                <div
-                                                    className="relative inline-flex items-center"
-                                                    onMouseEnter={() => setHoverActivityId(file.id)}
-                                                    onMouseLeave={() => setHoverActivityId((prev) => (prev === file.id ? null : prev))}
-                                                >
-                                                    <Clock className="w-3.5 h-3.5 text-muted-foreground/70" />
-                                                    {hoverActivityId === file.id && (
-                                                        <div className="absolute left-0 top-5 z-30 w-64 rounded-lg bg-background border border-border/60 shadow-xl p-3 text-[11px] text-foreground">
-                                                            <div className="font-semibold mb-1">Actividad reciente</div>
-                                                            <div className="space-y-1 max-h-40 overflow-y-auto">
-                                                                {activities[file.id]!.slice(0, 5).map((a) => (
-                                                                    <div key={a.id} className="flex flex-col">
-                                                                        <span className="font-medium">{a.action}</span>
-                                                                        <span className="text-[10px] text-muted-foreground">
-                                                                            {new Date(a.createdAt).toLocaleString()}
-                                                                        </span>
-                                                                    </div>
-                                                                ))}
-                                                            </div>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            ) : null}
-                                        </span>
-                                        <span className="hidden lg:block text-[11px] text-muted-foreground font-medium uppercase tracking-tight">{new Date(file.createdAt).toLocaleDateString()}</span>
-                                        <div className="flex items-center justify-end gap-0.5 sm:gap-1.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
-                                            <button onClick={(e) => { e.stopPropagation(); handleDownload(file.id); }} className="p-2 sm:p-2.5 glass-subtle rounded-xl text-foreground hover:bg-muted transition-all shrink-0 touch-manipulation" title="Download">
-                                                <Download className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                                        <span className="hidden sm:block text-xs text-muted-foreground">{formatSize(file.size)}</span>
+                                        <span className="hidden lg:block text-[11px] text-muted-foreground">{new Date(file.createdAt).toLocaleDateString()}</span>
+                                        <div className="flex items-center justify-end gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                                            <button onClick={(e) => { e.stopPropagation(); handleDownload(file.id); }} className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors" title="Download">
+                                                <Download className="w-3.5 h-3.5" />
                                             </button>
-                                            <button onClick={(e) => { e.stopPropagation(); confirmCreateLink(file.id); }} className="p-2 sm:p-2.5 glass-subtle rounded-xl text-primary hover:bg-muted transition-all shrink-0 touch-manipulation" title="Share">
-                                                <LinkIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                                            <button onClick={(e) => { e.stopPropagation(); confirmCreateLink(file.id); }} className="p-1.5 rounded-lg text-muted-foreground hover:text-primary hover:bg-muted transition-colors" title="Share">
+                                                <LinkIcon className="w-3.5 h-3.5" />
                                             </button>
                                             {canRename && (
-                                                <button onClick={(e) => { e.stopPropagation(); confirmRename(file.id, file.originalName, 'file'); }} className="p-2 sm:p-2.5 glass-subtle rounded-xl text-foreground hover:bg-muted transition-all shrink-0 touch-manipulation" title={t("common.rename")}>
-                                                    <Edit2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                                                <button onClick={(e) => { e.stopPropagation(); confirmRename(file.id, file.originalName, 'file'); }} className="p-1.5 rounded-lg text-muted-foreground hover:text-primary hover:bg-muted transition-colors" title={t("common.rename")}>
+                                                    <Edit2 className="w-3.5 h-3.5" />
                                                 </button>
                                             )}
                                             {canDelete && (
-                                                <button onClick={(e) => { e.stopPropagation(); confirmDelete(file.id, file.originalName, 'file'); }} className="p-2 sm:p-2.5 text-muted-foreground hover:text-red-500 transition-colors shrink-0 touch-manipulation" title="Delete">
-                                                    <Trash2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                                                <button onClick={(e) => { e.stopPropagation(); confirmDelete(file.id, file.originalName, 'file'); }} className="p-1.5 rounded-lg text-muted-foreground hover:text-red-500 hover:bg-red-50 transition-colors" title={t("common.delete")}>
+                                                    <Trash2 className="w-3.5 h-3.5" />
                                                 </button>
                                             )}
                                         </div>
@@ -990,14 +1039,14 @@ export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserPro
                                     <motion.div
                                         key={folder.id}
                                         draggable
-                                        onDragStart={(e: any) => handleDragStart(e, folder.id, 'folder')}
+                                        onDragStart={(e) => handleDragStart(e, folder.id, 'folder')}
                                         onDragOver={handleDragOver}
                                         onDragEnter={() => setDragOverFolderId(folder.id)}
                                         onDragLeave={() => setDragOverFolderId(null)}
-                                        onDrop={(e: any) => handleDrop(e, folder.id)}
-                                        whileDrag={{ scale: 1.05, opacity: 0.8, rotate: 2 }}
+                                        onDrop={(e) => handleDrop(e, folder.id)}
+                                        whileDrag={{ scale: 1.05, opacity: 0.8, rotate: -2 }}
                                         className={cn(
-                                            "group cursor-default notion-card flex flex-col items-center p-1 transition-all relative",
+                                            "group cursor-default notion-card flex flex-col items-center p-0 relative overflow-hidden",
                                             dragOverFolderId === folder.id && "ring-2 ring-primary bg-primary/5 scale-105",
                                             selectedItems.find(i => i.id === folder.id) && "ring-2 ring-primary/40 bg-primary/5"
                                         )}
@@ -1008,37 +1057,48 @@ export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserPro
                                         <div
                                             onClick={(e) => toggleItemSelection(folder.id, 'folder', e)}
                                             className={cn(
-                                                "absolute top-3 left-3 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all z-20 shadow-sm",
+                                                "absolute top-3 left-3 z-20 transition-all",
                                                 selectedItems.find(i => i.id === folder.id)
-                                                    ? "bg-primary border-primary text-white"
-                                                    : "bg-white/80 dark:bg-background/90 border-white dark:border-border opacity-100 md:opacity-0 md:group-hover:opacity-100 md:group-hover:border-primary/40"
+                                                    ? "w-6 h-6 rounded-full bg-primary border-primary text-white flex items-center justify-center shadow-lg"
+                                                    : "w-6 h-6 rounded-full bg-white/90 dark:bg-background/90 border-2 border-white dark:border-border opacity-100 md:opacity-0 md:group-hover:opacity-100 md:group-hover:border-primary/40 shadow-sm"
                                             )}
                                         >
                                             {selectedItems.find(i => i.id === folder.id) && <CheckCircle className="w-4 h-4" />}
                                         </div>
-                                        <div className="w-full aspect-square rounded-[1.25rem] flex items-center justify-center relative overflow-hidden bg-primary/[0.03] group-hover:bg-primary/[0.08] transition-colors ring-1 ring-black/5">
-                                            <FolderIcon className="w-16 h-16 text-primary/30 fill-primary/10 transition-transform group-hover:scale-110 duration-500" />
+                                        
+                                        {/* Folder Preview Area */}
+                                        <div className="w-full aspect-[4/3] relative overflow-hidden bg-gradient-to-br from-primary/5 to-primary/10 flex items-center justify-center group-hover:from-primary/10 group-hover:to-primary/15 transition-colors">
+                                            <FolderIcon className="w-20 h-20 text-primary/40 fill-primary/10 transition-transform duration-500 group-hover:scale-110" />
 
-                                            {/* Actions: always visible on mobile, hover on desktop */}
-                                        <div className="absolute inset-x-2 bottom-2 flex items-center justify-center gap-1.5 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-all translate-y-0 md:translate-y-2 md:group-hover:translate-y-0">
-                                                <button onClick={(e) => { e.stopPropagation(); navigateToFolder(folder); }} className="p-2.5 md:p-2 glass-subtle rounded-xl shadow-sm hover:bg-background text-primary transition-colors touch-manipulation" title="Open">
-                                                    <ChevronRight className="w-5 h-5 md:w-4 md:h-4" />
-                                                </button>
-                                                {canRename && (
-                                                    <button onClick={(e) => { e.stopPropagation(); confirmRename(folder.id, folder.name, 'folder'); }} className="p-2.5 md:p-2 glass-subtle rounded-xl shadow-sm hover:bg-background text-foreground transition-colors touch-manipulation" title={t("common.rename")}>
-                                                        <Edit2 className="w-4 h-4" />
+                                            {/* Folder Badge */}
+                                            <div className="absolute top-3 right-3 px-2 py-1 rounded-md bg-primary/80 backdrop-blur-sm text-white text-[10px] font-semibold uppercase tracking-wider">
+                                                {t("common.folder")}
+                                            </div>
+
+                                            {/* Actions Overlay */}
+                                            <div className="absolute inset-x-0 bottom-0 p-3 bg-gradient-to-t from-black/80 via-black/50 to-transparent opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-all duration-300">
+                                                <div className="flex items-center justify-center gap-2">
+                                                    <button onClick={(e) => { e.stopPropagation(); navigateToFolder(folder); }} className="p-2.5 bg-white/90 dark:bg-background/90 rounded-xl shadow-lg hover:bg-white text-primary transition-colors touch-manipulation" title="Open">
+                                                        <ChevronRight className="w-4 h-4" />
                                                     </button>
-                                                )}
-                                                {canDelete && (
-                                                    <button onClick={(e) => { e.stopPropagation(); confirmDelete(folder.id, folder.name, 'folder'); }} className="p-2.5 md:p-2 glass-subtle rounded-xl shadow-sm hover:bg-red-50 text-red-500 transition-colors touch-manipulation" title="Delete">
-                                                        <Trash2 className="w-4 h-4" />
-                                                    </button>
-                                                )}
+                                                    {canRename && (
+                                                        <button onClick={(e) => { e.stopPropagation(); confirmRename(folder.id, folder.name, 'folder'); }} className="p-2.5 bg-white/90 dark:bg-background/90 rounded-xl shadow-lg hover:bg-white text-foreground transition-colors touch-manipulation" title={t("common.rename")}>
+                                                            <Edit2 className="w-4 h-4" />
+                                                        </button>
+                                                    )}
+                                                    {canDelete && (
+                                                        <button onClick={(e) => { e.stopPropagation(); confirmDelete(folder.id, folder.name, 'folder'); }} className="p-2.5 bg-white/90 dark:bg-background/90 rounded-xl shadow-lg hover:bg-red-50 text-red-500 transition-colors touch-manipulation" title="Delete">
+                                                            <Trash2 className="w-4 h-4" />
+                                                        </button>
+                                                    )}
+                                                </div>
                                             </div>
                                         </div>
-                                        <div className="w-full px-2 py-3 sm:px-3 sm:py-4 text-center">
-                                            <h3 className="text-[12px] sm:text-[13px] font-semibold text-foreground truncate w-full mb-0.5">{folder.name}</h3>
-                                            <p className="text-[9px] sm:text-[10px] text-muted-foreground font-bold uppercase tracking-widest leading-none">{t("common.folder")}</p>
+                                        
+                                        {/* Folder Info */}
+                                        <div className="w-full p-3 bg-background/80 backdrop-blur-sm">
+                                            <h3 className="text-[12px] sm:text-[13px] font-semibold text-foreground truncate w-full mb-1">{folder.name}</h3>
+                                            <p className="text-[9px] text-muted-foreground/60">{new Date(folder.createdAt).toLocaleDateString()}</p>
                                         </div>
                                     </motion.div>
                                 ))}
@@ -1050,7 +1110,7 @@ export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserPro
                                         onDrop={(e: any) => handleDrop(e, null)}
                                         whileDrag={{ scale: 1.05, opacity: 0.8, rotate: -2 }}
                                         className={cn(
-                                            "group cursor-default notion-card flex flex-col items-center p-1 relative",
+                                            "group cursor-default notion-card flex flex-col items-center p-0 relative overflow-hidden",
                                             selectedFile === file.id && "ring-4 ring-primary/5 border-primary/40 shadow-xl",
                                             selectedItems.find(i => i.id === file.id) && "ring-2 ring-primary/40 bg-primary/5"
                                         )}
@@ -1061,48 +1121,64 @@ export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserPro
                                         <div
                                             onClick={(e) => toggleItemSelection(file.id, 'file', e)}
                                             className={cn(
-                                                "absolute top-3 left-3 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all z-20 shadow-sm",
+                                                "absolute top-3 left-3 z-20 transition-all",
                                                 selectedItems.find(i => i.id === file.id)
-                                                    ? "bg-primary border-primary text-white"
-                                                    : "bg-white/80 dark:bg-background/90 border-white dark:border-border opacity-100 md:opacity-0 md:group-hover:opacity-100 md:group-hover:border-primary/40"
+                                                    ? "w-6 h-6 rounded-full bg-primary border-primary text-white flex items-center justify-center shadow-lg"
+                                                    : "w-6 h-6 rounded-full bg-white/90 dark:bg-background/90 border-2 border-white dark:border-border opacity-100 md:opacity-0 md:group-hover:opacity-100 md:group-hover:border-primary/40 shadow-sm"
                                             )}
                                         >
                                             {selectedItems.find(i => i.id === file.id) && <CheckCircle className="w-4 h-4" />}
                                         </div>
-                                        <div className="w-full aspect-square rounded-[1.25rem] flex items-center justify-center relative overflow-hidden bg-muted/40 group-hover:bg-muted/60 transition-colors ring-1 ring-black/5">
+                                        
+                                        {/* Preview Area - Improved */}
+                                        <div className="w-full aspect-[4/3] relative overflow-hidden bg-gradient-to-br from-muted/30 to-muted/10">
                                             {previews[file.id] && file.mimeType.startsWith('image/') ? (
-                                                <img src={previews[file.id]} alt={file.originalName} className="w-full h-full object-cover transition-transform group-hover:scale-105 duration-500" />
+                                                <img src={previews[file.id]} alt={file.originalName} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
                                             ) : previews[file.id] && file.mimeType.startsWith('video/') ? (
-                                                <video src={previews[file.id]} className="w-full h-full object-cover transition-transform group-hover:scale-105 duration-500" muted playsInline preload="metadata" />
+                                                <video src={previews[file.id]} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" muted playsInline preload="metadata" />
                                             ) : (
-                                                <div className="text-muted-foreground group-hover:text-primary transition-colors">
-                                                    {getFileIcon(file.mimeType, "w-12 h-12")}
+                                                <div className="absolute inset-0 flex items-center justify-center">
+                                                    <div className="w-16 h-16 rounded-2xl bg-muted/50 flex items-center justify-center text-muted-foreground/60 group-hover:text-primary transition-colors">
+                                                        {getFileIcon(file.mimeType, "w-10 h-10")}
+                                                    </div>
                                                 </div>
                                             )}
 
-                                            {/* Actions: always visible on mobile, hover on desktop */}
-                                            <div className="absolute inset-x-2 bottom-2 flex items-center justify-center gap-1.5 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-all translate-y-0 md:translate-y-2 md:group-hover:translate-y-0">
-                                                <button onClick={(e) => { e.stopPropagation(); handleDownload(file.id); }} className="p-2.5 md:p-2 glass-subtle rounded-xl shadow-sm hover:bg-background text-foreground transition-colors touch-manipulation" title="Download">
-                                                    <Download className="w-4 h-4" />
-                                                </button>
-                                                <button onClick={(e) => { e.stopPropagation(); confirmCreateLink(file.id); }} className="p-2.5 md:p-2 glass-subtle rounded-xl shadow-sm hover:bg-background text-primary transition-colors touch-manipulation" title="Share">
-                                                    <LinkIcon className="w-4 h-4" />
-                                                </button>
-                                                {canRename && (
-                                                    <button onClick={(e) => { e.stopPropagation(); confirmRename(file.id, file.originalName, 'file'); }} className="p-2.5 md:p-2 glass-subtle rounded-xl shadow-sm hover:bg-background text-foreground transition-colors touch-manipulation" title={t("common.rename")}>
-                                                        <Edit2 className="w-4 h-4" />
+                                            {/* File Type Badge */}
+                                            <div className="absolute top-3 right-3 px-2 py-1 rounded-md bg-black/60 backdrop-blur-sm text-white text-[10px] font-semibold uppercase tracking-wider">
+                                                {file.mimeType.split('/')[1]?.slice(0, 4) || 'FILE'}
+                                            </div>
+
+                                            {/* Actions Overlay - Always visible on mobile, hover on desktop */}
+                                            <div className="absolute inset-x-0 bottom-0 p-3 bg-gradient-to-t from-black/80 via-black/50 to-transparent opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-all duration-300">
+                                                <div className="flex items-center justify-center gap-2">
+                                                    <button onClick={(e) => { e.stopPropagation(); handleDownload(file.id); }} className="p-2.5 bg-white/90 dark:bg-background/90 rounded-xl shadow-lg hover:bg-white text-foreground transition-colors touch-manipulation" title="Download">
+                                                        <Download className="w-4 h-4" />
                                                     </button>
-                                                )}
-                                                {canDelete && (
-                                                    <button onClick={(e) => { e.stopPropagation(); confirmDelete(file.id, file.originalName, 'file'); }} className="p-2.5 md:p-2 glass-subtle rounded-xl shadow-sm hover:bg-red-50 text-red-500 transition-colors touch-manipulation" title="Delete">
-                                                        <Trash2 className="w-4 h-4" />
+                                                    <button onClick={(e) => { e.stopPropagation(); confirmCreateLink(file.id); }} className="p-2.5 bg-white/90 dark:bg-background/90 rounded-xl shadow-lg hover:bg-white text-primary transition-colors touch-manipulation" title="Share">
+                                                        <LinkIcon className="w-4 h-4" />
                                                     </button>
-                                                )}
+                                                    {canRename && (
+                                                        <button onClick={(e) => { e.stopPropagation(); confirmRename(file.id, file.originalName, 'file'); }} className="p-2.5 bg-white/90 dark:bg-background/90 rounded-xl shadow-lg hover:bg-white text-foreground transition-colors touch-manipulation" title={t("common.rename")}>
+                                                            <Edit2 className="w-4 h-4" />
+                                                        </button>
+                                                    )}
+                                                    {canDelete && (
+                                                        <button onClick={(e) => { e.stopPropagation(); confirmDelete(file.id, file.originalName, 'file'); }} className="p-2.5 bg-white/90 dark:bg-background/90 rounded-xl shadow-lg hover:bg-red-50 text-red-500 transition-colors touch-manipulation" title="Delete">
+                                                            <Trash2 className="w-4 h-4" />
+                                                        </button>
+                                                    )}
+                                                </div>
                                             </div>
                                         </div>
-                                        <div className="w-full px-2 py-3 sm:px-3 sm:py-4 text-center">
-                                            <h3 className="text-[12px] sm:text-[13px] font-semibold text-foreground truncate w-full mb-0.5">{file.originalName}</h3>
-                                            <p className="text-[10px] sm:text-[11px] text-muted-foreground font-medium uppercase tracking-wider">{formatSize(file.size)}</p>
+                                        
+                                        {/* File Info */}
+                                        <div className="w-full p-3 bg-background/80 backdrop-blur-sm">
+                                            <h3 className="text-[12px] sm:text-[13px] font-semibold text-foreground truncate w-full mb-1">{file.originalName}</h3>
+                                            <div className="flex items-center justify-between">
+                                                <p className="text-[10px] text-muted-foreground font-medium">{formatSize(file.size)}</p>
+                                                <p className="text-[9px] text-muted-foreground/60">{new Date(file.createdAt).toLocaleDateString()}</p>
+                                            </div>
                                         </div>
                                     </motion.div>
                                 ))}
@@ -1131,18 +1207,77 @@ export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserPro
             }
             <Modal
                 isOpen={deleteModalOpen}
-                onClose={() => setDeleteModalOpen(false)}
+                onClose={() => { setDeleteModalOpen(false); setDeleteProgress(null); setDeleteError(null); }}
                 title={t("common.renameItem").replace("{type}", itemToDelete?.type === 'file' ? t("common.itemType.file") : t("common.itemType.folder"))}
             >
                 <div className="space-y-4">
-                    <p className="text-sm text-muted-foreground font-medium">
-                        {t("common.confirmDelete").replace("{name}", itemToDelete?.name || "")}
-                        {itemToDelete?.type === 'folder' && t("common.folderDeleteWarning")}
-                        {t("common.irreversibleAction")}
-                    </p>
+                    {deleteProgress && !deleteError ? (
+                        <div className="space-y-3">
+                            <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+                                    {deleteProgress.current === deleteProgress.total ? (
+                                        <Check className="w-4 h-4 text-green-500" />
+                                    ) : (
+                                        <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                                    )}
+                                </div>
+                                <div className="flex-1">
+                                    <p className="text-sm font-medium">
+                                        {deleteProgress.current === deleteProgress.total 
+                                            ? "Eliminado correctamente"
+                                            : "Eliminando..."
+                                        }
+                                    </p>
+                                    <p className="text-xs text-muted-foreground truncate">{deleteProgress.item}</p>
+                                </div>
+                            </div>
+                            <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
+                                <motion.div 
+                                    initial={{ width: 0 }}
+                                    animate={{ width: '100%' }}
+                                    className="h-full bg-primary rounded-full"
+                                />
+                            </div>
+                        </div>
+                    ) : deleteError ? (
+                        <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-full bg-red-500/20 flex items-center justify-center">
+                                    <X className="w-5 h-5 text-red-500" />
+                                </div>
+                                <div className="flex-1">
+                                    <p className="text-sm font-medium text-red-500">Error</p>
+                                    <p className="text-xs text-muted-foreground">{deleteError}</p>
+                                </div>
+                            </div>
+                        </div>
+                    ) : (
+                        <>
+                            <p className="text-sm text-muted-foreground font-medium">
+                                {t("common.confirmDelete").replace("{name}", itemToDelete?.name || "")}
+                                {itemToDelete?.type === 'folder' && t("common.folderDeleteWarning")}
+                                {t("common.irreversibleAction")}
+                            </p>
+                        </>
+                    )}
                     <ModalFooter>
-                        <Button variant="ghost" className="rounded-xl" onClick={() => setDeleteModalOpen(false)}>{t("common.cancel")}</Button>
-                        <Button variant="destructive" className="rounded-xl" onClick={handleDelete}>{t("common.deletePermanently")}</Button>
+                        <Button 
+                            variant="ghost" 
+                            className="rounded-xl" 
+                            onClick={() => { setDeleteModalOpen(false); setDeleteProgress(null); setDeleteError(null); }}
+                            disabled={!!deleteProgress && deleteProgress.current !== deleteProgress.total}
+                        >
+                            {deleteProgress?.current === deleteProgress?.total ? "Cerrar" : t("common.cancel")}
+                        </Button>
+                        {!deleteError && !deleteProgress?.current && (
+                            <Button 
+                                variant="destructive" 
+                                className="rounded-xl" 
+                                onClick={handleDelete}
+                            >
+                                {t("common.deletePermanently")}
+                            </Button>
+                        )}
                     </ModalFooter>
                 </div>
             </Modal>

@@ -29,7 +29,7 @@ const updateNotificationSchema = z.object({
 // @route   GET /api/chat/conversations
 // @desc    Get all conversations for current user
 // @access  Private
-router.get('/conversations', protect, async (req: AuthRequest, res, next) => {
+router.get('/conversations', protect, requirePermission('view_chat'), async (req: AuthRequest, res, next) => {
     try {
         const conversations = await prismaAny.conversation.findMany({
             where: {
@@ -169,7 +169,7 @@ router.post('/conversations', protect, requirePermission('create_chats'), async 
 // @route   GET /api/chat/conversations/:id
 // @desc    Get a conversation by ID
 // @access  Private
-router.get('/conversations/:id', protect, async (req: AuthRequest, res, next) => {
+router.get('/conversations/:id', protect, requirePermission('view_chat'), async (req: AuthRequest, res, next) => {
     try {
         const conversation = await prismaAny.conversation.findFirst({
             where: {
@@ -200,7 +200,7 @@ router.get('/conversations/:id', protect, async (req: AuthRequest, res, next) =>
 // @route   GET /api/chat/conversations/:id/messages
 // @desc    Get messages in a conversation
 // @access  Private
-router.get('/conversations/:id/messages', protect, async (req: AuthRequest, res, next) => {
+router.get('/conversations/:id/messages', protect, requirePermission('view_chat'), async (req: AuthRequest, res, next) => {
     try {
         const { before, limit = 50 } = req.query;
 
@@ -357,6 +357,39 @@ router.post('/conversations/:id/messages', protect, requirePermission('send_mess
             data: { lastMessageAt: new Date() }
         });
 
+        // Send push notifications to conversation participants (except sender)
+        const conversation = await prismaAny.conversation.findUnique({
+            where: { id: req.params.id },
+            include: { 
+                participants: { 
+                    where: { userId: { not: req.user!.id } },
+                    select: { userId: true }
+                }
+            }
+        });
+
+        if (conversation) {
+            const recipientIds = conversation.participants.map((p: any) => p.userId);
+            const senderName = req.user!.displayName || req.user!.username;
+            
+            for (const recipientId of recipientIds) {
+                // Get push subscriptions for recipient
+                const subscriptions = await prismaAny.pushSubscription.findMany({
+                    where: { userId: recipientId }
+                });
+
+                // Send push notification to each subscription
+                for (const sub of subscriptions) {
+                    // In production, use web-push library to send actual notification
+                    console.log(`[Push] Would send message notification to ${sub.endpoint}:`, {
+                        title: senderName,
+                        body: content.substring(0, 100),
+                        data: { type: 'chat_message', conversationId: req.params.id }
+                    });
+                }
+            }
+        }
+
         // Notify mentioned users
         const userMentions = mentions.filter(m => m.type === 'user');
         if (userMentions.length > 0) {
@@ -394,7 +427,7 @@ router.post('/conversations/:id/messages', protect, requirePermission('send_mess
 // @route   PUT /api/chat/messages/:id
 // @desc    Edit a message
 // @access  Private
-router.put('/messages/:id', protect, async (req: AuthRequest, res, next) => {
+router.put('/messages/:id', protect, requirePermission('edit_messages'), async (req: AuthRequest, res, next) => {
     try {
         const { content } = updateMessageSchema.parse(req.body);
 
@@ -406,8 +439,8 @@ router.put('/messages/:id', protect, async (req: AuthRequest, res, next) => {
             return res.status(404).json({ message: 'Message not found' });
         }
 
-        // Only sender can edit
-        if (message.senderId !== req.user!.id) {
+        // Sender can edit. Admins can edit any. Users with edit_messages can edit any.
+        if (message.senderId !== req.user!.id && !req.user!.isAdmin) {
             return res.status(403).json({ message: 'Not authorized to edit this message' });
         }
 
@@ -433,7 +466,7 @@ router.put('/messages/:id', protect, async (req: AuthRequest, res, next) => {
 // @route   DELETE /api/chat/messages/:id
 // @desc    Delete a message (soft delete)
 // @access  Private
-router.delete('/messages/:id', protect, async (req: AuthRequest, res, next) => {
+router.delete('/messages/:id', protect, requirePermission('delete_messages'), async (req: AuthRequest, res, next) => {
     try {
         const message = await prismaAny.message.findUnique({
             where: { id: req.params.id }
@@ -443,8 +476,8 @@ router.delete('/messages/:id', protect, async (req: AuthRequest, res, next) => {
             return res.status(404).json({ message: 'Message not found' });
         }
 
-        // Only sender can delete
-        if (message.senderId !== req.user!.id) {
+        // Sender can delete. Admins can delete any. Users with delete_messages can delete any.
+        if (message.senderId !== req.user!.id && !req.user!.isAdmin) {
             return res.status(403).json({ message: 'Not authorized to delete this message' });
         }
 
@@ -495,7 +528,7 @@ router.put('/conversations/:id/notifications', protect, async (req: AuthRequest,
 // @route   GET /api/chat/users
 // @desc    Get all users for starting a conversation
 // @access  Private
-router.get('/users', protect, async (req: AuthRequest, res, next) => {
+router.get('/users', protect, requirePermission('view_chat'), async (req: AuthRequest, res, next) => {
     try {
         const users = await prismaAny.user.findMany({
             where: { id: { not: req.user!.id } },
@@ -533,7 +566,7 @@ router.get('/users', protect, async (req: AuthRequest, res, next) => {
 // @route   PUT /api/chat/status
 // @desc    Update user status (online, away, dnd)
 // @access  Private
-router.put('/status', protect, async (req: AuthRequest, res, next) => {
+router.put('/status', protect, requirePermission('view_chat'), async (req: AuthRequest, res, next) => {
     try {
         const { status, custom } = req.body;
 
@@ -556,7 +589,7 @@ router.put('/status', protect, async (req: AuthRequest, res, next) => {
 // @route   GET /api/chat/status
 // @desc    Get user statuses
 // @access  Private
-router.get('/status', protect, async (req: AuthRequest, res, next) => {
+router.get('/status', protect, requirePermission('view_chat'), async (req: AuthRequest, res, next) => {
     try {
         const statuses = await prismaAny.userStatus.findMany();
         res.json(statuses);
@@ -568,7 +601,7 @@ router.get('/status', protect, async (req: AuthRequest, res, next) => {
 // @route   POST /api/chat/conversations/:id/leave
 // @desc    Leave a conversation
 // @access  Private
-router.post('/conversations/:id/leave', protect, async (req: AuthRequest, res, next) => {
+router.post('/conversations/:id/leave', protect, requirePermission('view_chat'), async (req: AuthRequest, res, next) => {
     try {
         const participant = await prismaAny.conversationParticipant.findFirst({
             where: {
@@ -634,7 +667,7 @@ router.delete('/conversations/:id', protect, requirePermission('delete_conversat
 // @route   GET /api/chat/search-mentions
 // @desc    Search files, folders, and users for @mentions
 // @access  Private
-router.get('/search-mentions', protect, async (req: AuthRequest, res, next) => {
+router.get('/search-mentions', protect, requirePermission('view_chat'), async (req: AuthRequest, res, next) => {
     try {
         const { query, type } = req.query;
         const searchTerm = (query as string || '').toLowerCase();
@@ -789,7 +822,7 @@ router.get('/search-mentions', protect, async (req: AuthRequest, res, next) => {
 // @route   POST /api/chat/validate-share
 // @desc    Validate if user can share specific files with conversation participants
 // @access  Private
-router.post('/validate-share', protect, async (req: AuthRequest, res, next) => {
+router.post('/validate-share', protect, requirePermission('view_chat'), async (req: AuthRequest, res, next) => {
     try {
         const { fileIds, conversationId } = req.body;
 

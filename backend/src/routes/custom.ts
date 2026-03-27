@@ -380,8 +380,6 @@ export const executeBlocks = async (blocks: any[], context: any): Promise<any> =
                         result = await prisma.user.findMany({ where });
                     } else if (model === 'link') {
                         result = await prisma.link.findMany({ where });
-                    } else if (model === 'document') {
-                        result = await prisma.document.findMany({ where });
                     } else if (model === 'note') {
                         result = await prisma.note.findMany({ where });
                     }
@@ -398,8 +396,6 @@ export const executeBlocks = async (blocks: any[], context: any): Promise<any> =
                         result = await prisma.folder.create({ data });
                     } else if (model === 'link') {
                         result = await prisma.link.create({ data });
-                    } else if (model === 'document') {
-                        result = await prisma.document.create({ data });
                     } else if (model === 'note') {
                         result = await prisma.note.create({ data });
                     }
@@ -417,8 +413,6 @@ export const executeBlocks = async (blocks: any[], context: any): Promise<any> =
                         result = await prisma.folder.updateMany({ where, data });
                     } else if (model === 'link') {
                         result = await prisma.link.updateMany({ where, data });
-                    } else if (model === 'document') {
-                        result = await prisma.document.updateMany({ where, data });
                     } else if (model === 'note') {
                         result = await prisma.note.updateMany({ where, data });
                     }
@@ -435,8 +429,6 @@ export const executeBlocks = async (blocks: any[], context: any): Promise<any> =
                         result = await prisma.folder.deleteMany({ where });
                     } else if (model === 'link') {
                         result = await prisma.link.deleteMany({ where });
-                    } else if (model === 'document') {
-                        result = await prisma.document.deleteMany({ where });
                     } else if (model === 'note') {
                         result = await prisma.note.deleteMany({ where });
                     }

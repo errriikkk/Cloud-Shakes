@@ -8,93 +8,96 @@ datasource db {
 }
 
 model User {
-  id             String      @id @default(uuid())
-  username       String      @unique
-  email          String?     @unique
-  password       String
-  displayName    String      @default("User")
-  avatar         String?     // URL or file ID for profile picture
-  isAdmin        Boolean     @default(false)
-  isActive       Boolean     @default(true)
-  storageLimit   BigInt      @default(53687091200) // 50 GB in bytes
-  createdAt      DateTime    @default(now())
-  updatedAt      DateTime    @updatedAt
-  files          File[]
-  folders        Folder[]
-  links          Link[]
-  documents      Document[]
-  notes          Note[]
-  calendarEvents CalendarEvent[]
-  apiFlows       ApiFlow[]
-  activities     Activity[]
-  roles          UserRole[]
-  conversations  ConversationParticipant[]
-  messages       Message[]
-  reactions      MessageReaction[]
-  status         UserStatus?
-  invitesCreated Invite[]    @relation("InvitesCreated")
-  createdConversations Conversation[] @relation("ConversationsCreated")
-  modifiedFiles          File[]          @relation("FileLastModifiedBy")
-  modifiedDocuments      Document[]      @relation("DocumentLastModifiedBy")
-  modifiedNotes          Note[]          @relation("NoteLastModifiedBy")
-  modifiedCalendarEvents CalendarEvent[] @relation("CalendarEventLastModifiedBy")
-  fileShares     FileShare[]
-  brandingUpdates Branding[] @relation("BrandingUpdatedBy")
-  cloudSettingsUpdates CloudSettings[] @relation("CloudSettingsUpdatedBy")
-  backupsInitiated Backup[] @relation("BackupInitiator")
-  blogPosts        BlogPost[]
+  id                     String                    @id @default(uuid())
+  username               String                    @unique
+  email                  String?                   @unique
+  password               String
+  displayName            String                    @default("User")
+  avatar                 String? // URL or file ID for profile picture
+  isAdmin                Boolean                   @default(false)
+  isActive               Boolean                   @default(true)
+  storageLimit           BigInt                    @default(53687091200) // 50 GB in bytes
+  createdAt              DateTime                  @default(now())
+  updatedAt              DateTime                  @updatedAt
+  files                  File[]
+  folders                Folder[]
+  links                  Link[]
+  documents              Document[]
+  spreadsheets           Spreadsheet[]
+  presentations          Presentation[]
+  notes                  Note[]
+  calendarEvents         CalendarEvent[]
+  apiFlows               ApiFlow[]
+  activities             Activity[]
+  roles                  UserRole[]
+  conversations          ConversationParticipant[]
+  messages               Message[]
+  reactions              MessageReaction[]
+  status                 UserStatus?
+  invitesCreated         Invite[]                  @relation("InvitesCreated")
+  createdConversations   Conversation[]            @relation("ConversationsCreated")
+  modifiedFiles          File[]                    @relation("FileLastModifiedBy")
+  modifiedDocuments      Document[]                @relation("DocumentLastModifiedBy")
+  modifiedNotes          Note[]                    @relation("NoteLastModifiedBy")
+  modifiedCalendarEvents CalendarEvent[]           @relation("CalendarEventLastModifiedBy")
+  fileShares             FileShare[]
+  brandingUpdates        Branding[]                @relation("BrandingUpdatedBy")
+  cloudSettingsUpdates   CloudSettings[]           @relation("CloudSettingsUpdatedBy")
+  backupsInitiated       Backup[]                  @relation("BackupInitiator")
+  blogPosts              BlogPost[]
 }
 
 model Folder {
-  id        String   @id @default(uuid())
+  id        String     @id @default(uuid())
   name      String
   ownerId   String
-  owner     User     @relation(fields: [ownerId], references: [id])
+  owner     User       @relation(fields: [ownerId], references: [id])
   parentId  String?
-  parent    Folder?  @relation("SubFolders", fields: [parentId], references: [id], onDelete: Cascade)
-  children  Folder[] @relation("SubFolders")
+  parent    Folder?    @relation("SubFolders", fields: [parentId], references: [id], onDelete: Cascade)
+  children  Folder[]   @relation("SubFolders")
   links     Link[]
   files     File[]
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  documents Document[]
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
 }
 
 model File {
-  id               String   @id @default(uuid())
+  id               String      @id @default(uuid())
   originalName     String
-  storedName       String   @unique // Name in MinIO
+  storedName       String      @unique // Name in MinIO
   mimeType         String
   size             BigInt
   ownerId          String
-  owner            User     @relation(fields: [ownerId], references: [id])
+  owner            User        @relation(fields: [ownerId], references: [id])
   folderId         String?
-  folder           Folder?  @relation(fields: [folderId], references: [id], onDelete: Cascade)
-  hideFromRecent   Boolean  @default(false)
+  folder           Folder?     @relation(fields: [folderId], references: [id], onDelete: Cascade)
+  hideFromRecent   Boolean     @default(false)
   lastModifiedById String?
-  lastModifiedBy   User?    @relation("FileLastModifiedBy", fields: [lastModifiedById], references: [id])
-  createdAt        DateTime @default(now())
+  lastModifiedBy   User?       @relation("FileLastModifiedBy", fields: [lastModifiedById], references: [id])
+  createdAt        DateTime    @default(now())
   links            Link[]
   shares           FileShare[]
 }
 
 model Link {
-  id           String    @id @default(nanoid(10)) // Short code
-  fileId       String?
-  file         File?     @relation(fields: [fileId], references: [id], onDelete: Cascade)
-  folderId     String?
-  folder       Folder?   @relation(fields: [folderId], references: [id], onDelete: Cascade)
-  documentId   String?
-  document     Document? @relation(fields: [documentId], references: [id], onDelete: Cascade)
-  type         String    @default("file") // "file", "folder", or "document"
-  password     String? // Optional hashed password
-  expiresAt    DateTime?
+  id             String    @id @default(nanoid(10)) // Short code
+  fileId         String?
+  file           File?     @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  folderId       String?
+  folder         Folder?   @relation(fields: [folderId], references: [id], onDelete: Cascade)
+  documentId     String?
+  document       Document? @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  type           String    @default("file") // "file", "folder", or "document"
+  password       String? // Optional hashed password
+  expiresAt      DateTime?
   directDownload Boolean   @default(false)
   isEmbed        Boolean   @default(false)
-  customSlug   String?   @unique // Custom URL slug
-  views        Int       @default(0)
-  createdAt    DateTime  @default(now())
-  creatorId    String
-  creator      User      @relation(fields: [creatorId], references: [id])
+  customSlug     String?   @unique // Custom URL slug
+  views          Int       @default(0)
+  createdAt      DateTime  @default(now())
+  creatorId      String
+  creator        User      @relation(fields: [creatorId], references: [id])
 }
 
 // ── Instance Branding (Name + Logo) ───────────────────────────────────
@@ -102,7 +105,7 @@ model Link {
 model Branding {
   id          String   @id @default("default")
   cloudName   String   @default("Cloud Shakes")
-  logoUrl     String?  // Public URL for the logo (recommended: https URL)
+  logoUrl     String? // Public URL for the logo (recommended: https URL)
   updatedAt   DateTime @updatedAt
   updatedById String?
   updatedBy   User?    @relation("BrandingUpdatedBy", fields: [updatedById], references: [id])
@@ -110,38 +113,81 @@ model Branding {
 
 // ── Cloud Limits (storage + bandwidth) ────────────────────────────────
 model CloudSettings {
-  id               String   @id @default("default")
+  id                String   @id @default("default")
   // If null => unlimited
   storageLimitBytes BigInt?
   // If null => use env default. If 0 => unlimited/no throttle.
-  maxUploadSpeedKB Int?
-  updatedAt        DateTime @updatedAt
-  updatedById      String?
-  updatedBy        User?    @relation("CloudSettingsUpdatedBy", fields: [updatedById], references: [id])
+  maxUploadSpeedKB  Int?
+  updatedAt         DateTime @updatedAt
+  updatedById       String?
+  updatedBy         User?    @relation("CloudSettingsUpdatedBy", fields: [updatedById], references: [id])
 }
 
 // ── Phase 2: Documents ───────────────────────────────────────────────
 model Document {
-  id               String   @id @default(uuid())
-  title            String   @default("Sin título")
-  content          Json     @default("{}") // Rich text content (JSON)
+  id               String            @id @default(uuid())
+  title            String            @default("Sin título")
+  content          Json              @default("{}") // Rich text content (JSON de TipTap)
   ownerId          String
-  owner            User     @relation(fields: [ownerId], references: [id])
-  folderId         String?  // Optional: organize docs in folders
+  owner            User              @relation(fields: [ownerId], references: [id])
+  folderId         String?
+  folder           Folder?           @relation(fields: [folderId], references: [id], onDelete: SetNull)
   lastModifiedById String?
-  lastModifiedBy   User?    @relation("DocumentLastModifiedBy", fields: [lastModifiedById], references: [id])
-  links            Link[]   // Links that share this document
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  lastModifiedBy   User?             @relation("DocumentLastModifiedBy", fields: [lastModifiedById], references: [id])
+  links            Link[] // Links that share this document
+  versions         DocumentVersion[]
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
 
   @@index([ownerId])
 }
 
-// ── Phase 3: Notes ───────────────────────────────────────────────────
+// Versionado de documentos
+model DocumentVersion {
+  id         String   @id @default(uuid())
+  documentId String
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  content    Json // Snapshot del contenido en JSON
+  title      String // Snapshot del título
+  createdAt  DateTime @default(now())
+
+  @@index([documentId])
+}
+
+// ── Phase 3: Spreadsheet ───────────────────────────────────────────────
+model Spreadsheet {
+  id        String   @id @default(uuid())
+  title     String   @default("Sin título")
+  data      Json     @default("{}") // Grid data + formulas
+  ownerId   String
+  owner     User     @relation(fields: [ownerId], references: [id])
+  folderId  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([ownerId])
+}
+
+// ── Phase 4: Presentations ─────────────────────────────────────────────
+model Presentation {
+  id        String   @id @default(uuid())
+  title     String   @default("Sin título")
+  slides    Json     @default("[]") // Array de slides con contenido TipTap JSON
+  ownerId   String
+  owner     User     @relation(fields: [ownerId], references: [id])
+  folderId  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([ownerId])
+}
+
+// ── Phase 5: Notes ───────────────────────────────────────────────────
 model Note {
   id               String   @id @default(uuid())
   title            String   @default("")
   content          String   @default("")
+  scope            String   @default("private") // private, workspace
   color            String   @default("default") // default, blue, green, yellow, red, purple
   pinned           Boolean  @default(false)
   ownerId          String
@@ -152,6 +198,7 @@ model Note {
   updatedAt        DateTime @updatedAt
 
   @@index([ownerId])
+  @@index([scope, updatedAt])
 }
 
 // ── Phase 4: Calendar ────────────────────────────────────────────────
@@ -164,7 +211,7 @@ model CalendarEvent {
   allDay           Boolean   @default(false)
   pinned           Boolean   @default(false)
   color            String    @default("primary") // primary, blue, green, yellow, red, purple
-  reminderMinutes  Int?      // Minutes before event to show reminder (null = no reminder)
+  reminderMinutes  Int? // Minutes before event to show reminder (null = no reminder)
   reminderSent     Boolean   @default(false) // Track if reminder was sent
   ownerId          String
   owner            User      @relation(fields: [ownerId], references: [id])
@@ -201,16 +248,16 @@ model ApiFlow {
 
 // ── Activity Log (Nextcloud-like feature) ────────────────────────────────
 model Activity {
-  id          String   @id @default(uuid())
-  type        String   // 'file_upload', 'file_delete', 'file_download', 'folder_create', 'folder_delete', 'link_create', 'document_create', 'note_create', etc.
-  action      String   // Human-readable action description
-  resourceId  String?  // ID of the resource (file, folder, etc.)
+  id           String   @id @default(uuid())
+  type         String // 'file_upload', 'file_delete', 'file_download', 'folder_create', 'folder_delete', 'link_create', 'document_create', 'note_create', etc.
+  action       String // Human-readable action description
+  resourceId   String? // ID of the resource (file, folder, etc.)
   resourceType String? // 'file', 'folder', 'document', 'note', 'link', etc.
   resourceName String? // Name of the resource
-  ownerId     String
-  owner       User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  metadata    Json?   // Additional metadata (JSON)
-  createdAt   DateTime @default(now())
+  ownerId      String
+  owner        User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  metadata     Json? // Additional metadata (JSON)
+  createdAt    DateTime @default(now())
 
   @@index([ownerId, createdAt])
   @@index([createdAt])
@@ -218,26 +265,26 @@ model Activity {
 
 // ── IAM: Roles & Permissions ────────────────────────────────────────────────
 model Role {
-  id          String          @id @default(uuid())
+  id          String           @id @default(uuid())
   name        String
   description String?
-  color       String?         @default("#7289DA")
-  level       Int?            // Nivel del 1-5 para herencia acumulativa
-  isSystem    Boolean         @default(false)
+  color       String?          @default("#7289DA")
+  level       Int? // Nivel del 1-5 para herencia acumulativa
+  isSystem    Boolean          @default(false)
   users       UserRole[]
   permissions RolePermission[]
   fileShares  FileShare[]
-  createdAt   DateTime        @default(now())
-  updatedAt   DateTime        @updatedAt
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
 }
 
 model Permission {
-  id          String          @id @default(uuid())
-  key         String          @unique
+  id          String           @id @default(uuid())
+  key         String           @unique
   description String?
   roles       RolePermission[]
-  createdAt   DateTime        @default(now())
-  updatedAt   DateTime        @updatedAt
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
 }
 
 model RolePermission {
@@ -251,11 +298,11 @@ model RolePermission {
 }
 
 model UserRole {
-  id      String @id @default(uuid())
-  userId  String
-  roleId  String
-  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  role    Role   @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  id     String @id @default(uuid())
+  userId String
+  roleId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role   Role   @relation(fields: [roleId], references: [id], onDelete: Cascade)
 
   @@unique([userId, roleId])
 }
@@ -268,44 +315,44 @@ enum SharePermission {
 }
 
 model FileShare {
-  id         String         @id @default(uuid())
+  id         String          @id @default(uuid())
   fileId     String
-  userId     String?        // Usuario específico (nullable si es por rol)
-  roleId     String?        // Rol específico (nullable si es por usuario)
+  userId     String? // Usuario específico (nullable si es por rol)
+  roleId     String? // Rol específico (nullable si es por usuario)
   permission SharePermission @default(READ)
-  createdAt  DateTime       @default(now())
+  createdAt  DateTime        @default(now())
   createdBy  String
-  file       File           @relation(fields: [fileId], references: [id], onDelete: Cascade)
-  user       User?          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  role       Role?          @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  file       File            @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  user       User?           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role       Role?           @relation(fields: [roleId], references: [id], onDelete: Cascade)
 
   @@unique([fileId, userId])
   @@unique([fileId, roleId])
 }
 
 model Invite {
-  id          String   @id @default(uuid())
+  id          String    @id @default(uuid())
   email       String?
   username    String?
   roles       Json
-  token       String   @unique
+  token       String    @unique
   expiresAt   DateTime
   acceptedAt  DateTime?
   revokedAt   DateTime?
   createdById String
-  createdBy   User     @relation("InvitesCreated", fields: [createdById], references: [id], onDelete: Cascade)
-  createdAt   DateTime @default(now())
+  createdBy   User      @relation("InvitesCreated", fields: [createdById], references: [id], onDelete: Cascade)
+  createdAt   DateTime  @default(now())
 }
 
 // ── Chat: Conversations & Messages ────────────────────────────────────────────────
 model Conversation {
-  id            String             @id @default(uuid())
+  id            String                    @id @default(uuid())
   name          String?
-  isGroup       Boolean            @default(false)
-  createdAt     DateTime           @default(now())
-  updatedAt     DateTime           @updatedAt
+  isGroup       Boolean                   @default(false)
+  createdAt     DateTime                  @default(now())
+  updatedAt     DateTime                  @updatedAt
   createdById   String
-  createdBy     User               @relation("ConversationsCreated", fields: [createdById], references: [id], onDelete: Cascade)
+  createdBy     User                      @relation("ConversationsCreated", fields: [createdById], references: [id], onDelete: Cascade)
   participants  ConversationParticipant[]
   messages      Message[]
   lastMessageAt DateTime?
@@ -329,17 +376,17 @@ model ConversationParticipant {
 }
 
 model Message {
-  id             String       @id @default(uuid())
+  id             String            @id @default(uuid())
   conversationId String
   senderId       String
   content        String
-  type           String       @default("text") // text, file, system
+  type           String            @default("text") // text, file, system
   metadata       Json?
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
   deletedAt      DateTime?
-  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  sender         User         @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  conversation   Conversation      @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender         User              @relation(fields: [senderId], references: [id], onDelete: Cascade)
   reactions      MessageReaction[]
 
   @@index([conversationId, createdAt])
@@ -360,211 +407,224 @@ model MessageReaction {
 
 // ── User Status ───────────────────────────────────────────────────────────────────
 model UserStatus {
-  id        String   @id @default(uuid())
-  userId    String   @unique
-  status    String   @default("online") // online, away, dnd, offline
-  lastSeen  DateTime @default(now())
-  custom    String?
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id       String   @id @default(uuid())
+  userId   String   @unique
+  status   String   @default("online") // online, away, dnd, offline
+  lastSeen DateTime @default(now())
+  custom   String?
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 // ── Plugin System ───────────────────────────────────────────────────────────────
 
 model Plugin {
-  id          String   @id @default(uuid())
-  name        String   @unique
+  id          String  @id @default(uuid())
+  name        String  @unique
   displayName String
   description String?
   author      String
   authorId    String?
-  type        String   @default("backend") // backend, frontend, fullstack
-  category    String   @default("integration") // integration, automation, analytics, ai, storage, ui
+  type        String  @default("backend") // backend, frontend, fullstack
+  category    String  @default("integration") // integration, automation, analytics, ai, storage, ui
   website     String?
   repository  String?
-  license     String   @default("MIT")
-  isPublic    Boolean  @default(false)
-  isFeatured  Boolean  @default(false)
-  isApproved  Boolean  @default(false)
-  status      String   @default("draft") // draft, pending, approved, rejected, deprecated
-  
+  license     String  @default("MIT")
+  isPublic    Boolean @default(false)
+  isFeatured  Boolean @default(false)
+  isApproved  Boolean @default(false)
+  status      String  @default("draft") // draft, pending, approved, rejected, deprecated
+
   // SDK
-  sdkVersion  String   @default("1.0.0")
+  sdkVersion    String  @default("1.0.0")
   minSdkVersion String?
-  
+
   // Resources
-  cpuLimit    String   @default("500m")
-  memoryLimit String   @default("512Mi")
-  storageLimit String  @default("1Gi")
-  
+  cpuLimit     String @default("500m")
+  memoryLimit  String @default("512Mi")
+  storageLimit String @default("1Gi")
+
   // Security
-  permissions String[] @default([])
+  permissions    String[] @default([])
   allowedDomains String[] @default([])
-  
+
   // Stats
-  downloads   Int      @default(0)
-  rating      Float    @default(0)
-  ratingCount Int      @default(0)
-  
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  
-  versions    PluginVersion[]
+  downloads   Int   @default(0)
+  rating      Float @default(0)
+  ratingCount Int   @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  versions      PluginVersion[]
   installations UserPlugin[]
 }
 
 model PluginVersion {
-  id          String   @id @default(uuid())
-  pluginId    String
-  plugin      Plugin   @relation(fields: [pluginId], references: [id], onDelete: Cascade)
-  version     String
-  
+  id       String @id @default(uuid())
+  pluginId String
+  plugin   Plugin @relation(fields: [pluginId], references: [id], onDelete: Cascade)
+  version  String
+
   // Build info
-  buildStatus String   @default("pending") // pending, building, success, failed
+  buildStatus String  @default("pending") // pending, building, success, failed
   buildLog    String?
-  
+
   // Artifact
-  artifactUrl String?  // URL to ZIP file in MinIO
+  artifactUrl  String? // URL to ZIP file in MinIO
   artifactSize BigInt?
-  checksum    String?
-  
+  checksum     String?
+
   // Docker
   dockerImage String?
   dockerfile  String?
-  
+
   // Metadata
-  changelog   String?
-  minAppVersion String?
-  deprecated  Boolean  @default(false)
+  changelog       String?
+  minAppVersion   String?
+  deprecated      Boolean @default(false)
   deprecationNote String?
-  
-  createdAt   DateTime @default(now())
+
+  createdAt   DateTime  @default(now())
   publishedAt DateTime?
-  
+
   @@unique([pluginId, version])
 }
 
 model UserPlugin {
-  id          String   @id @default(uuid())
-  userId      String
-  pluginId    String
-  plugin      Plugin   @relation(fields: [pluginId], references: [id], onDelete: Cascade)
-  version     String
-  
+  id       String @id @default(uuid())
+  userId   String
+  pluginId String
+  plugin   Plugin @relation(fields: [pluginId], references: [id], onDelete: Cascade)
+  version  String
+
   // Installation status
-  status      String   @default("installed") // installed, enabled, disabled, error
+  status       String  @default("installed") // installed, enabled, disabled, error
   errorMessage String?
-  
+
   // Container info
-  containerId String?
+  containerId     String?
   containerStatus String?
-  containerIp  String?
-  containerPort Int?
-  
+  containerIp     String?
+  containerPort   Int?
+
   // Config
-  config      Json     @default("{}")
-  
+  config Json @default("{}")
+
   // Stats
-  lastUsedAt  DateTime?
-  useCount    Int      @default(0)
-  
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  
+  lastUsedAt DateTime?
+  useCount   Int       @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@unique([userId, pluginId])
 }
 
 model PluginLog {
-  id          String   @id @default(uuid())
+  id           String   @id @default(uuid())
   userPluginId String
-  level       String   // info, warn, error
-  message     String
-  metadata    Json?
-  timestamp   DateTime @default(now())
+  level        String // info, warn, error
+  message      String
+  metadata     Json?
+  timestamp    DateTime @default(now())
 }
 
 // ── Blog Posts ─────────────────────────────────────────────────────────────
 model BlogPost {
-  id          String   @id @default(uuid())
-  slug        String   @unique // URL-friendly identifier
-  locale      String   @default("es") // es | en
-  
+  id     String @id @default(uuid())
+  slug   String @unique // URL-friendly identifier
+  locale String @default("es") // es | en
+
   // Title & Content
-  title       String
-  excerpt     String?  // Short description for cards
-  content     String   // Markdown/HTML content
-  coverImage  String?  // URL to cover image
-  
+  title      String
+  excerpt    String? // Short description for cards
+  content    String // Markdown/HTML content
+  coverImage String? // URL to cover image
+
   // SEO
-  seoTitle    String?
+  seoTitle       String?
   seoDescription String?
-  
+
   // Metadata
-  author      String   @default("Cloud Shakes")
-  tags        String[] @default([]) // Array of tags
-  category    String   @default("general")
-  
+  author   String   @default("Cloud Shakes")
+  tags     String[] @default([]) // Array of tags
+  category String   @default("general")
+
   // Status
-  published   Boolean  @default(false)
-  featured    Boolean  @default(false) // Featured post
-  
+  published Boolean @default(false)
+  featured  Boolean @default(false) // Featured post
+
   // Timestamps
   publishedAt DateTime?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
   // Relations
-  authorId    String?
-  authorUser  User?    @relation(fields: [authorId], references: [id])
+  authorId   String?
+  authorUser User?   @relation(fields: [authorId], references: [id])
 }
 
 // ── Backups ─────────────────────────────────────────────────────────────
 model BackupConfig {
-  id          String   @id @default(uuid())
-  type        String   @default("local") // local, s3, ssh
-  name        String
-  enabled     Boolean  @default(false)
-  
+  id      String  @id @default(uuid())
+  type    String  @default("local") // local, s3, ssh
+  name    String
+  enabled Boolean @default(false)
+
   // S3 (MinIO) config
-  s3Endpoint  String?
-  s3Bucket    String?
-  s3AccessKey String? // Encrypted string
-  s3SecretKey String? // Encrypted string
-  s3Region    String?  @default("us-east-1")
+  s3Endpoint       String?
+  s3Bucket         String?
+  s3AccessKey      String? // Encrypted string
+  s3SecretKey      String? // Encrypted string
+  s3Region         String? @default("us-east-1")
   s3ForcePathStyle Boolean @default(true)
-  
+
   // SSH config
   sshHost     String?
-  sshPort     Int?     @default(22)
+  sshPort     Int?    @default(22)
   sshUser     String?
   sshPassword String? // Encrypted string
-  sshKey      String?  @db.Text // Encrypted private key
-  sshPath     String?  // Path on remote server
+  sshKey      String? @db.Text // Encrypted private key
+  sshPath     String? // Path on remote server
 
   // Local config
-  localPath   String?
+  localPath String?
 
   // Schedule (cron expression)
-  schedule    String?  @default("0 0 * * *") // Daily by default
-  retention   Int      @default(7) // Keep last 7 backups
+  schedule  String? @default("0 0 * * *") // Daily by default
+  retention Int     @default(7) // Keep last 7 backups
 
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  
-  backups     Backup[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  backups Backup[]
 }
 
 model Backup {
-  id              String   @id @default(uuid())
-  configId        String
-  config          BackupConfig @relation(fields: [configId], references: [id], onDelete: Cascade)
-  status          String   @default("pending") // pending, in_progress, success, failed
-  filename        String?
-  size            BigInt?
-  log             String?  @db.Text
-  startedAt       DateTime @default(now())
-  completedAt     DateTime?
-  expiresAt       DateTime?
-  initiatorId     String?  // If triggered manually
-  initiator       User?    @relation("BackupInitiator", fields: [initiatorId], references: [id], onDelete: SetNull)
+  id          String       @id @default(uuid())
+  configId    String
+  config      BackupConfig @relation(fields: [configId], references: [id], onDelete: Cascade)
+  status      String       @default("pending") // pending, in_progress, success, failed
+  filename    String?
+  size        BigInt?
+  error       String?
+  log         String?      // Log output from backup
+  startedAt   DateTime     @default(now())
+  completedAt DateTime?
+  expiresAt   DateTime?
+  initiatorId String? // If triggered manually
+  initiator   User?        @relation("BackupInitiator", fields: [initiatorId], references: [id], onDelete: SetNull)
 }
 
+// ── Push Notifications ─────────────────────────────────────────────────────
+model PushSubscription {
+  id        String   @id @default(uuid())
+  userId    String
+  endpoint  String   // Push service endpoint URL
+  p256dh    String   // Public key for encryption
+  auth      String   // Auth secret
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, endpoint])
+}

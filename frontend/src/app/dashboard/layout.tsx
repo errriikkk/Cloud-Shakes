@@ -5,7 +5,7 @@ import { useAuth } from "@/context/AuthContext";
 import {
     Loader2, LogOut, HardDrive, Link as LinkIcon,
     Menu, X, Cloud, Database, Folder, ChevronDown, ChevronRight,
-    FileText, StickyNote, Calendar, MoreHorizontal, Search, Home, BarChart3, Settings, Image as ImageIcon, Video, MessageSquare, Activity
+    StickyNote, Calendar, MoreHorizontal, Search, Home, BarChart3, Settings, Image as ImageIcon, Video, MessageSquare, Activity, Zap
 } from "lucide-react";
 
 import Link from "next/link";
@@ -48,70 +48,43 @@ function NavItem({ href, icon: Icon, label, folders, onSelect }: NavItemProps) {
     });
 
     const isActive = pathname === href || (pathname.startsWith(href + "/") && href !== "/dashboard/home" && href !== "/dashboard/files") || (href === "/dashboard/home" && pathname === "/dashboard/home") || (href === "/dashboard/files" && (pathname === "/dashboard" || pathname === "/dashboard/files"));
-    const isExpanded = expandedSections[href];
-
-    const toggleExpand = (e: React.MouseEvent) => {
-        e.preventDefault();
-        e.stopPropagation();
-        setExpandedSections(prev => ({ ...prev, [href]: !prev[href] }));
-    };
 
     return (
-        <div className="mb-0.5">
-            <Link href={href} onClick={onSelect}>
-                <div
-                    className={cn(
-                        "flex items-center px-3 py-2 rounded-xl transition-all duration-200 group text-sm font-medium",
-                        isActive && !folders?.some(f => pathname.includes(f.id))
-                            ? "bg-accent text-primary shadow-sm"
-                            : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
-                    )}
-                >
-                    <div className={cn(
-                        "w-7 h-7 rounded-lg flex items-center justify-center mr-3 transition-colors",
-                        isActive ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground group-hover:bg-background"
-                    )}>
-                        <Icon className="w-4 h-4" />
-                    </div>
-                    <span className="flex-1">{label}</span>
-                    {folders && folders.length > 0 && (
-                        <button
-                            onClick={toggleExpand}
-                            className="p-1 hover:bg-black/5 rounded-md transition-colors"
-                        >
-                            {isExpanded ? (
-                                <ChevronDown className="w-3.5 h-3.5 text-muted-foreground/40" />
-                            ) : (
-                                <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/40" />
-                            )}
-                        </button>
-                    )}
-                </div>
-            </Link>
-
-            {/* Sub-items (folders) */}
-            <AnimatePresence>
-                {isExpanded && folders && folders.length > 0 && (
-                    <motion.div
-                        initial={{ height: 0, opacity: 0 }}
-                        animate={{ height: "auto", opacity: 1 }}
-                        exit={{ height: 0, opacity: 0 }}
-                        transition={{ duration: 0.15 }}
-                        className="overflow-hidden ml-9 space-y-0.5 mt-0.5"
-                    >
-                        {folders.map(folder => (
-                            <Suspense key={folder.id} fallback={<div className="h-7 animate-pulse bg-muted/20 rounded-lg ml-3 mr-3" />}>
-                                <SubItem
-                                    folder={folder}
-                                    href={href}
-                                    pathname={pathname}
-                                    onSelect={onSelect}
-                                />
-                            </Suspense>
-                        ))}
-                    </motion.div>
+        <div className="relative">
+            <Link
+                href={href}
+                onClick={onSelect}
+                className={cn(
+                    "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200",
+                    isActive
+                        ? "bg-primary/10 text-primary"
+                        : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
+                    folders && folders.length > 0 && "justify-between"
                 )}
-            </AnimatePresence>
+            >
+                <div className="flex items-center gap-3 flex-1">
+                    <Icon className={cn("w-5 h-5", isActive && "text-primary")} />
+                    <span>{label}</span>
+                </div>
+                {folders && folders.length > 0 && (
+                    <ChevronDown className={cn("w-4 h-4 transition-transform", expandedSections[href] && "rotate-180")} />
+                )}
+            </Link>
+            {folders && folders.length > 0 && expandedSections[href] && (
+                <div className="ml-4 mt-1 space-y-0.5">
+                    {folders.slice(0, 5).map((folder: any) => (
+                        <Link
+                            key={folder.id}
+                            href={`/dashboard/files?folder=${folder.id}`}
+                            onClick={onSelect}
+                            className="flex items-center gap-2 px-3 py-1.5 rounded-md text-xs text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+                        >
+                            <Folder className="w-3.5 h-3.5" />
+                            <span className="truncate max-w-[120px]">{folder.name}</span>
+                        </Link>
+                    ))}
+                </div>
+            )}
         </div>
     );
 }
@@ -131,6 +104,8 @@ interface SidebarContentProps {
     storageUsed: number;
     storageLimit: number | null;
     logout: () => void;
+    networkSpeed: { download: number; upload: number; timestamp: number } | null;
+    onRunSpeedTest: () => void;
 }
 
 function SidebarContent({
@@ -147,7 +122,9 @@ function SidebarContent({
     isWarning,
     storageUsed,
     storageLimit,
-    logout
+    logout,
+    networkSpeed,
+    onRunSpeedTest,
 }: SidebarContentProps) {
     return (
         <div className="flex flex-col h-full">
@@ -188,9 +165,7 @@ function SidebarContent({
                 {(user.isAdmin || user.permissions?.includes('view_files')) && (
                     <NavItem href="/dashboard/files" icon={HardDrive} label={t("nav.files")} folders={filesFolders} onSelect={() => setMobileSidebarOpen(false)} />
                 )}
-                {(user.isAdmin || user.permissions?.includes('view_documents')) && (
-                    <NavItem href="/dashboard/documents" icon={FileText} label={t("nav.documents")} onSelect={() => setMobileSidebarOpen(false)} />
-                )}
+                
                 {(user.isAdmin || user.permissions?.includes('view_notes')) && (
                     <NavItem href="/dashboard/notes" icon={StickyNote} label={t("nav.notes")} onSelect={() => setMobileSidebarOpen(false)} />
                 )}
@@ -255,6 +230,37 @@ function SidebarContent({
                             </p>
                         </div>
 
+                        {/* Network Speed */}
+                        <div className="space-y-2">
+                            <div className="flex items-center justify-between px-1">
+                                <div className="flex items-center gap-1.5">
+                                    <Zap className="w-3.5 h-3.5 text-muted-foreground" />
+                                    <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Nube Speed</span>
+                                </div>
+                                <button 
+                                    onClick={onRunSpeedTest}
+                                    className="text-[10px] text-primary hover:text-primary/80 font-medium"
+                                    title="Test again"
+                                >
+                                    ↻
+                                </button>
+                            </div>
+                            {networkSpeed ? (
+                                <div className="grid grid-cols-2 gap-2">
+                                    <div className="bg-muted/40 rounded-lg p-2 text-center">
+                                        <p className="text-[8px] text-muted-foreground uppercase">Download</p>
+                                        <p className="text-xs font-bold text-foreground">{networkSpeed.download} MB/s</p>
+                                    </div>
+                                    <div className="bg-muted/40 rounded-lg p-2 text-center">
+                                        <p className="text-[8px] text-muted-foreground uppercase">Upload</p>
+                                        <p className="text-xs font-bold text-foreground">{networkSpeed.upload} MB/s</p>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="text-[10px] text-muted-foreground px-1">Testing...</div>
+                            )}
+                        </div>
+
                         {/* User info */}
                         <div className="space-y-1.5">
                             <Link href="/dashboard/settings" className="flex items-center gap-2.5 px-1 py-1 rounded-lg hover:bg-muted/50 transition-colors">
@@ -301,6 +307,53 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     const [storageLimit, setStorageLimit] = useState<number | null>(null);
     const [isSearchOpen, setIsSearchOpen] = useState(false);
     const [filesFolders, setFilesFolders] = useState<any[]>([]);
+    const [networkSpeed, setNetworkSpeed] = useState<{ download: number; upload: number; timestamp: number } | null>(null);
+
+    // Network speed test - use existing endpoints
+    const runSpeedTest = useCallback(async () => {
+        try {
+            const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+            
+            // Test download speed - fetch a small file
+            const startDownload = performance.now();
+            await axios.get(`${API}/api/files`, { 
+                withCredentials: true,
+                timeout: 10000 
+            });
+            const endDownload = performance.now();
+            const downloadTime = (endDownload - startDownload) / 1000;
+            // Estimate based on typical API response size (~50KB)
+            const estimatedDownloadSpeed = downloadTime > 0 ? (50 / downloadTime) : 0;
+
+            // Test upload speed - send a small payload to a simple endpoint
+            const uploadData = new Array(50 * 1024).fill('x').join(''); // 50KB
+            const startUpload = performance.now();
+            await axios.post(`${API}/api/activity`, 
+                { type: 'speed_test', data: uploadData },
+                { withCredentials: true, timeout: 10000 }
+            ).catch(() => {
+                // Ignore errors for upload test
+            });
+            const endUpload = performance.now();
+            const uploadTime = (endUpload - startUpload) / 1000;
+            const uploadSpeed = uploadTime > 0 ? (uploadData.length / uploadTime / 1024) : 0;
+
+            setNetworkSpeed({
+                download: Math.round(estimatedDownloadSpeed * 10) / 10,
+                upload: Math.round(uploadSpeed * 10) / 10,
+                timestamp: Date.now()
+            });
+        } catch (err) {
+            console.error("Speed test failed:", err);
+        }
+    }, []);
+
+    // Run speed test on mount and periodically
+    useEffect(() => {
+        runSpeedTest();
+        const interval = setInterval(runSpeedTest, 60000); // Every minute
+        return () => clearInterval(interval);
+    }, [runSpeedTest]);
 
     useEffect(() => {
         const fetchUsage = async () => {
@@ -313,6 +366,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             }
         };
         if (user) fetchUsage();
+
+        // Listen for mobile menu trigger from chat
+        const handleOpenMobileMenu = () => setMobileSidebarOpen(true);
+        window.addEventListener('openMobileMenu', handleOpenMobileMenu);
+        return () => window.removeEventListener('openMobileMenu', handleOpenMobileMenu);
     }, [user, pathname]);
 
     const fetchFolders = useCallback(async () => {
@@ -366,10 +424,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
     if (!user) return null;
 
+    const isFullBleedRoute = /^\/dashboard\/chat(\/|$)/.test(pathname);
+
+    const isOfficeEditor = false;
+
     const bottomNavItems = [
         { href: "/dashboard/home", icon: Home, label: t("nav.home") },
         { href: "/dashboard/files", icon: HardDrive, label: t("nav.files") },
-        { href: "/dashboard/documents", icon: FileText, label: t("nav.documents") },
         { href: "/dashboard/notes", icon: StickyNote, label: t("nav.notes") },
         { href: "/dashboard/calendar", icon: Calendar, label: t("nav.calendar") },
     ];
@@ -389,46 +450,40 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <AnimatePresence>
                 {mobileSidebarOpen && (
                     <motion.aside initial={{ x: -280 }} animate={{ x: 0 }} exit={{ x: -280 }} transition={{ ease: "circOut", duration: 0.2 }} className="fixed inset-y-0 left-0 w-72 bg-sidebar border-r border-border z-50 md:hidden flex flex-col" data-marquee-ignore="true">
-                        <SidebarContent logoUrl={logoUrl} cloudName={cloudName} t={t} setIsSearchOpen={setIsSearchOpen} setMobileSidebarOpen={setMobileSidebarOpen} user={user} filesFolders={filesFolders} loading={loading} storagePercent={storagePercent} isCritical={isCritical} isWarning={isWarning} storageUsed={storageUsed} storageLimit={storageLimit} logout={logout} />
+                        <SidebarContent logoUrl={logoUrl} cloudName={cloudName} t={t} setIsSearchOpen={setIsSearchOpen} setMobileSidebarOpen={setMobileSidebarOpen} user={user} filesFolders={filesFolders} loading={loading} storagePercent={storagePercent} isCritical={isCritical} isWarning={isWarning} storageUsed={storageUsed} storageLimit={storageLimit} logout={logout} networkSpeed={networkSpeed} onRunSpeedTest={runSpeedTest} />
                     </motion.aside>
                 )}
             </AnimatePresence>
             <aside className="hidden md:flex w-64 bg-sidebar border-r border-border flex-col shrink-0 h-full" data-marquee-ignore="true">
-                <SidebarContent logoUrl={logoUrl} cloudName={cloudName} t={t} setIsSearchOpen={setIsSearchOpen} setMobileSidebarOpen={setMobileSidebarOpen} user={user} filesFolders={filesFolders} loading={loading} storagePercent={storagePercent} isCritical={isCritical} isWarning={isWarning} storageUsed={storageUsed} storageLimit={storageLimit} logout={logout} />
+                <SidebarContent logoUrl={logoUrl} cloudName={cloudName} t={t} setIsSearchOpen={setIsSearchOpen} setMobileSidebarOpen={setMobileSidebarOpen} user={user} filesFolders={filesFolders} loading={loading} storagePercent={storagePercent} isCritical={isCritical} isWarning={isWarning} storageUsed={storageUsed} storageLimit={storageLimit} logout={logout} networkSpeed={networkSpeed} onRunSpeedTest={runSpeedTest} />
             </aside>
             <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
-                <header className="h-12 border-b border-border flex items-center px-4 md:hidden bg-background shrink-0" data-marquee-ignore="true">
-                    <button onClick={() => setMobileSidebarOpen(true)} className="text-muted-foreground hover:text-foreground p-1 -ml-1" data-marquee-ignore="true">
-                        <Menu className="w-5 h-5" data-marquee-ignore="true" />
-                    </button>
-                    <span className="ml-3 font-semibold text-sm text-foreground flex-1">{cloudName}</span>
-                    <button onClick={() => setIsSearchOpen(true)} className="text-muted-foreground hover:text-foreground p-1">
-                        <Search className="w-5 h-5" />
-                    </button>
+                <header className={cn("h-12 border-b border-border flex items-center px-4 md:hidden bg-background shrink-0", isFullBleedRoute && "hidden")} data-marquee-ignore="true">
+                    {!isFullBleedRoute && (
+                        <>
+                            <button onClick={() => setMobileSidebarOpen(true)} className="text-muted-foreground hover:text-foreground p-1 -ml-1" data-marquee-ignore="true">
+                                <Menu className="w-5 h-5" data-marquee-ignore="true" />
+                            </button>
+                            <span className="ml-3 font-semibold text-sm text-foreground flex-1">{cloudName}</span>
+                            <button onClick={() => setIsSearchOpen(true)} className="text-muted-foreground hover:text-foreground p-1">
+                                <Search className="w-5 h-5" />
+                            </button>
+                        </>
+                    )}
                 </header>
-                <div className="flex-1 overflow-y-auto p-4 md:p-8 content-with-nav">
-                    <div className="max-w-5xl mx-auto">
-                        <Suspense fallback={<div className="py-20 text-center text-muted-foreground text-sm font-medium">{t("common.loadingContent")}</div>}>
+                <div
+                    className={cn(
+                        "flex-1 overflow-y-auto",
+                        isOfficeEditor || isFullBleedRoute ? "p-0 overflow-hidden" : "content-with-nav p-4 md:p-8"
+                    )}
+                >
+                    <Suspense fallback={<div className="py-20 text-center text-muted-foreground text-sm font-medium">{t("common.loadingContent")}</div>}>
+                        <div className={cn(!(isOfficeEditor || isFullBleedRoute) && "mx-auto w-full max-w-[1400px]")}>
                             <DashboardContent>{children}</DashboardContent>
-                        </Suspense>
-                    </div>
+                        </div>
+                    </Suspense>
                 </div>
             </main>
-            <nav className="fixed bottom-0 left-0 right-0 md:hidden bg-background/95 backdrop-blur-xl border-t border-border z-30" data-marquee-ignore="true" style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 1rem)', marginBottom: 'env(safe-area-inset-bottom, 0px)' }}>
-                <div className="flex items-center justify-around h-16 px-2 pb-safe">
-                    {bottomNavItems.map(({ href, icon: Icon, label }) => {
-                        const isActive = pathname === href || (pathname.startsWith(href + "/") && href !== "/dashboard") || (href === "/dashboard" && pathname === "/dashboard");
-                        return (
-                            <Link key={href} href={href} className={cn("flex flex-col items-center justify-center gap-0.5 py-1 px-3 rounded-xl transition-all min-w-[3.5rem]", isActive ? "text-primary" : "text-muted-foreground/60 active:text-foreground")}>
-                                <div className={cn("w-8 h-8 rounded-xl flex items-center justify-center transition-all", isActive ? "bg-accent" : "")}>
-                                    <Icon className={cn("w-5 h-5 transition-all", isActive ? "scale-105" : "")} />
-                                </div>
-                                <span className={cn("text-[10px] font-semibold transition-all", isActive ? "text-primary" : "")}>{label}</span>
-                            </Link>
-                        );
-                    })}
-                </div>
-            </nav>
             <SearchModal isOpen={isSearchOpen} onClose={() => setIsSearchOpen(false)} />
             <PwaInstallPrompt />
         </div>

@@ -189,11 +189,6 @@ export default function TeamRolesSettingsPage() {
         delete_folders: ["view_folders"],
         organize_folders: ["view_folders"],
 
-        // Documents
-        create_documents: ["view_documents"],
-        edit_documents: ["view_documents"],
-        delete_documents: ["view_documents"],
-
         // Notes
         create_notes: ["view_notes"],
         edit_notes: ["view_notes"],
@@ -233,7 +228,6 @@ export default function TeamRolesSettingsPage() {
         // keep minimal; used only for tooltips
         view_files: "Ver mis archivos",
         view_folders: "Ver carpetas",
-        view_documents: "Ver documentos",
         view_notes: "Ver notas",
         view_calendar: "Ver calendario",
         view_links: "Ver enlaces",
@@ -325,17 +319,6 @@ export default function TeamRolesSettingsPage() {
                 { key: "create_folders", label: "Crear carpetas" },
                 { key: "delete_folders", label: "Eliminar carpetas" },
                 { key: "organize_folders", label: "Organizar carpetas" },
-            ]
-        },
-        {
-            key: "documents",
-            label: t('nav.documents') || 'Documentos',
-            icon: FileText,
-            permissions: [
-                { key: "view_documents", label: "Ver documentos" },
-                { key: "create_documents", label: "Crear documentos" },
-                { key: "edit_documents", label: "Editar documentos" },
-                { key: "delete_documents", label: "Eliminar documentos" },
             ]
         },
         {
@@ -458,9 +441,9 @@ export default function TeamRolesSettingsPage() {
                     axios.get(API_ENDPOINTS.IAM.ROLES, { withCredentials: true }),
                     axios.get(API_ENDPOINTS.IAM.TEAM_INVITATIONS, { withCredentials: true })
                 ]);
-                setUsers(usersRes.data);
-                setRoles(rolesRes.data);
-                setInvitations(invitesRes.data);
+                setUsers((usersRes.data && Array.isArray(usersRes.data)) ? usersRes.data : []);
+                setRoles((rolesRes.data && Array.isArray(rolesRes.data)) ? rolesRes.data : []);
+                setInvitations((invitesRes.data && Array.isArray(invitesRes.data)) ? invitesRes.data : []);
             } catch (err) {
                 console.error("Failed to load team/roles data", err);
             } finally {
@@ -773,6 +756,82 @@ export default function TeamRolesSettingsPage() {
                                             getDisabledReason={(key) => computeDisabledReason(newRolePermissions, key)}
                                         />
                                     ))}
+                                </div>
+                            </motion.div>
+
+                            {/* Visual Permission Overview */}
+                            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }} className="bg-gradient-to-br from-card to-card/50 border border-border/60 rounded-2xl p-6 shadow-sm">
+                                <div className="flex items-center gap-3 mb-5">
+                                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500/20 to-blue-500/20 flex items-center justify-center">
+                                        <BarChart3 className="w-5 h-5 text-emerald-500" />
+                                    </div>
+                                    <div>
+                                        <h2 className="text-lg font-bold">Resumen de Permisos</h2>
+                                        <p className="text-xs text-muted-foreground">Vista visual de permisos por categoría</p>
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    {PERMISSION_CATEGORIES.map(cat => {
+                                        const activeCount = cat.permissions.filter(p => newRolePermissions.includes(p.key)).length;
+                                        const totalCount = cat.permissions.length;
+                                        const percentage = totalCount > 0 ? Math.round((activeCount / totalCount) * 100) : 0;
+                                        
+                                        return (
+                                            <div key={cat.key} className="bg-muted/30 rounded-xl p-4 border border-border/40">
+                                                <div className="flex items-center justify-between mb-3">
+                                                    <div className="flex items-center gap-2">
+                                                        <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
+                                                            <cat.icon className="w-4 h-4 text-primary" />
+                                                        </div>
+                                                        <span className="font-medium text-sm">{cat.label}</span>
+                                                    </div>
+                                                    <span className={`text-xs font-bold px-2 py-1 rounded-full ${
+                                                        percentage === 100 ? 'bg-emerald-500/20 text-emerald-500' :
+                                                        percentage > 50 ? 'bg-blue-500/20 text-blue-500' :
+                                                        percentage > 0 ? 'bg-amber-500/20 text-amber-500' :
+                                                        'bg-muted text-muted-foreground'
+                                                    }`}>
+                                                        {activeCount}/{totalCount}
+                                                    </span>
+                                                </div>
+                                                
+                                                {/* Progress bar */}
+                                                <div className="h-2 bg-muted rounded-full overflow-hidden mb-2">
+                                                    <motion.div 
+                                                        initial={{ width: 0 }}
+                                                        animate={{ width: `${percentage}%` }}
+                                                        transition={{ duration: 0.5, ease: "easeOut" }}
+                                                        className={`h-full rounded-full ${
+                                                            percentage === 100 ? 'bg-emerald-500' :
+                                                            percentage > 50 ? 'bg-blue-500' :
+                                                            percentage > 0 ? 'bg-amber-500' :
+                                                            'bg-muted'
+                                                        }`}
+                                                    />
+                                                </div>
+                                                
+                                                {/* Permission badges */}
+                                                <div className="flex flex-wrap gap-1">
+                                                    {cat.permissions.map(p => {
+                                                        const isActive = newRolePermissions.includes(p.key);
+                                                        return (
+                                                            <span 
+                                                                key={p.key} 
+                                                                className={`text-[10px] px-1.5 py-0.5 rounded-md font-medium ${
+                                                                    isActive 
+                                                                        ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20' 
+                                                                        : 'bg-muted/50 text-muted-foreground border border-transparent'
+                                                                }`}
+                                                            >
+                                                                {isActive ? '✓' : '✗'} {p.label}
+                                                            </span>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
                                 </div>
                             </motion.div>
 

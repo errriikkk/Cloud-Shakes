@@ -5,7 +5,7 @@ import { useAuth } from "@/context/AuthContext";
 import axios from "axios";
 import { API_ENDPOINTS } from "@/lib/api";
 import { 
-    HardDrive, FileText, StickyNote, Calendar, Link as LinkIcon,
+    HardDrive, StickyNote, Calendar, Link as LinkIcon,
     TrendingUp, File, Folder, Database, BarChart3, PieChart,
     Eye, CheckCircle2, AlertCircle
 } from "lucide-react";
@@ -30,7 +30,6 @@ export default function StatisticsPage() {
         storage: { used: 0, limit: null as number | null },
         files: { total: 0, byType: {} as Record<string, number> },
         folders: 0,
-        documents: 0,
         notes: 0,
         calendarEvents: 0,
         links: 0,
@@ -49,11 +48,10 @@ useEffect(() => {
         const fetchStats = async () => {
             if (!user) return;
             try {
-                const [usageRes, filesRes, foldersRes, docsRes, notesRes, eventsRes, linksRes, linksStatsRes] = await Promise.all([
+                const [usageRes, filesRes, foldersRes, notesRes, eventsRes, linksRes, linksStatsRes] = await Promise.all([
                     axios.get(API_ENDPOINTS.FILES.USAGE, { withCredentials: true }).catch(() => ({ data: { used: 0, limit: null } })),
                     axios.get(API_ENDPOINTS.FILES.BASE, { withCredentials: true }).catch(() => ({ data: { data: [], pagination: { total: 0 } } })),
                     axios.get(API_ENDPOINTS.FOLDERS.BASE, { withCredentials: true }).catch(() => ({ data: [] })),
-                    axios.get(API_ENDPOINTS.DOCUMENTS.BASE, { withCredentials: true }).catch(() => ({ data: { data: [], pagination: { total: 0 } } })),
                     axios.get(API_ENDPOINTS.NOTES.BASE, { withCredentials: true }).catch(() => ({ data: { data: [], pagination: { total: 0 } } })),
                     axios.get(API_ENDPOINTS.CALENDAR.BASE, { 
                         params: { month: new Date().getMonth() + 1, year: new Date().getFullYear() },
@@ -64,7 +62,6 @@ useEffect(() => {
                 ]);
 
                 const files = extractData(filesRes);
-                const documents = extractData(docsRes);
                 const notes = extractData(notesRes);
 
                 // Calculate file types
@@ -84,7 +81,6 @@ useEffect(() => {
                         byType,
                     },
                     folders: foldersRes.data.length,
-                    documents: documents.length,
                     notes: notes.length,
                     calendarEvents: eventsRes.data.length,
                     links: linksRes.data.length,
@@ -206,23 +202,6 @@ useEffect(() => {
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.2 }}
-                    className="bg-background border border-border/60 rounded-2xl p-6 shadow-sm"
-                >
-                    <div className="flex items-center justify-between mb-4">
-                        <div className="w-12 h-12 rounded-xl bg-purple-500/10 flex items-center justify-center">
-                            <FileText className="w-6 h-6 text-purple-500" />
-                        </div>
-                    </div>
-                    <h3 className="text-3xl font-bold text-foreground mb-1">
-                        {stats.documents}
-                    </h3>
-                    <p className="text-xs text-muted-foreground">{t('statistics.documents')}</p>
-                </motion.div>
-
-                <motion.div
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.3 }}
                     className="bg-background border border-border/60 rounded-2xl p-6 shadow-sm"
                 >
                     <div className="flex items-center justify-between mb-4">
@@ -377,7 +356,7 @@ useEffect(() => {
                                     <div key={type} className="p-4 bg-muted/30 rounded-xl">
                                         <div className="flex items-center justify-between mb-2">
                                             <span className="text-sm font-bold text-foreground capitalize">
-                                                {type === 'file' ? t('statistics.files') : type === 'document' ? t('statistics.documents') : t('files.noFolders').replace('No hay ', '')}
+                                                {type === 'file' ? t('statistics.files') : t('files.noFolders').replace('No hay ', '')}
                                             </span>
                                             <span className="text-lg font-bold text-primary">{count}</span>
                                         </div>
@@ -411,7 +390,7 @@ useEffect(() => {
                                             </div>
                                             <div>
                                                 <p className="text-sm font-bold text-foreground capitalize">
-                                                    {link.type === 'file' ? t('statistics.files') : link.type === 'document' ? t('statistics.documents') : t('files.noFolders').replace('No hay ', '')}
+                                                    {link.type === 'file' ? t('statistics.files') : t('files.noFolders').replace('No hay ', '')}
                                                 </p>
                                                 <p className="text-xs text-muted-foreground font-mono">{link.id}</p>
                                             </div>

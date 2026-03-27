@@ -45,7 +45,6 @@ interface HomeCachePayload {
     storageLimit: number;
     stats: {
         files: number;
-        documents: number;
         notes: number;
         links: number;
     };
@@ -62,7 +61,7 @@ export default function HomePage() {
     const [storageUsed, setStorageUsed] = useState(0);
     const [storageLimit, setStorageLimit] = useState<number | null>(null);
     const [loading, setLoading] = useState(true);
-    const [stats, setStats] = useState({ files: 0, documents: 0, notes: 0, links: 0 });
+    const [stats, setStats] = useState({ files: 0, notes: 0, links: 0 });
 
     const getGreeting = () => {
         const hour = new Date().getHours();
@@ -79,7 +78,6 @@ export default function HomePage() {
         setStorageLimit(Number.isFinite(limitRaw) ? Number(limitRaw) : Number.POSITIVE_INFINITY);
         setStats({
             files: data.stats.files || 0,
-            documents: data.stats.documents || 0,
             notes: data.stats.notes || 0,
             links: data.stats.links || 0,
         });
@@ -100,20 +98,18 @@ export default function HomePage() {
         };
         
         try {
-            const [eventsRes, usageRes, filesRes, docsRes, notesRes, linksRes] = await Promise.all([
+            const [eventsRes, usageRes, filesRes, notesRes, linksRes] = await Promise.all([
                 axios.get(API_ENDPOINTS.CALENDAR.BASE, {
                     params: { month: new Date().getMonth() + 1, year: new Date().getFullYear() },
                     withCredentials: true
                 }).catch(() => ({ data: [] })),
                 axios.get(API_ENDPOINTS.FILES.USAGE, { withCredentials: true }).catch(() => ({ data: { used: 0, limit: null } })),
                 axios.get(API_ENDPOINTS.FILES.BASE, { params: { limit: 6 }, withCredentials: true }).catch(() => ({ data: { data: [] } })),
-                axios.get(API_ENDPOINTS.DOCUMENTS.BASE, { params: { limit: 6 }, withCredentials: true }).catch(() => ({ data: { data: [] } })),
                 axios.get(API_ENDPOINTS.NOTES.BASE, { params: { limit: 6 }, withCredentials: true }).catch(() => ({ data: { data: [] } })),
                 axios.get(API_ENDPOINTS.LINKS.BASE, { params: { limit: 6 }, withCredentials: true }).catch(() => ({ data: [] })),
             ]);
 
             const files = extractData(filesRes);
-            const documents = extractData(docsRes);
             const notes = extractData(notesRes);
 
             const now = startOfDay(new Date());
@@ -131,7 +127,6 @@ export default function HomePage() {
                 storageLimit: usageRes.data.limit === null ? Number.POSITIVE_INFINITY : Number(usageRes.data.limit),
                 stats: {
                     files: files?.length || 0,
-                    documents: documents?.length || 0,
                     notes: notes?.length || 0,
                     links: linksRes.data?.length || 0,
                 },
@@ -203,7 +198,6 @@ export default function HomePage() {
 
     const quickActions = [
         { icon: Upload, label: t("files.upload"), href: "/dashboard/files", color: "bg-blue-500", permission: true },
-        { icon: FileText, label: t("nav.documents"), href: "/dashboard/documents", color: "bg-purple-500", permission: user?.permissions?.includes('view_documents') || user?.isAdmin },
         { icon: StickyNote, label: t("nav.notes"), href: "/dashboard/notes", color: "bg-yellow-500", permission: user?.permissions?.includes('view_notes') || user?.isAdmin },
         { icon: Calendar, label: t("nav.calendar"), href: "/dashboard/calendar", color: "bg-green-500", permission: user?.permissions?.includes('view_calendar') || user?.isAdmin },
         { icon: LinkIcon, label: t("nav.shared"), href: "/dashboard/links", color: "bg-pink-500", permission: user?.permissions?.includes('view_links') || user?.isAdmin },
@@ -212,7 +206,6 @@ export default function HomePage() {
 
     const statCards = [
         { label: t("nav.files"), value: stats.files, icon: Folder, color: "from-blue-500 to-blue-600", href: "/dashboard/files" },
-        { label: t("nav.documents"), value: stats.documents, icon: FileText, color: "from-purple-500 to-purple-600", href: "/dashboard/documents" },
         { label: t("nav.notes"), value: stats.notes, icon: StickyNote, color: "from-yellow-500 to-yellow-600", href: "/dashboard/notes" },
         { label: t("nav.shared"), value: stats.links, icon: LinkIcon, color: "from-pink-500 to-pink-600", href: "/dashboard/links" },
     ];

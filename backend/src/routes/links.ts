@@ -12,15 +12,14 @@ const router = express.Router();
 
 const createLinkSchema = z.object({
     fileId: z.string().uuid().optional(),
-    documentId: z.string().uuid().optional(),
     folderId: z.string().uuid().optional(),
     password: z.string().optional(),
     expiresInMinutes: z.number().optional(),
     directDownload: z.boolean().optional(),
     isEmbed: z.boolean().optional(),
     customSlug: z.string().optional(),
-}).refine(data => data.fileId || data.documentId || data.folderId, {
-    message: "Debe proporcionar fileId, documentId o folderId"
+}).refine(data => data.fileId || data.folderId, {
+    message: "Debe proporcionar fileId o folderId"
 });
 
 const updateLinkSchema = z.object({
@@ -116,7 +115,6 @@ router.get('/', protect, async (req: AuthRequest, res, next) => {
                     }
                 },
                 folder: true,
-                document: true,
             },
             orderBy: { createdAt: 'desc' },
         });
@@ -125,8 +123,6 @@ router.get('/', protect, async (req: AuthRequest, res, next) => {
         const orphanedLinkIds: string[] = [];
         for (const link of links) {
             if (link.type === 'file' && link.fileId && !link.file) {
-                orphanedLinkIds.push(link.id);
-            } else if (link.type === 'document' && link.documentId && !link.document) {
                 orphanedLinkIds.push(link.id);
             } else if (link.type === 'folder' && link.folderId && !link.folder) {
                 orphanedLinkIds.push(link.id);
@@ -145,7 +141,6 @@ router.get('/', protect, async (req: AuthRequest, res, next) => {
         // Filter out orphaned links from response
         const validLinks = (links as any[]).filter((link: any) => {
             if (link.type === 'file' && link.fileId && !link.file) return false;
-            if (link.type === 'document' && link.documentId && !link.document) return false;
             if (link.type === 'folder' && link.folderId && !link.folder) return false;
             return true;
         });
@@ -159,7 +154,6 @@ router.get('/', protect, async (req: AuthRequest, res, next) => {
                 password: undefined, // Never expose hashed password
                 file: l.file ? { ...l.file, size: l.file.size.toString() } : null,
                 folder: l.folder || (l.file && l.file.folder ? l.file.folder : null),
-                document: l.document || null,
             };
         });
 
@@ -170,11 +164,11 @@ router.get('/', protect, async (req: AuthRequest, res, next) => {
 });
 
 // @route   POST /api/links
-// @desc    Create a shareable link (for files, folders, or documents)
+// @desc    Create a shareable link (for files or folders)
 // @access  Private
 router.post('/', protect, requirePermission('share_files'), async (req: AuthRequest, res, next) => {
     try {
-        const { fileId, documentId, folderId, password, expiresInMinutes, directDownload, isEmbed, customSlug } = createLinkSchema.parse(req.body);
+        const { fileId, folderId, password, expiresInMinutes, directDownload, isEmbed, customSlug } = createLinkSchema.parse(req.body);
 
         // Security: Validate and sanitize customSlug
         let sanitizedCustomSlug: string | null = null;
@@ -241,24 +235,6 @@ router.post('/', protect, requirePermission('share_files'), async (req: AuthRequ
             ownerId = file.ownerId;
             linkData.fileId = fileId;
         }
-        // Handle document link
-        else if (documentId) {
-            const document = await prisma.document.findUnique({
-                where: { id: documentId },
-            });
-
-            if (!document) {
-                return res.status(404).json({ message: 'Document not found' });
-            }
-
-            if (document.ownerId !== req.user.id && !req.user.isAdmin) {
-                return res.status(401).json({ message: 'Not authorized' });
-            }
-
-            linkType = 'document';
-            ownerId = document.ownerId;
-            linkData.documentId = documentId;
-        }
         // Handle folder link
         else if (folderId) {
             const folder = await prisma.folder.findUnique({
@@ -301,12 +277,6 @@ router.post('/', protect, requirePermission('share_files'), async (req: AuthRequ
                         size: true,
                     }
                 },
-                document: {
-                    select: {
-                        title: true,
-                        updatedAt: true,
-                    }
-                },
                 folder: {
                     select: {
                         name: true,
@@ -316,7 +286,7 @@ router.post('/', protect, requirePermission('share_files'), async (req: AuthRequ
         });
 
         // Log activity
-        const resourceName = link.file?.originalName || link.document?.title || link.folder?.name || 'Link';
+        const resourceName = link.file?.originalName || link.folder?.name || 'Link';
         await createActivity(
             req.user.id,
             'link',
@@ -437,7 +407,6 @@ router.put('/:id', protect, async (req: AuthRequest, res, next) => {
             data: updateData,
             include: {
                 file: { select: { originalName: true, mimeType: true, size: true } },
-                document: { select: { title: true, updatedAt: true } },
                 folder: { select: { name: true } },
             },
         });
@@ -467,7 +436,6 @@ router.delete('/:id', protect, requirePermission('share_files'), async (req: Aut
             where: { id: req.params.id as string },
             include: {
                 file: { select: { originalName: true } },
-                document: { select: { title: true } },
                 folder: { select: { name: true } }
             },
         });
@@ -480,7 +448,7 @@ router.delete('/:id', protect, requirePermission('share_files'), async (req: Aut
         await prisma.link.delete({ where: { id: req.params.id as string } });
 
         // Log activity
-        const resourceName = link.file?.originalName || link.document?.title || link.folder?.name || 'Link';
+        const resourceName = link.file?.originalName || link.folder?.name || 'Link';
         await createActivity(
             req.user.id,
             'link',
@@ -669,7 +637,7 @@ router.get('/:id/raw', async (req, res, next) => {
 });
 
 // @route   GET /api/links/:id
-// @desc    Get link info (public) - supports files, folders, and documents
+// @desc    Get link info (public) - supports files and folders
 // @access  Public
 router.get('/:id', async (req, res, next) => {
     try {
@@ -683,7 +651,6 @@ router.get('/:id', async (req, res, next) => {
             },
             include: {
                 file: true,
-                document: true,
                 folder: true,
             },
         });
@@ -700,7 +667,6 @@ router.get('/:id', async (req, res, next) => {
             isPasswordProtected: !!link.password,
             fileName: link.file?.originalName,
             mimeType: link.file?.mimeType,
-            documentTitle: link.document?.title,
             folderName: link.folder?.name,
             expiresAt: link.expiresAt,
             directDownload: link.directDownload,
@@ -712,7 +678,7 @@ router.get('/:id', async (req, res, next) => {
 });
 
 // @route   POST /api/links/:id/verify
-// @desc    Verify password and get download URL or document content
+// @desc    Verify password and get download URL
 // @access  Public
 router.post('/:id/verify', async (req, res, next) => {
     try {
@@ -726,7 +692,6 @@ router.post('/:id/verify', async (req, res, next) => {
             },
             include: {
                 file: true,
-                document: true,
                 folder: true,
             },
         });
@@ -756,19 +721,6 @@ router.post('/:id/verify', async (req, res, next) => {
                 fileId: link.file.id,
                 linkId: link.id,
                 downloadPath: `/api/links/${req.params.id}/download`,
-            });
-        }
-
-        // Handle document links
-        if (link.document) {
-            return res.json({
-                document: {
-                    id: link.document.id,
-                    title: link.document.title,
-                    content: link.document.content,
-                    updatedAt: link.document.updatedAt,
-                },
-                type: 'document'
             });
         }
 

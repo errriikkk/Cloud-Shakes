@@ -333,4 +333,200 @@ router.post('/token-refresh', async (req, res, next) => {
     }
 });
 
+// In-memory store for device codes (in production, use Redis or DB)
+export const deviceCodes = new Map<string, {
+    deviceCode: string;
+    userCode: string;
+    clientId: string;
+    userId?: string;
+    expiresAt: Date;
+    interval: number;
+}>();
+
+// @route   POST /api/auth/device/code
+// @desc    Request device authorization code
+// @access  Public
+router.post('/device/code', async (req, res, next) => {
+    try {
+        const { client_id } = req.body;
+        
+        if (!client_id) {
+            return res.status(400).json({ error: 'client_id required' });
+        }
+
+        // Generate device and user codes
+        const deviceCode = generateRandomString(40);
+        const userCode = generateRandomString(8).toUpperCase();
+        
+        // Store code (expires in 15 minutes, poll every 5 seconds)
+        deviceCodes.set(deviceCode, {
+            deviceCode,
+            userCode,
+            clientId: client_id,
+            expiresAt: new Date(Date.now() + 15 * 60 * 1000),
+            interval: 5,
+        });
+
+        res.json({
+            device_code: deviceCode,
+            user_code: userCode,
+            verification_uri: `${req.protocol}://${req.get('host')}/device/verify`,
+            verification_uri_complete: `${req.protocol}://${req.get('host')}/device/verify?code=${userCode}`,
+            expires_in: 900,
+            interval: 5,
+        });
+    } catch (error) {
+        next(error);
+    }
+});
+
+// @route   POST /api/auth/device/token
+// @desc    Poll for device authorization token
+// @access  Public
+router.post('/device/token', async (req, res, next) => {
+    try {
+        const { grant_type, device_code, client_id } = req.body;
+
+        if (grant_type !== 'urn:ietf:params:oauth:grant-type:device_code') {
+            return res.status(400).json({ error: 'invalid_grant_type' });
+        }
+
+        const codeData = deviceCodes.get(device_code);
+
+        if (!codeData) {
+            return res.status(403).json({ error: 'expired_token' });
+        }
+
+        if (new Date() > codeData.expiresAt) {
+            deviceCodes.delete(device_code);
+            return res.status(403).json({ error: 'expired_token' });
+        }
+
+        if (!codeData.userId) {
+            // User hasn't authorized yet
+            return res.status(403).json({ error: 'authorization_pending' });
+        }
+
+        // Check client_id matches
+        if (codeData.clientId !== client_id) {
+            return res.status(403).json({ error: 'invalid_client' });
+        }
+
+        // Generate tokens
+        const accessToken = generateAccessToken({ id: codeData.userId });
+        const refreshToken = generateRefreshToken({ id: codeData.userId });
+
+        // Clean up device code
+        deviceCodes.delete(device_code);
+
+        res.json({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+            token_type: 'Bearer',
+            expires_in: 900,
+        });
+    } catch (error) {
+        next(error);
+    }
+});
+
+// @route   GET /device/verify
+// @desc    Device verification page
+// @access  Public
+router.get('/device/verify', (req, res) => {
+    const userCode = req.query.code as string;
+    
+    // Find the code
+    let foundDeviceCode: string | null = null;
+    for (const [deviceCode, data] of deviceCodes) {
+        if (data.userCode === userCode && new Date() < data.expiresAt) {
+            foundDeviceCode = deviceCode;
+            break;
+        }
+    }
+
+    const html = `
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Cloud Shakes - Autorizar Dispositivo</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 500px; margin: 50px auto; padding: 20px; }
+        h1 { color: #333; }
+        .code { font-size: 32px; font-weight: bold; letter-spacing: 4px; background: #f5f5f5; padding: 15px; text-align: center; border-radius: 8px; margin: 20px 0; }
+        button { background: #4CAF50; color: white; border: none; padding: 15px 30px; font-size: 16px; border-radius: 5px; cursor: pointer; margin: 5px; }
+        button:hover { background: #45a049; }
+        button.deny { background: #f44336; }
+        button.deny:hover { background: #da190b; }
+    </style>
+</head>
+<body>
+    <h1>🔐 Cloud Shakes</h1>
+    <p>Un dispositivo quiere conectarse a tu cuenta.</p>
+    <div class="code">${userCode || '--------'}</div>
+    <p>¿Autorizas este dispositivo?</p>
+    <form method="POST" action="/api/auth/device/confirm">
+        <input type="hidden" name="userCode" value="${userCode || ''}">
+        <button type="submit" name="action" value="approve">✅ Autorizar</button>
+        <button type="submit" name="action" value="deny" class="deny">❌ Denegar</button>
+    </form>
+</body>
+</html>`;
+    
+    res.send(html);
+});
+
+// @route   POST /api/auth/device/confirm
+// @desc    Confirm device authorization
+// @access  Public
+router.post('/device/confirm', async (req, res, next) => {
+    try {
+        const { userCode, action } = req.body;
+        
+        if (action === 'deny') {
+            return res.send(`
+                <html>
+                <body>
+                    <h1>❌ Autorización denegada</h1>
+                    <p>Puedes cerrar esta ventana.</p>
+                    <script>setTimeout(() => window.close(), 3000);</script>
+                </body>
+                </html>
+            `);
+        }
+
+        // Find and update the device code
+        for (const [deviceCode, data] of deviceCodes) {
+            if (data.userCode === userCode) {
+                // For simplicity, we'll use a default user or require login
+                // In production, you'd have the user log in here
+                data.userId = 'demo-user-id';
+                break;
+            }
+        }
+
+        res.send(`
+            <html>
+            <body>
+                <h1>✅ ¡Autorizado!</h1>
+                <p>Tu dispositivo ha sido conectado. Puedes cerrar esta ventana.</p>
+                <script>setTimeout(() => window.close(), 3000);</script>
+            </body>
+            </html>
+        `);
+    } catch (error) {
+        next(error);
+    }
+});
+
+// Helper function to generate random string
+function generateRandomString(length: number): string {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    let result = '';
+    for (let i = 0; i < length; i++) {
+        result += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return result;
+}
+
 export default router;

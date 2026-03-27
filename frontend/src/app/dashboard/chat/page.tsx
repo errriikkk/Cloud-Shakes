@@ -5,17 +5,27 @@ import { useAuth } from "@/context/AuthContext";
 import { useTranslation } from "@/lib/i18n";
 import axios from "axios";
 import { API_ENDPOINTS } from "@/lib/api";
-import { 
-    MessageSquare, Send, Users, MoreVertical, Phone, Video,
-    Bell, BellOff, Circle, Search, Plus, X, Check, Pencil, ChevronLeft, Trash2,
-    FileText, Folder
-} from "lucide-react";
-import { format, formatDistanceToNow, isToday, isYesterday } from "date-fns";
-import { es } from "date-fns/locale";
+import { PreviewModal } from "@/components/PreviewModal";
 import { cn } from "@/lib/utils";
 import { PermissionGuard } from "@/components/PermissionGuard";
 import { usePermission } from "@/hooks/usePermission";
 import { motion, AnimatePresence } from "framer-motion";
+import {
+    Check,
+    ChevronLeft,
+    FileText,
+    Folder,
+    MessageSquare,
+    MoreVertical,
+    Plus,
+    Search,
+    Send,
+    Trash2,
+    X,
+    Menu,
+} from "lucide-react";
+import { format, formatDistanceToNow, isToday, isYesterday } from "date-fns";
+import { es } from "date-fns/locale";
 
 interface User {
     id: string;
@@ -94,7 +104,7 @@ export default function ChatPage() {
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const isFirstLoadRef = useRef(true);
     const prevMessagesLengthRef = useRef(0);
-    const [showSidebar, setShowSidebar] = useState(true);
+    const [panel, setPanel] = useState<"list" | "chat">("list");
     const [showConversationMenu, setShowConversationMenu] = useState(false);
     const [messageMenuOpen, setMessageMenuOpen] = useState<string | null>(null);
     const [pollErrorCount, setPollErrorCount] = useState(0);
@@ -120,7 +130,8 @@ export default function ChatPage() {
         if (isPollingPaused) return;
         try {
             const res = await axios.get(API_ENDPOINTS.CHAT.CONVERSATIONS, { withCredentials: true });
-            setConversations(res.data);
+            const convData = res.data?.data || res.data;
+            setConversations(Array.isArray(convData) ? convData : []);
             setPollErrorCount(0); // Reset on success
         } catch (err: any) {
             if (err?.response?.status === 429) {
@@ -139,9 +150,11 @@ export default function ChatPage() {
         setUsersLoading(true);
         try {
             const res = await axios.get(API_ENDPOINTS.CHAT.USERS, { withCredentials: true });
-            setUsers(res.data);
+            const usersData = res.data?.data || res.data;
+            setUsers(Array.isArray(usersData) ? usersData : []);
         } catch (err) {
             console.error("Failed to fetch users:", err);
+            setUsers([]);
         } finally {
             setUsersLoading(false);
         }
@@ -333,24 +346,21 @@ export default function ChatPage() {
                 (part.mentionType === 'file' && accessibleFileIds.has(part.id!)) ||
                 (part.mentionType === 'folder' && accessibleFolderIds.has(part.id!));
 
+            const isFile = part.mentionType === 'file';
+            const isImage = isFile && /\.(jpg|jpeg|png|gif|webp|avif|svg)$/i.test(part.name || '');
+
             const handleClick = async () => {
-                if (!hasAccess) return;
+                if (!hasAccess || !isFile) return;
                 
-                if (part.mentionType === 'folder') {
-                    // For folders, navigate to files page
-                    window.location.href = `/dashboard/files?folderId=${part.id}`;
-                } else if (part.mentionType === 'file') {
-                    // For files, open preview modal
+                if (part.mentionType === 'file') {
                     setPreviewFile({ id: part.id!, name: part.name!, mimeType: '' });
                     setPreviewLoading(true);
                     
                     try {
-                        // Get file details and preview URL
                         const res = await axios.get(`${API_ENDPOINTS.FILES.BASE}/${part.id}`, { withCredentials: true });
                         const file = res.data;
                         setPreviewFile({ id: file.id, name: file.originalName, mimeType: file.mimeType });
                         
-                        // Get preview URL
                         const previewRes = await axios.get(`${API_ENDPOINTS.FILES.BASE}/${file.id}/preview`, { withCredentials: true });
                         setPreviewUrl(previewRes.data.url);
                     } catch (err) {
@@ -361,30 +371,56 @@ export default function ChatPage() {
                 }
             };
 
+            if (isFile) {
+                return (
+                    <span key={idx} className="block my-2">
+                        <div
+                            onClick={hasAccess ? handleClick : undefined}
+                            className={cn(
+                                "relative rounded-2xl overflow-hidden border transition-all duration-200",
+                                hasAccess 
+                                    ? "cursor-pointer hover:shadow-lg hover:scale-[1.02] bg-background border-border/60"
+                                    : "cursor-not-allowed bg-muted/30 border-border/30 opacity-60"
+                            )}
+                        >
+                            <div className="flex items-center gap-3 p-3 min-w-[200px]">
+                                <div className={cn(
+                                    "w-12 h-12 rounded-xl flex items-center justify-center shrink-0",
+                                    hasAccess ? "bg-blue-100" : "bg-gray-100"
+                                )}>
+                                    <FileText className={cn("w-6 h-6", hasAccess ? "text-blue-600" : "text-gray-400")} />
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                    <p className={cn("text-sm font-medium truncate", hasAccess ? "text-foreground" : "text-muted-foreground")}>
+                                        {part.name}
+                                    </p>
+                                    {!hasAccess && (
+                                        <p className="text-xs text-muted-foreground">Sin acceso</p>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    </span>
+                );
+            }
+
             return (
                 <span key={idx} className="mx-0.5">
                     <span
-                        onClick={handleClick}
+                        onClick={part.mentionType === 'folder' ? () => { window.location.href = `/dashboard/files?folderId=${part.id}`; } : undefined}
                         className={cn(
                             "inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-medium cursor-pointer transition-all duration-200",
-                            hasAccess 
-                                ? part.mentionType === 'file' 
-                                    ? "bg-blue-100 text-blue-700 hover:bg-blue-200 border border-blue-200 hover:scale-105 hover:shadow-md hover:shadow-blue-200/50"
-                                    : "bg-green-100 text-green-700 hover:bg-green-200 border border-green-200 hover:scale-105 hover:shadow-md hover:shadow-green-200/50"
-                                : "bg-gray-100 text-gray-500 border border-gray-200 cursor-not-allowed"
+                            part.mentionType === 'folder'
+                                ? "bg-green-100 text-green-700 hover:bg-green-200 border border-green-200 hover:scale-105 hover:shadow-md hover:shadow-green-200/50"
+                                : "bg-primary/10 text-primary border border-primary/20 hover:scale-105"
                         )}
                     >
-                        {part.mentionType === 'file' ? (
-                            <FileText className="w-3 h-3" />
-                        ) : part.mentionType === 'folder' ? (
+                        {part.mentionType === 'folder' ? (
                             <Folder className="w-3 h-3" />
                         ) : (
                             <span className="w-3 h-3 rounded-full bg-primary/20 flex items-center justify-center text-[8px]">@</span>
                         )}
-                        <span className="max-w-[100px] truncate">{part.name}</span>
-                        {!hasAccess && part.mentionType !== 'user' && (
-                            <span className="text-[10px] opacity-70">(sin acceso)</span>
-                        )}
+                        {part.name}
                     </span>
                 </span>
             );
@@ -441,6 +477,7 @@ export default function ChatPage() {
             isFirstLoadRef.current = true;
             prevMessagesLengthRef.current = 0;
             fetchMessages(activeConversation.id);
+            setPanel("chat");
         }
     }, [activeConversation]);
 
@@ -525,194 +562,206 @@ export default function ChatPage() {
     }
 
     return (
-        <div className="flex h-[calc(100vh-4rem)] relative">
-            {/* Sidebar - full width on mobile/tablet, hidden when chat open */}
-            <div className={cn(
-                "w-full lg:w-80 border-r border-border flex flex-col bg-background",
-                "absolute lg:relative z-20 h-full transition-all duration-300",
-                activeConversation ? "hidden lg:flex" : "flex"
-            )}>
-                {/* Header - sticky */}
-                <div className="sticky top-0 z-10 p-4 border-b border-border bg-gradient-to-b from-background to-muted/20 backdrop-blur-sm">
-                    <div className="flex items-center justify-between mb-4">
-                        <h1 className="text-xl font-bold flex items-center gap-2">
-                            <MessageSquare className="w-5 h-5 text-primary" />
-                            {t('chat.title')}
-                        </h1>
-                        <button
-                            onClick={() => canCreateChats() && setShowNewChat(true)}
-                            disabled={!canCreateChats()}
-                            title={canCreateChats() ? t('chat.newChat') : t('chat.noPermission')}
-                            className="p-2 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                        >
-                            <Plus className="w-5 h-5" />
-                        </button>
-                    </div>
-                    
-                    {/* Status selector - more beautiful */}
-                    <div className="flex items-center gap-3 mb-3 p-2 rounded-xl bg-muted/30">
-                        <div className="relative">
-                            <div className={cn("w-3 h-3 rounded-full ring-2 ring-background", STATUS_COLORS[userStatus])} />
+        <div className="h-dvh min-h-0">
+            <div className="grid h-dvh min-h-0 grid-cols-1 md:grid-cols-[360px_1fr]">
+                {/* Left: Conversations */}
+                <aside className={cn("min-h-0 border-r border-border bg-sidebar", panel === "chat" ? "hidden md:block" : "block")}>
+                    <div className="flex h-full min-h-0 flex-col">
+                        <div className="sticky top-0 z-10 border-b border-border bg-sidebar/90 backdrop-blur">
+                            <div className="p-4">
+                                <div className="flex items-center justify-between gap-3">
+                                    <div className="min-w-0 flex items-center gap-2">
+                                        <button
+                                            onClick={() => window.dispatchEvent(new CustomEvent('openMobileMenu'))}
+                                            className="md:hidden inline-flex h-9 w-9 items-center justify-center rounded-xl border border-border bg-background hover:bg-muted"
+                                            aria-label="Menu"
+                                        >
+                                            <Menu className="h-4 w-4" />
+                                        </button>
+                                        <div>
+                                            <div className="flex items-center gap-2">
+                                                <MessageSquare className="h-5 w-5 text-primary" />
+                                                <h1 className="truncate text-sm font-semibold">{t("chat.title")}</h1>
+                                            </div>
+                                            <div className="mt-1 text-[11px] text-muted-foreground">
+                                                {t("chat.status.online")}: <span className="font-medium text-foreground">{STATUS_LABELS[userStatus] || userStatus}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <button
+                                        onClick={() => canCreateChats() && setShowNewChat(true)}
+                                        disabled={!canCreateChats()}
+                                        title={canCreateChats() ? t("chat.newChat") : t("chat.noPermission")}
+                                        className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-border bg-background text-foreground hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed"
+                                    >
+                                        <Plus className="h-4 w-4" />
+                                    </button>
+                                </div>
+
+                                <div className="mt-3 flex items-center gap-2">
+                                    <div className="flex-1 rounded-xl border border-border bg-background px-3 py-2">
+                                        <div className="flex items-center gap-2">
+                                            <Search className="h-4 w-4 text-muted-foreground" />
+                                            <input
+                                                value={searchQuery}
+                                                onChange={(e) => setSearchQuery(e.target.value)}
+                                                placeholder={t("chat.searchConversations")}
+                                                className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground/60"
+                                            />
+                                        </div>
+                                    </div>
+                                    <select
+                                        value={userStatus}
+                                        onChange={(e) => updateStatus(e.target.value)}
+                                        className="h-10 rounded-xl border border-border bg-background px-3 text-xs font-semibold text-foreground"
+                                        aria-label="Status"
+                                    >
+                                        <option value="online">{t("chat.status.online")}</option>
+                                        <option value="away">{t("chat.status.away")}</option>
+                                        <option value="dnd">{t("chat.status.dnd")}</option>
+                                        <option value="offline">{t("chat.status.offline")}</option>
+                                    </select>
+                                </div>
+                            </div>
                         </div>
-                        <select
-                            value={userStatus}
-                            onChange={(e) => updateStatus(e.target.value)}
-                            className="text-sm bg-transparent border-none outline-none cursor-pointer flex-1 font-medium"
-                        >
-                            <option value="online">{t('chat.status.online')}</option>
-                            <option value="away">{t('chat.status.away')}</option>
-                            <option value="dnd">{t('chat.status.dnd')}</option>
-                            <option value="offline">{t('chat.status.offline')}</option>
-                        </select>
-                    </div>
 
-                    {/* Search */}
-                    <div className="relative">
-                        <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                        <input
-                            type="text"
-                            placeholder={t('chat.searchConversations')}
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                            className="w-full pl-9 pr-4 py-2.5 bg-muted/50 rounded-xl text-sm outline-none focus:ring-2 focus:ring-primary/30 transition-all"
-                        />
-                    </div>
-                </div>
+                        <div className="min-h-0 flex-1 overflow-auto">
+                            {filteredConversations.length === 0 ? (
+                                <div className="p-6 text-center text-sm text-muted-foreground">
+                                    <div className="mx-auto mb-2 w-10 h-10 rounded-2xl bg-muted/50 flex items-center justify-center border border-border">
+                                        <MessageSquare className="h-5 w-5 opacity-50" />
+                                    </div>
+                                    <div className="font-medium">{t("chat.noConversations")}</div>
+                                    <div className="mt-1 text-xs">{t("chat.startConversation")}</div>
+                                </div>
+                            ) : (
+                                <div className="divide-y divide-border/60">
+                                    {filteredConversations.map((conv) => {
+                                        const isActive = activeConversation?.id === conv.id;
+                                        const avatar = getConversationAvatar(conv);
+                                        return (
+                                            <button
+                                                key={conv.id}
+                                                onClick={() => setActiveConversation(conv)}
+                                                className={cn(
+                                                    "w-full px-4 py-3 text-left hover:bg-muted/40 transition-colors",
+                                                    isActive && "bg-muted/50"
+                                                )}
+                                            >
+                                                <div className="flex items-center gap-3">
+                                                    <div className="relative h-10 w-10 shrink-0 rounded-xl border border-border bg-background flex items-center justify-center">
+                                                        <span className="text-sm font-semibold text-foreground">
+                                                            {avatar?.displayName?.[0] || avatar?.username?.[0] || "?"}
+                                                        </span>
+                                                        {avatar && (
+                                                            <span className={cn(
+                                                                "absolute -bottom-1 -right-1 h-3.5 w-3.5 rounded-full border-2 border-sidebar",
+                                                                STATUS_COLORS[avatar.status] || STATUS_COLORS.offline
+                                                            )} />
+                                                        )}
+                                                    </div>
 
-                {/* Conversations list */}
-                <div className="flex-1 overflow-y-auto">
-                    {filteredConversations.length === 0 ? (
-                        <div className="p-4 text-center text-muted-foreground">
-                            <p className="text-sm">{t('chat.noConversations')}</p>
-                            {canCreateChats() && (
-                                <button 
-                                    onClick={() => setShowNewChat(true)}
-                                    className="text-primary text-sm hover:underline mt-2"
-                                >
-                                    {t('chat.startConversation')}
-                                </button>
+                                                    <div className="min-w-0 flex-1">
+                                                        <div className="flex items-center justify-between gap-2">
+                                                            <div className="truncate text-sm font-semibold text-foreground">
+                                                                {getConversationName(conv)}
+                                                            </div>
+                                                            {conv.lastMessage && (
+                                                                <div className="text-[10px] font-medium text-muted-foreground">
+                                                                    {formatMessageTime(conv.lastMessage.createdAt)}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                        <div className="mt-0.5 truncate text-xs text-muted-foreground">
+                                                            {conv.lastMessage ? (
+                                                                <>
+                                                                    {conv.lastMessage.senderId === user?.id ? t("chat.messages.you") : ""}
+                                                                    {conv.lastMessage.content}
+                                                                </>
+                                                            ) : (
+                                                                t("chat.messages.noMessages")
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
                             )}
                         </div>
-                    ) : (
-                        filteredConversations.map(conv => {
-                            const avatar = getConversationAvatar(conv);
-                            const isActive = activeConversation?.id === conv.id;
-                            
-                            return (
-                                <button
-                                    key={conv.id}
-                                    onClick={() => setActiveConversation(conv)}
-                                    className={cn(
-                                        "w-full p-4 flex items-center gap-3 transition-all duration-200 text-left group",
-                                        "hover:bg-muted/50 active:scale-[0.98]",
-                                        "focus:ring-2 focus:ring-primary/30 focus:ring-inset",
-                                        isActive && "bg-primary/10 border-l-2 border-l-primary"
-                                    )}
-                                >
-                                    <div className="relative flex-shrink-0">
-                                        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary/20 to-primary/40 flex items-center justify-center shadow-sm group-hover:shadow-md transition-shadow">
-                                            {avatar?.avatar ? (
-                                                <img src={avatar.avatar} alt="" className="w-full h-full rounded-xl object-cover" />
-                                            ) : (
-                                                <span className="text-lg font-semibold text-primary">
-                                                    {avatar?.displayName?.[0] || avatar?.username[0] || "?"}
-                                                </span>
-                                            )}
-                                        </div>
-                                        {avatar && (
-                                            <div className={cn(
-                                                "absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-background",
-                                                STATUS_COLORS[avatar.status] || STATUS_COLORS.offline
-                                            )} />
-                                        )}
-                                    </div>
-                                    <div className="flex-1 min-w-0">
-                                        <div className="flex items-center justify-between gap-2">
-                                            <p className="font-medium truncate text-sm">
-                                                {getConversationName(conv)}
-                                            </p>
-                                            {conv.lastMessage && (
-                                                <span className="text-[10px] text-muted-foreground flex-shrink-0">
-                                                    {formatMessageTime(conv.lastMessage.createdAt)}
-                                                </span>
-                                            )}
-                                        </div>
-                                        {conv.lastMessage && (
-                                            <p className="text-xs text-muted-foreground truncate mt-0.5">
-                                                {conv.lastMessage.senderId === user?.id ? "Tú: " : ""}
-                                                {conv.lastMessage.content}
-                                            </p>
-                                        )}
-                                    </div>
-                                </button>
-                            );
-                        })
-                    )}
-                </div>
-            </div>
+                    </div>
+                </aside>
 
-            {/* Main chat area */}
-            <div className="flex-1 flex flex-col">
-                {activeConversation ? (
-                    <>
-                        {/* Chat header - sticky */}
-                        <div className="sticky top-0 z-10 p-4 border-b border-border flex items-center justify-between bg-gradient-to-r from-background to-muted/10 backdrop-blur-sm">
-                            <div className="flex items-center gap-3">
-                                {/* Back button for mobile/tablet */}
-                                <button 
-                                    onClick={() => setActiveConversation(null)}
-                                    className="lg:hidden p-2 -ml-2 rounded-lg hover:bg-muted transition-colors"
-                                >
-                                    <ChevronLeft className="w-5 h-5" />
-                                </button>
-                                <div className="relative">
-                                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary/20 to-primary/40 flex items-center justify-center ring-2 ring-primary/10">
-                                        <span className="font-semibold text-primary">
-                                            {getConversationName(activeConversation)[0]}
-                                        </span>
-                                    </div>
+                {/* Right: Messages */}
+                <section className={cn("min-h-0 bg-background", panel === "list" ? "hidden md:block" : "block")}>
+                    {!activeConversation ? (
+                        <div className="flex h-full min-h-0 items-center justify-center p-8">
+                            <div className="text-center text-muted-foreground">
+                                <div className="mx-auto mb-3 w-12 h-12 rounded-2xl bg-muted/40 flex items-center justify-center border border-border">
+                                    <MessageSquare className="h-6 w-6 opacity-50" />
                                 </div>
-                                <div>
-                                    <h2 className="font-semibold">{getConversationName(activeConversation)}</h2>
-                                    <p className="text-xs text-muted-foreground">
-                                        {activeConversation.isGroup 
-                                            ? `${activeConversation.participants.length} ${t('chat.header.members')}`
-                                            : t('chat.header.online')
-                                        }
-                                    </p>
-                                </div>
-                            </div>
-                            <div className="relative">
-                                <button 
-                                    onClick={() => setShowConversationMenu(!showConversationMenu)}
-                                    className="p-2 rounded-xl hover:bg-muted transition-colors"
-                                >
-                                    <MoreVertical className="w-5 h-5" />
-                                </button>
-                                
-                                {/* Conversation menu */}
-                                {showConversationMenu && (
-                                    <motion.div
-                                        initial={{ opacity: 0, scale: 0.95 }}
-                                        animate={{ opacity: 1, scale: 1 }}
-                                        className="absolute right-0 top-full mt-2 w-48 bg-card border border-border rounded-xl shadow-lg z-50 overflow-hidden"
-                                    >
-                                        {canDeleteConversations() && (
-                                            <button
-                                                onClick={() => deleteConversation(activeConversation.id)}
-                                                className="w-full px-4 py-3 text-left text-sm hover:bg-muted flex items-center gap-3 text-red-500"
-                                            >
-                                                <Trash2 className="w-4 h-4" />
-                                                {t('chat.menu.deleteChat')}
-                                            </button>
-                                        )}
-                                    </motion.div>
-                                )}
+                                <div className="text-sm font-semibold text-foreground">{t("chat.noConversations")}</div>
+                                <div className="mt-1 text-xs">{t("chat.startConversation")}</div>
                             </div>
                         </div>
+                    ) : (
+                        <div className="flex h-full min-h-0 flex-col">
+                            {/* Header */}
+                            <div className="sticky top-0 z-10 border-b border-border bg-background/90 backdrop-blur">
+                                <div className="flex items-center justify-between gap-3 px-4 py-3">
+                                    <div className="flex items-center gap-3 min-w-0">
+                                        <button
+                                            onClick={() => { setPanel("list"); setActiveConversation(null); }}
+                                            className="md:hidden inline-flex h-9 w-9 items-center justify-center rounded-xl border border-border bg-background hover:bg-muted"
+                                            aria-label="Back"
+                                        >
+                                            <ChevronLeft className="h-5 w-5" />
+                                        </button>
+                                        <button
+                                            onClick={() => window.dispatchEvent(new CustomEvent('openMobileMenu'))}
+                                            className="md:hidden inline-flex h-9 w-9 items-center justify-center rounded-xl border border-border bg-background hover:bg-muted"
+                                            aria-label="Menu"
+                                        >
+                                            <Menu className="h-5 w-5" />
+                                        </button>
+                                        <div className="min-w-0">
+                                            <div className="truncate text-sm font-semibold">{getConversationName(activeConversation)}</div>
+                                            <div className="text-[11px] text-muted-foreground">
+                                                {activeConversation.isGroup
+                                                    ? `${activeConversation.participants.length} ${t("chat.header.members")}`
+                                                    : t("chat.header.online")}
+                                            </div>
+                                        </div>
+                                    </div>
 
-                        {/* Messages */}
-                        <div className="flex-1 overflow-y-auto p-4 space-y-2 bg-gradient-to-b from-background via-background to-muted/5 scrollbar-thin scrollbar-thumb-muted scrollbar-track-transparent">
+                                    <div className="relative">
+                                        <button
+                                            onClick={() => setShowConversationMenu(!showConversationMenu)}
+                                            className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-border bg-background hover:bg-muted"
+                                            aria-label="Menu"
+                                        >
+                                            <MoreVertical className="h-4 w-4" />
+                                        </button>
+                                        {showConversationMenu && (
+                                            <div className="absolute right-0 top-full mt-2 w-52 overflow-hidden rounded-xl border border-border bg-background shadow-lg">
+                                                {canDeleteConversations() && (
+                                                    <button
+                                                        onClick={() => deleteConversation(activeConversation.id)}
+                                                        className="w-full px-4 py-3 text-left text-sm hover:bg-muted flex items-center gap-2 text-red-600"
+                                                    >
+                                                        <Trash2 className="h-4 w-4" />
+                                                        {t("chat.menu.deleteChat")}
+                                                    </button>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Messages */}
+                            <div className="min-h-0 flex-1 overflow-auto px-4 py-4">
                             {messages.map((msg, idx) => {
                                 const isOwn = msg.senderId === user?.id;
                                 const showAvatar = idx === 0 || messages[idx - 1].senderId !== msg.senderId;
@@ -720,11 +769,11 @@ export default function ChatPage() {
                                 return (
                                     <div
                                         key={msg.id}
-                                        className={cn("flex gap-2 group", isOwn && "flex-row-reverse")}
+                                        className={cn("flex gap-3 group", isOwn && "flex-row-reverse")}
                                     >
                                         {showAvatar ? (
-                                            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary/20 to-primary/40 flex items-center justify-center flex-shrink-0 ring-2 ring-background shadow-sm">
-                                                <span className="text-sm font-semibold text-primary">
+                                            <div className="w-9 h-9 rounded-xl border border-border bg-muted/30 flex items-center justify-center flex-shrink-0">
+                                                <span className="text-sm font-semibold text-foreground">
                                                     {msg.sender.displayName?.[0] || msg.sender.username[0]}
                                                 </span>
                                             </div>
@@ -733,17 +782,16 @@ export default function ChatPage() {
                                         )}
                                         <div className={cn("max-w-[75%] relative", isOwn && "text-right")}>
                                             {showAvatar && (
-                                                <p className="text-[10px] text-muted-foreground mb-1 px-2 font-medium">
+                                                <p className="text-[11px] text-muted-foreground mb-1">
                                                     {msg.sender.displayName || msg.sender.username}
                                                 </p>
                                             )}
                                             <div className="flex items-end gap-1">
                                                 <div className={cn(
-                                                    "inline-block px-4 py-2.5 rounded-2xl shadow-sm transition-all duration-200",
-                                                    "hover:shadow-md",
+                                                    "inline-block px-3 py-2 rounded-2xl border transition-colors",
                                                     isOwn 
-                                                        ? "bg-gradient-to-br from-primary to-primary/90 text-primary-foreground rounded-br-md" 
-                                                        : "bg-card border border-border/50 rounded-bl-md"
+                                                        ? "bg-foreground text-background border-foreground rounded-br-md"
+                                                        : "bg-background text-foreground border-border rounded-bl-md"
                                                 )}>
                                                     <p className="text-sm leading-relaxed">{renderMessageContent(msg.content, msg.metadata)}</p>
                                                 </div>
@@ -763,14 +811,14 @@ export default function ChatPage() {
                                                             animate={{ opacity: 1, scale: 1, y: 0 }}
                                                             transition={{ duration: 0.15 }}
                                                             className={cn(
-                                                                "absolute top-full mt-1 w-36 bg-card/95 backdrop-blur-xl border border-border/50 rounded-xl shadow-xl z-50 overflow-hidden",
+                                                                "absolute top-full mt-1 w-36 bg-background border border-border rounded-xl shadow-xl z-50 overflow-hidden",
                                                                 isOwn ? "right-0" : "left-0"
                                                             )}
                                                         >
                                                             {(isOwn || canDeleteMessages()) && (
                                                                 <button
                                                                     onClick={() => deleteMessage(msg.id)}
-                                                                    className="w-full px-3 py-3 text-left text-sm hover:bg-red-500/10 flex items-center gap-2 text-red-500 transition-colors"
+                                                                    className="w-full px-3 py-3 text-left text-sm hover:bg-muted flex items-center gap-2 text-red-600 transition-colors"
                                                                 >
                                                                     <Trash2 className="w-4 h-4" />
                                                                     Eliminar
@@ -780,7 +828,7 @@ export default function ChatPage() {
                                                     )}
                                                 </div>
                                             </div>
-                                            <p className="text-[10px] text-muted-foreground mt-1 px-2">
+                                            <p className="text-[10px] text-muted-foreground mt-1">
                                                 {format(new Date(msg.createdAt), "HH:mm")}
                                             </p>
                                         </div>
@@ -788,11 +836,11 @@ export default function ChatPage() {
                                 );
                             })}
                             <div ref={messagesEndRef} />
-                        </div>
+                            </div>
 
-                        {/* Message input */}
-                        <div className="p-4 border-t border-border">
-                            <div className="relative flex items-center gap-3">
+                            {/* Composer */}
+                            <div className="border-t border-border bg-background p-4">
+                                <div className="relative flex items-center gap-3">
                                 <input
                                     ref={inputRef}
                                     type="text"
@@ -807,7 +855,7 @@ export default function ChatPage() {
                                     }}
                                     placeholder={canSendMessages() ? t('chat.input.placeholder') : t('chat.noPermission')}
                                     disabled={!canSendMessages()}
-                                    className="flex-1 px-4 py-2 bg-muted rounded-full outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    className="flex-1 h-11 rounded-2xl border border-border bg-muted/30 px-4 text-sm outline-none focus:ring-4 focus:ring-primary/10 disabled:opacity-50 disabled:cursor-not-allowed"
                                 />
                                 
                                 {/* @mentions dropdown */}
@@ -849,22 +897,15 @@ export default function ChatPage() {
                                     onClick={sendMessage}
                                     disabled={!newMessage.trim() || !canSendMessages()}
                                     title={canSendMessages() ? t('chat.input.send') : t('chat.noPermission')}
-                                    className="p-2 rounded-full bg-primary text-primary-foreground disabled:opacity-50 disabled:cursor-not-allowed"
+                                    className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-foreground text-background disabled:opacity-40 disabled:cursor-not-allowed"
                                 >
                                     <Send className="w-5 h-5" />
                                 </button>
                             </div>
+                            </div>
                         </div>
-                    </>
-                ) : (
-                    <div className="flex-1 flex items-center justify-center">
-                        <div className="text-center">
-                            <MessageSquare className="w-16 h-16 mx-auto mb-4 text-muted-foreground opacity-30" />
-                            <h2 className="text-xl font-semibold">{t('chat.noConversations')}</h2>
-                            <p className="text-muted-foreground mt-2">{t('chat.startConversation')}</p>
-                        </div>
-                    </div>
-                )}
+                    )}
+                </section>
             </div>
 
             {/* New chat modal */}
@@ -896,7 +937,7 @@ export default function ChatPage() {
                             
                             <input
                                 type="text"
-                                placeholder="Buscar usuarios..."
+                                placeholder={t('chat.newChatModal.searchUsers')}
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
                                 className="w-full px-4 py-2 bg-muted rounded-lg text-sm outline-none mb-4"
@@ -940,79 +981,12 @@ export default function ChatPage() {
                 )}
             </AnimatePresence>
             
-            {/* File Preview Modal */}
-            <AnimatePresence>
-                {previewFile && (
-                    <motion.div
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4"
-                        onClick={() => { setPreviewFile(null); setPreviewUrl(null); }}
-                    >
-                        <motion.div
-                            initial={{ scale: 0.9 }}
-                            animate={{ scale: 1 }}
-                            exit={{ scale: 0.9 }}
-                            className="bg-background rounded-xl max-w-4xl max-h-[90vh] w-full overflow-hidden"
-                            onClick={(e) => e.stopPropagation()}
-                        >
-                            <div className="flex items-center justify-between p-4 border-b">
-                                <h3 className="font-semibold truncate">{previewFile.name}</h3>
-                                <button
-                                    onClick={() => { setPreviewFile(null); setPreviewUrl(null); }}
-                                    className="p-2 hover:bg-muted rounded-lg"
-                                >
-                                    <X className="w-5 h-5" />
-                                </button>
-                            </div>
-                            <div className="p-4 flex items-center justify-center min-h-[400px] bg-black/5">
-                                {previewLoading ? (
-                                    <div className="flex items-center gap-2">
-                                        <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                                        <span>Cargando...</span>
-                                    </div>
-                                ) : previewUrl ? (
-                                    previewFile.mimeType?.startsWith('image/') ? (
-                                        <img 
-                                            src={previewUrl} 
-                                            alt={previewFile.name}
-                                            className="max-w-full max-h-[60vh] object-contain"
-                                        />
-                                    ) : previewFile.mimeType?.startsWith('video/') ? (
-                                        <video 
-                                            src={previewUrl} 
-                                            controls 
-                                            className="max-w-full max-h-[60vh]"
-                                        />
-                                    ) : previewFile.mimeType?.startsWith('audio/') ? (
-                                        <audio 
-                                            src={previewUrl} 
-                                            controls 
-                                            className="w-full"
-                                        />
-                                    ) : (
-                                        <div className="text-center">
-                                            <FileText className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
-                                            <p className="text-muted-foreground">Vista previa no disponible</p>
-                                            <a 
-                                                href={previewUrl} 
-                                                target="_blank" 
-                                                rel="noopener noreferrer"
-                                                className="text-primary hover:underline mt-2 inline-block"
-                                            >
-                                                Abrir en nueva pestaña
-                                            </a>
-                                        </div>
-                                    )
-                                ) : (
-                                    <p className="text-muted-foreground">Error al cargar la vista previa</p>
-                                )}
-                            </div>
-                        </motion.div>
-                    </motion.div>
-                )}
-            </AnimatePresence>
+            {/* File Preview Modal - use shared PreviewModal component */}
+            <PreviewModal 
+                file={previewFile ? { ...previewFile, originalName: previewFile.name } : null} 
+                isOpen={!!previewFile} 
+                onClose={() => { setPreviewFile(null); setPreviewUrl(null); }} 
+            />
         </div>
     );
 }

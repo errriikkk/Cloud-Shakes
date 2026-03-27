@@ -24,10 +24,6 @@ export const API_ENDPOINTS = {
         PUBLIC_INFO: (id: string) => `${API_URL}/api/links/public/${id}`,
         PUBLIC_DOWNLOAD: (id: string) => `${API_URL}/api/links/download/${id}`,
     },
-    DOCUMENTS: {
-        BASE: `${API_URL}/api/documents`,
-        DETAIL: (id: string) => `${API_URL}/api/documents/${id}`,
-    },
     NOTES: {
         BASE: `${API_URL}/api/notes`,
         DETAIL: (id: string) => `${API_URL}/api/notes/${id}`,

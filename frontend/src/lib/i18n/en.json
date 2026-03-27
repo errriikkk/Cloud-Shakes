@@ -59,7 +59,6 @@
     "itemType": {
       "file": "File",
       "folder": "Folder",
-      "document": "Document",
       "note": "Note",
       "calendar": "Event"
     }
@@ -156,7 +155,6 @@
   "nav": {
     "home": "Home",
     "files": "Files",
-    "documents": "Documents",
     "notes": "Notes",
     "calendar": "Calendar",
     "shared": "Shared",
@@ -205,8 +203,8 @@
   },
   "search": {
     "quickSearch": "Quick Search",
-    "placeholder": "Search files, documents, notes, events...",
-    "description": "Search files, documents, notes and events.",
+    "placeholder": "Search files, notes, events...",
+    "description": "Search files, notes and events.",
     "navigate": "Navigate",
     "select": "Select",
     "noResults": "No results found for",
@@ -227,7 +225,7 @@
     "thisWeek": "This week",
     "noEvents": "No events this week",
     "next": "Next",
-    "recentDocs": "Recent documents",
+    "recentDocs": "Recent items",
     "activeNotes": "Active notes",
     "recentFiles": "Recent files",
     "lastActivity": "Last activity",
@@ -318,7 +316,6 @@
     "types": {
       "message": "Message",
       "calendar": "Calendar",
-      "document": "Document",
       "system": "System"
     }
   },
@@ -398,18 +395,6 @@
     "recentActivity": "Recent activity",
     "currentName": "Current name"
   },
-  "documents": {
-    "title": "Documents",
-    "search": "Search documents...",
-    "newDocument": "New Document",
-    "noDocuments": "No documents yet.",
-    "untitled": "Untitled Document",
-    "delete": "Delete Document",
-    "confirmDelete": "Are you sure you want to delete this document permanently? This action cannot be undone.",
-    "unsavedChanges": "You have unsaved changes. Are you sure you want to leave?",
-    "lastSavedAt": "Last saved {time}",
-    "placeholder": "Start typing here..."
-  },
   "notes": {
     "title": "Notes",
     "newNote": "New note",
@@ -427,6 +412,11 @@
     "newEvent": "New Event",
     "today": "Today",
     "events": "Events",
+    "views": {
+      "month": "Month",
+      "week": "Week",
+      "agenda": "Agenda"
+    },
     "shortCal": "Cal",
     "shortList": "List",
     "noEventsYet": "You don't have any events yet.",
@@ -444,6 +434,7 @@
     "save": "Save",
     "cancel": "Cancel",
     "confirmDelete": "Are you sure you want to delete this event?",
+    "deleteFailed": "Couldn't delete the event. Please try again.",
     "days": {
       "mon": "Mon",
       "tue": "Tue",
@@ -507,7 +498,6 @@
     "storage": "Storage",
     "users": "Users",
     "files": "Files",
-    "documents": "Documents",
     "notes": "Notes",
     "links": "Links",
     "period": "Period",
@@ -668,5 +658,67 @@
     "autoGainControl": "Auto Gain Control",
     "gainDesc": "Automatically adjusts volume",
     "minimalSecure": "Minimal & Secure"
+  },
+  "permissions": {
+    "accessDenied": "Access Denied",
+    "noAccess": "You don't have permission to {action}",
+    "required": "Permission required",
+    "contactAdmin": "Contact an administrator",
+    "goBack": "Go Back",
+    "close": "Close",
+    "blockedAction": "Action blocked",
+    "youCannot": "You cannot perform this action",
+    "labels": {
+      "admin": "Full Administrator",
+      "manage_users": "Manage users",
+      "manage_roles": "Manage roles",
+      "manage_settings": "System settings",
+      "manage_integrations": "Manage integrations",
+      "view_files": "View my files",
+      "view_shared_files": "View shared files",
+      "view_workspace_files": "View all files",
+      "upload_files": "Upload files",
+      "delete_files": "Delete files",
+      "download_files": "Download files",
+      "share_files": "Share files",
+      "preview_files": "Preview",
+      "create_folders": "Create folders",
+      "delete_folders": "Delete folders",
+      "organize_folders": "Organize folders",
+      "view_notes": "View notes",
+      "create_notes": "Create notes",
+      "edit_notes": "Edit notes",
+      "delete_notes": "Delete notes",
+      "view_calendar": "View calendar",
+      "create_events": "Create events",
+      "edit_events": "Edit events",
+      "delete_events": "Delete events",
+      "view_links": "View links",
+      "create_links": "Create links",
+      "delete_links": "Delete links",
+      "view_gallery": "View gallery",
+      "upload_images": "Upload images",
+      "delete_images": "Delete images",
+      "view_chat": "View chat",
+      "send_messages": "Send messages",
+      "edit_messages": "Edit messages",
+      "delete_messages": "Delete messages",
+      "create_chats": "Create chats",
+      "create_group_chats": "Create groups",
+      "mention_users": "Mention users",
+      "send_attachments": "Send files",
+      "view_calls": "View video calls",
+      "create_calls": "Create video calls",
+      "manage_calls": "Manage video calls",
+      "join_calls": "Join video calls",
+      "view_statistics": "View statistics",
+      "export_statistics": "Export statistics",
+      "view_activity": "View activity",
+      "export_activity": "Export activity"
+    }
+  },
+  "preview": {
+    "pdfNotSupported": "PDFs cannot be previewed at the moment. Try downloading and viewing it!",
+    "download": "Download PDF"
   }
 }

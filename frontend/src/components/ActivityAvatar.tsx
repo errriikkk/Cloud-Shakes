@@ -109,13 +109,26 @@ function ActivityHistoryPanel({ user, resourceId, resourceType, onClose }: Activ
     useEffect(() => {
         const fetchHistory = async () => {
             try {
-                if (resourceId && resourceType) {
+                if (resourceId && resourceType && user) {
                     const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
                     const res = await axios.get(`${API}/api/activity`, {
-                        params: { resourceId, resourceType, limit: 20 },
+                        params: { resourceId, resourceType, limit: 50 },
                         withCredentials: true,
                     });
-                    setHistory(res.data || []);
+                    const historyData = res.data?.data || res.data;
+                    const allHistory = Array.isArray(historyData) ? historyData : [];
+                    
+                    // Filter to show only activity from this specific user
+                    const userId = user.id;
+                    const userUsername = (user.username || '').toLowerCase();
+                    const filtered = allHistory.filter((entry: any) => {
+                        const entryOwner = entry.owner;
+                        if (!entryOwner) return false;
+                        // Compare by id or username
+                        return entryOwner.id === userId || 
+                               (entryOwner.username || '').toLowerCase() === userUsername;
+                    });
+                    setHistory(filtered);
                 }
             } catch (err) {
                 console.error("Failed to fetch activity history:", err);
@@ -124,7 +137,7 @@ function ActivityHistoryPanel({ user, resourceId, resourceType, onClose }: Activ
             }
         };
         fetchHistory();
-    }, [resourceId, resourceType]);
+    }, [resourceId, resourceType, user]);
 
     // Prevent body scroll when panel open
     useEffect(() => {

@@ -33,12 +33,6 @@ export default function manifest(): MetadataRoute.Manifest {
                 icons: [{ src: '/logo-192.png', sizes: '192x192' }],
             },
             {
-                name: 'Documentos',
-                short_name: 'Docs',
-                url: '/dashboard/documents',
-                icons: [{ src: '/logo-192.png', sizes: '192x192' }],
-            },
-            {
                 name: 'Notas',
                 short_name: 'Notas',
                 url: '/dashboard/notes',

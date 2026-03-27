@@ -137,7 +137,7 @@ export function NotificationPanel({ className }: NotificationPanelProps) {
                 withCredentials: true 
             });
             
-            const conversations = res.data || [];
+            const conversations = Array.isArray(res.data) ? res.data : (res.data?.data || []);
             const newMessageIds: string[] = [];
             const newNotifications: Notification[] = [];
             

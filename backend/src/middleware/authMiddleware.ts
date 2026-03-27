@@ -12,7 +12,6 @@ export interface AuthRequest extends Request {
 
 const DEFAULT_PERMISSIONS = [
     'view_files',
-    'view_documents',
     'view_notes',
     'view_calendar',
     'view_links',
@@ -135,7 +134,6 @@ export const protect = async (req: AuthRequest, res: Response, next: NextFunctio
 
         const DEFAULT_PERMISSIONS = [
             'view_files',
-            'view_documents',
             'view_notes',
             'view_calendar',
             'view_links',

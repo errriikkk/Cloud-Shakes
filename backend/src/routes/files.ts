@@ -207,37 +207,77 @@ router.get('/', protect, async (req: AuthRequest, res, next) => {
         const userRoleIds = userRoles.map((ur: any) => ur.role.id);
 
         // Build query: own files + files shared with user + files shared with user's roles
-        const fileCondition = canViewAll
-            ? { folderId: folderId ? (folderId as string) : null }
-            : {
-                OR: [
-                    { ownerId: req.user.id, folderId: folderId ? (folderId as string) : null },
-                    { 
-                        folderId: folderId ? (folderId as string) : null,
-                        shares: {
-                            OR: [
-                                { userId: req.user.id },
-                                { roleId: { in: userRoleIds } }
-                            ]
-                        }
-                    }
-                ]
-            };
+        let files: any[] = [];
+        let total = 0;
 
-        const [files, total] = await Promise.all([
-            prisma.file.findMany({
-                where: fileCondition as any,
-                include: {
-                    owner: { select: { id: true, username: true, displayName: true } },
+        if (canViewAll) {
+            // Simple query for workspace access
+            const whereClause = { folderId: folderId ? (folderId as string) : null };
+            [files, total] = await Promise.all([
+                prisma.file.findMany({
+                    where: whereClause,
+                    include: { owner: { select: { id: true, username: true, displayName: true } } },
+                    orderBy: { createdAt: 'desc' },
+                    skip,
+                    take: limitNum,
+                }),
+                prisma.file.count({ where: whereClause }),
+            ]);
+        } else {
+            // Get own files
+            const ownFilesWhere = { 
+                ownerId: req.user.id, 
+                folderId: folderId ? (folderId as string) : null 
+            };
+            const [ownFiles, ownTotal] = await Promise.all([
+                prisma.file.findMany({
+                    where: ownFilesWhere,
+                    include: { owner: { select: { id: true, username: true, displayName: true } } },
+                    orderBy: { createdAt: 'desc' },
+                    skip: 0,
+                    take: 1000,
+                }),
+                prisma.file.count({ where: ownFilesWhere }),
+            ]);
+
+            // Get shared files via FileShare
+            const sharedFileIds = await prisma.fileShare.findMany({
+                where: {
+                    OR: [
+                        { userId: req.user.id },
+                        { roleId: { in: userRoleIds } }
+                    ]
                 },
-                orderBy: { createdAt: 'desc' },
-                skip,
-                take: limitNum,
-            }),
-            prisma.file.count({
-                where: fileCondition as any,
-            }),
-        ]);
+                select: { fileId: true }
+            });
+            const fileIds = [...new Set(sharedFileIds.map(s => s.fileId))];
+            
+            const sharedFilesWhere = {
+                id: { in: fileIds },
+                folderId: folderId ? (folderId as string) : null
+            };
+            const [sharedFiles, sharedTotal] = await Promise.all([
+                prisma.file.findMany({
+                    where: sharedFilesWhere,
+                    include: { owner: { select: { id: true, username: true, displayName: true } } },
+                    orderBy: { createdAt: 'desc' },
+                    skip: 0,
+                    take: 1000,
+                }),
+                prisma.file.count({ where: sharedFilesWhere }),
+            ]);
+
+            // Combine and paginate
+            const allFiles = [...ownFiles, ...sharedFiles];
+            total = ownTotal + sharedTotal;
+            
+            // Apply pagination
+            const sortedFiles = allFiles.sort((a, b) => 
+                new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+            );
+            files = sortedFiles.slice(skip, skip + limitNum);
+        }
+
         res.json({
             data: files.map(f => ({ ...f, size: f.size.toString() })),
             pagination: {

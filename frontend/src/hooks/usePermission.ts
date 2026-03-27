@@ -27,12 +27,6 @@ export function usePermission() {
     const canCreateFolders = () => hasPermission('create_folders');
     const canDeleteFolders = () => hasPermission('delete_folders');
     
-    // Documents
-    const canViewDocuments = () => hasPermission('view_documents');
-    const canCreateDocuments = () => hasPermission('create_documents');
-    const canEditDocuments = () => hasPermission('edit_documents');
-    const canDeleteDocuments = () => hasPermission('delete_documents');
-    
     // Notes
     const canViewNotes = () => hasPermission('view_notes');
     const canCreateNotes = () => hasPermission('create_notes');
@@ -110,11 +104,6 @@ export function usePermission() {
         canViewFolders,
         canCreateFolders,
         canDeleteFolders,
-        // Documents
-        canViewDocuments,
-        canCreateDocuments,
-        canEditDocuments,
-        canDeleteDocuments,
         // Notes
         canViewNotes,
         canCreateNotes,

@@ -15,7 +15,7 @@ interface SearchResult {
     originalName?: string;
     name?: string;
     title?: string;
-    type: 'file' | 'folder' | 'document' | 'note' | 'calendar';
+    type: 'file' | 'folder' | 'note' | 'calendar';
     mimeType?: string;
     folder?: { id: string, name: string };
     parent?: { id: string, name: string };
@@ -37,10 +37,9 @@ export function SearchModal({ isOpen, onClose }: SearchModalProps) {
     const [results, setResults] = useState<{ 
         files: SearchResult[], 
         folders: SearchResult[],
-        documents: SearchResult[],
         notes: SearchResult[],
         calendarEvents: SearchResult[]
-    }>({ files: [], folders: [], documents: [], notes: [], calendarEvents: [] });
+    }>({ files: [], folders: [], notes: [], calendarEvents: [] });
     const [loading, setLoading] = useState(false);
     const [selectedIndex, setSelectedIndex] = useState(0);
     const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
@@ -59,7 +58,7 @@ export function SearchModal({ isOpen, onClose }: SearchModalProps) {
     useEffect(() => {
         if (isOpen) {
             setQuery("");
-            setResults({ files: [], folders: [], documents: [], notes: [], calendarEvents: [] });
+            setResults({ files: [], folders: [], notes: [], calendarEvents: [] });
             setSelectedIndex(0);
             setSelectedCategory(null);
             setTimeout(() => inputRef.current?.focus(), 100);
@@ -84,7 +83,7 @@ export function SearchModal({ isOpen, onClose }: SearchModalProps) {
                     setLoading(false);
                 }
             } else {
-                setResults({ files: [], folders: [], documents: [], notes: [], calendarEvents: [] });
+                setResults({ files: [], folders: [], notes: [], calendarEvents: [] });
             }
         }, 300);
 
@@ -94,7 +93,6 @@ export function SearchModal({ isOpen, onClose }: SearchModalProps) {
     const allResults: SearchResult[] = [
         ...results.folders,
         ...results.files,
-        ...results.documents,
         ...results.notes,
         ...results.calendarEvents,
     ];
@@ -103,7 +101,6 @@ export function SearchModal({ isOpen, onClose }: SearchModalProps) {
         { key: 'all', label: t("search.all"), count: allResults.length },
         { key: 'files', label: t("nav.files"), count: results.files.length },
         { key: 'folders', label: t("search.folders"), count: results.folders.length },
-        { key: 'documents', label: t("nav.documents"), count: results.documents.length },
         { key: 'notes', label: t("nav.notes"), count: results.notes.length },
         { key: 'calendar', label: t("nav.calendar"), count: results.calendarEvents.length },
     ];
@@ -112,7 +109,6 @@ export function SearchModal({ isOpen, onClose }: SearchModalProps) {
         ? allResults.filter(r => {
             if (selectedCategory === 'files') return r.type === 'file';
             if (selectedCategory === 'folders') return r.type === 'folder';
-            if (selectedCategory === 'documents') return r.type === 'document';
             if (selectedCategory === 'notes') return r.type === 'note';
             if (selectedCategory === 'calendar') return r.type === 'calendar';
             return true;
@@ -144,8 +140,6 @@ export function SearchModal({ isOpen, onClose }: SearchModalProps) {
             const folderId = item.folder?.id || item.parent?.id || '';
             const path = folderId ? `/dashboard/files?folder=${folderId}&preview=${item.id}` : `/dashboard/files?preview=${item.id}`;
             router.push(path);
-        } else if (item.type === 'document') {
-            router.push(`/dashboard/documents/${item.id}`);
         } else if (item.type === 'note') {
             router.push(`/dashboard/notes`);
         } else if (item.type === 'calendar') {
@@ -165,12 +159,6 @@ export function SearchModal({ isOpen, onClose }: SearchModalProps) {
                 await navigator.clipboard.writeText(shareUrl);
                 setCopiedId(item.id);
                 setTimeout(() => setCopiedId(null), 2000);
-            } else if (item.type === 'document') {
-                // Create share link for document
-                const shareUrl = `${window.location.origin}/dashboard/documents/${item.id}`;
-                await navigator.clipboard.writeText(shareUrl);
-                setCopiedId(item.id);
-                setTimeout(() => setCopiedId(null), 2000);
             }
         } catch (err) {
             console.error("Share failed:", err);
@@ -180,7 +168,6 @@ export function SearchModal({ isOpen, onClose }: SearchModalProps) {
     const getFileIcon = (item: SearchResult) => {
         const iconClass = "w-4 h-4";
         if (item.type === 'folder') return <Folder className={iconClass} />;
-        if (item.type === 'document') return <FileText className={cn(iconClass, "text-blue-500")} />;
         if (item.type === 'note') return <StickyNote className={cn(iconClass, "text-yellow-500")} />;
         if (item.type === 'calendar') return <Calendar className={cn(iconClass, "text-purple-500")} />;
         if (!item.mimeType) return <File className={iconClass} />;
@@ -195,7 +182,6 @@ export function SearchModal({ isOpen, onClose }: SearchModalProps) {
         const labels: Record<string, string> = {
             'file': t("common.itemType.file"),
             'folder': t("common.itemType.folder"),
-            'document': t("common.itemType.document"),
             'note': t("common.itemType.note"),
             'calendar': t("common.itemType.calendar"),
         };
@@ -206,7 +192,6 @@ export function SearchModal({ isOpen, onClose }: SearchModalProps) {
         const colors: Record<string, string> = {
             'file': 'bg-muted/60 text-muted-foreground',
             'folder': 'bg-primary/5 text-primary',
-            'document': 'bg-blue-500/10 text-blue-500',
             'note': 'bg-yellow-500/10 text-yellow-500',
             'calendar': 'bg-purple-500/10 text-purple-500',
         };
@@ -392,7 +377,7 @@ export function SearchModal({ isOpen, onClose }: SearchModalProps) {
                                                 resourceType={item.type}
                                             />
 
-                                            {(item.type === 'file' || item.type === 'document') && (
+                                            {(item.type === 'file') && (
                                                 <button
                                                     onClick={(e) => handleShare(e, item)}
                                                     className={cn(

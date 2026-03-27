@@ -34,7 +34,6 @@ import shareRoutes from './routes/share';
 import folderRoutes from './routes/folders';
 import linkRoutes from './routes/links';
 import searchRoutes from './routes/search';
-import documentRoutes from './routes/documents';
 import noteRoutes from './routes/notes';
 import calendarRoutes from './routes/calendar';
 import chatRoutes from './routes/chat';
@@ -48,6 +47,7 @@ import activityRoutes from './routes/activity';
 import brandingRoutes from './routes/branding';
 import cloudSettingsRoutes from './routes/cloudSettings';
 import backupsRoutes from './routes/backups';
+import notificationRoutes from './routes/notifications';
 import { initStorage } from './utils/storage';
 import prisma from './config/db';
 import { hashPassword } from './utils/auth';
@@ -290,11 +290,11 @@ app.use('/api/files', csrfProtection);
 app.use('/api/folders', csrfProtection);
 app.use('/api/links', csrfProtectionLinks); // Custom CSRF for links (excludes public endpoints)
 app.use('/api/search', csrfProtection);
-app.use('/api/documents', csrfProtection);
 app.use('/api/notes', csrfProtection);
 app.use('/api/calendar', csrfProtection);
 app.use('/api/chat', csrfProtection);
 app.use('/api/api-flows', csrfProtection);
+app.use('/api/notifications', csrfProtection);
 
 // Routes
 app.use('/api/auth', authRoutes);
@@ -303,7 +303,6 @@ app.use('/api/files', shareRoutes);
 app.use('/api/folders', folderRoutes);
 app.use('/api/links', linkRoutes);
 app.use('/api/search', searchRoutes);
-app.use('/api/documents', documentRoutes);
 app.use('/api/notes', noteRoutes);
 app.use('/api/calendar', calendarRoutes);
 app.use('/api/chat', chatRoutes);
@@ -317,6 +316,7 @@ app.use('/api/backups', backupsRoutes);
 app.use('/api/roles', adminIpMiddleware, rolesRoutes);
 app.use('/api/users', adminIpMiddleware, usersRoutes);
 app.use('/api/team/invitations', teamInvitationsRoutes);
+app.use('/api/notifications', notificationRoutes);
 // Custom API routes must be last to catch all /api/custom/* paths
 app.use('/api/custom', customRoutes);
 
@@ -328,6 +328,72 @@ app.get(['/api/talks/active-rooms', '/api/talks/active-rooms/'], (req, res) => {
 
 app.get('/health', (req, res) => {
     res.status(200).json({ status: 'ok', timestamp: new Date() });
+});
+
+// Device authorization routes (public)
+import { deviceCodes } from './routes/auth';
+
+// Mount device verify routes directly (not under /api/auth)
+
+app.get('/device/verify', (req, res) => {
+    const userCode = req.query.code as string;
+    
+    const html = `
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Cloud Shakes - Autorizar Dispositivo</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 500px; margin: 50px auto; padding: 20px; text-align: center; }
+        h1 { color: #333; }
+        .code { font-size: 32px; font-weight: bold; letter-spacing: 4px; background: #f5f5f5; padding: 15px; border-radius: 8px; margin: 20px 0; }
+        button { background: #4CAF50; color: white; border: none; padding: 15px 30px; font-size: 16px; border-radius: 5px; cursor: pointer; margin: 5px; }
+        button:hover { background: #45a049; }
+        button.deny { background: #f44336; }
+        button.deny:hover { background: #da190b; }
+    </style>
+</head>
+<body>
+    <h1>🔐 Cloud Shakes</h1>
+    <p>Un dispositivo quiere conectarse a tu cuenta.</p>
+    <div class="code">${userCode || '--------'}</div>
+    <p>¿Autorizas este dispositivo?</p>
+    <form method="POST" action="/device/confirm">
+        <input type="hidden" name="userCode" value="${userCode || ''}">
+        <button type="submit" name="action" value="approve">✅ Autorizar</button>
+        <button type="submit" name="action" value="deny" class="deny">❌ Denegar</button>
+    </form>
+</body>
+</html>`;
+    res.send(html);
+});
+
+app.post('/device/confirm', (req, res) => {
+    const { userCode, action } = req.body;
+    
+    if (action === 'deny') {
+        return res.send(`
+            <html><body>
+                <h1>❌ Autorización denegada</h1>
+                <p>Puedes cerrar esta ventana.</p>
+            </body></html>
+        `);
+    }
+
+    // Find and update the device code to mark as authorized
+    for (const [_, data] of deviceCodes) {
+        if (data.userCode === userCode) {
+            data.userId = 'demo-user-id'; // In production, get actual user ID
+            break;
+        }
+    }
+
+    res.send(`
+        <html><body>
+            <h1>✅ ¡Autorizado!</h1>
+            <p>Tu dispositivo ha sido conectado. Puedes cerrar esta ventana.</p>
+        </body></html>
+    `);
 });
 
 // Global Error Handler

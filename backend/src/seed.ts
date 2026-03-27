@@ -32,16 +32,6 @@ const PERMISSIONS = {
     'share_files': 'Share files externally',
     'delete_folders': 'Delete folders',
     
-    // Documents - Viewer (Nivel 2)
-    'view_documents': 'View documents',
-    
-    // Documents - Editor (Nivel 3)
-    'create_documents': 'Create documents',
-    'edit_documents': 'Edit documents',
-    
-    // Documents - Admin (Nivel 4)
-    'delete_documents': 'Delete documents',
-    
     // Notes - Viewer (Nivel 2)
     'view_notes': 'View notes',
     
@@ -151,7 +141,6 @@ const DEFAULT_ROLES = [
             'manage_users', 'manage_roles',
             'view_files', 'view_workspace_files', 'upload_files', 'delete_files', 'download_files', 'share_files', 'preview_files',
             'view_folders', 'create_folders', 'delete_folders', 'organize_folders',
-            'view_documents', 'create_documents', 'edit_documents', 'delete_documents',
             'view_notes', 'create_notes', 'edit_notes', 'delete_notes',
             'view_calendar', 'create_events', 'edit_events', 'delete_events',
             'view_links', 'create_links', 'delete_links',
@@ -175,7 +164,6 @@ const DEFAULT_ROLES = [
         permissions: [
             'view_files', 'upload_files', 'download_files', 'preview_files',
             'view_folders', 'create_folders', 'organize_folders',
-            'view_documents', 'create_documents', 'edit_documents',
             'view_notes', 'create_notes', 'edit_notes',
             'view_calendar', 'create_events', 'edit_events',
             'view_links', 'create_links',
@@ -195,7 +183,6 @@ const DEFAULT_ROLES = [
         permissions: [
             'view_files', 'download_files', 'preview_files',
             'view_folders',
-            'view_documents',
             'view_notes',
             'view_calendar',
             'view_links',
