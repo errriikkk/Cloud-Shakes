@@ -160,6 +160,7 @@ export const UploadProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
                             await axios.post(`${API_URL}/api/files/upload`, formData, {
                                 withCredentials: true,
+                                timeout: 600000, // 10 minutes for large files
                                 onUploadProgress: (progressEvent) => {
                                     const percent = Math.round((progressEvent.loaded * 100) / (progressEvent.total || 100));
                                     updateStatus(item.id, 'uploading', percent);

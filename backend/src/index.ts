@@ -190,12 +190,12 @@ seedAdmin().catch(err => console.error('Failed to seed admin:', err));
 app.set('trust proxy', 1);
 
 app.use(cookieParser());
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ limit: '10mb', extended: true }));
+app.use(express.json({ limit: '500mb' }));
+app.use(express.urlencoded({ limit: '500mb', extended: true }));
 
-// Request timeout to prevent slowloris attacks
+// Request timeout to prevent slowloris attacks - increased for large file uploads
 app.use((req, res, next) => {
-    res.setTimeout(30000, () => {
+    res.setTimeout(600000, () => { // 10 minutes for large uploads
         res.status(408).json({ message: 'Request timeout' });
     });
     next();
