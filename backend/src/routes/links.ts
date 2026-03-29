@@ -501,6 +501,7 @@ router.get('/:id/raw', async (req, res, next) => {
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Range');
 
     try {
+        console.log(`[RAW] Request for linkId: ${linkId}`);
         const link = await prisma.link.findFirst({
             where: {
                 OR: [
@@ -510,6 +511,8 @@ router.get('/:id/raw', async (req, res, next) => {
             },
             include: { file: true },
         });
+
+        console.log(`[RAW] Found link:`, link ? { id: link.id, isEmbed: link.isEmbed, fileId: link.fileId } : 'NOT FOUND');
 
         if (!link) {
             return res.redirect(`${frontendUrl}/s/${linkId}`);
