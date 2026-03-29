@@ -1146,9 +1146,23 @@ export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserPro
                                                     </div>
                                                 </div>
                                             ) : previews[file.id] && file.mimeType.startsWith('image/') ? (
-                                                <img src={previews[file.id]} alt={file.originalName} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" onLoad={() => setLoadingPreviews(prev => ({ ...prev, [file.id]: false }))} />
+                                                <img 
+                                                    src={previews[file.id]} 
+                                                    alt={file.originalName} 
+                                                    className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" 
+                                                    onLoad={() => setLoadingPreviews(prev => ({ ...prev, [file.id]: false }))}
+                                                    onError={() => setLoadingPreviews(prev => ({ ...prev, [file.id]: false }))}
+                                                />
                                             ) : previews[file.id] && file.mimeType.startsWith('video/') ? (
-                                                <video src={previews[file.id]} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" muted playsInline preload="metadata" onLoadedData={() => setLoadingPreviews(prev => ({ ...prev, [file.id]: false }))} />
+                                                <video 
+                                                    src={previews[file.id]} 
+                                                    className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" 
+                                                    muted 
+                                                    playsInline 
+                                                    preload="metadata" 
+                                                    onLoadedData={() => setLoadingPreviews(prev => ({ ...prev, [file.id]: false }))}
+                                                    onError={() => setLoadingPreviews(prev => ({ ...prev, [file.id]: false }))}
+                                                />
                                             ) : (
                                                 <div className="absolute inset-0 flex items-center justify-center">
                                                     <div className="w-16 h-16 rounded-2xl bg-muted/50 flex items-center justify-center text-muted-foreground/60 group-hover:text-primary transition-colors">

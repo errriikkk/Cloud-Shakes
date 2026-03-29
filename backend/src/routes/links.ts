@@ -484,7 +484,7 @@ router.options('/:id/raw', (req, res) => {
 // @route   GET /api/links/:id/raw
 // @desc    Get direct raw content (proxied for security AND throttling)
 // @access  Public
-// NOTE: This route MUST be before /:id to be captured correctly
+// NOTE: This route handles BOTH regular and embed links
 router.get('/:id/raw', async (req, res, next) => {
     const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
     const linkId = req.params.id as string;
@@ -523,23 +523,14 @@ router.get('/:id/raw', async (req, res, next) => {
             return res.redirect(`${frontendUrl}/s/${linkId}`);
         }
 
-        // If link is marked as embed, skip this handler and let the embed handler process it
-        if (link.isEmbed) {
-            return next();
-        }
-
-        // Check password if link is password protected
-        if (link.password) {
+        // Check password if link is password protected (skip for embeds)
+        if (link.password && !link.isEmbed) {
             const providedPassword = req.query.password as string;
             if (!providedPassword) {
-                // No password provided, redirect to verification page
                 return res.redirect(`${frontendUrl}/s/${linkId}?require_password=true`);
             }
-
-            // Verify password
             const isValid = await verifyPassword(link.password, providedPassword);
             if (!isValid) {
-                // Invalid password, redirect to verification page
                 return res.redirect(`${frontendUrl}/s/${linkId}?require_password=true&error=invalid_password`);
             }
         }
@@ -547,8 +538,8 @@ router.get('/:id/raw', async (req, res, next) => {
         // Import MinIO client
         const { minioClient, BUCKET_NAME } = require('../utils/storage');
 
-        // Safe filename for headers
-        const safeFilename = encodeURIComponent(link.file.originalName);
+        const file = link.file as any;
+        const safeFilename = encodeURIComponent(file.originalName);
 
         // Throttling limits (KB/s -> Bytes/s)
         const downloadSpeedKB = parseInt(process.env.MAX_DOWNLOAD_SPEED || '0');
@@ -557,37 +548,69 @@ router.get('/:id/raw', async (req, res, next) => {
 
         // Check if file exists in MinIO first
         try {
-            await minioClient.statObject(BUCKET_NAME, link.file.storedName);
+            await minioClient.statObject(BUCKET_NAME, file.storedName);
         } catch (statErr: any) {
             console.error(`[RAW] File not found in MinIO for link ${linkId}:`, statErr);
             return res.redirect(`${frontendUrl}/s/${linkId}?error=file_unavailable`);
         }
 
-        // Get the file stream
+        // Handle Range requests for video/audio seeking (especially important for embeds)
+        const range = req.headers.range;
+        
+        if (range && link.isEmbed) {
+            // For embeds, handle Range requests for video/audio players
+            try {
+                const stat = await minioClient.statObject(BUCKET_NAME, file.storedName);
+                const fileSize = stat.size;
+                const parts = range.replace(/bytes=/, "").split("-");
+                const start = parseInt(parts[0], 10);
+                const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+                const chunksize = (end - start) + 1;
+
+                const dataStream = await minioClient.getPartialObject(BUCKET_NAME, file.storedName, start, chunksize);
+
+                res.writeHead(206, {
+                    'Content-Range': `bytes ${start}-${end}/${fileSize}`,
+                    'Accept-Ranges': 'bytes',
+                    'Content-Length': chunksize,
+                    'Content-Type': file.mimeType,
+                    'Content-Disposition': `inline; filename="${safeFilename}"`,
+                });
+
+                dataStream.on('error', (err: any) => {
+                    console.error('[EMBED RAW] Stream Error', err);
+                    res.end();
+                });
+
+                dataStream.pipe(res);
+                return;
+            } catch (minioErr) {
+                console.error('[EMBED RAW] Range request error:', minioErr);
+                // Fall through to regular streaming
+            }
+        }
+
+        // Regular streaming (non-embed or fallback)
         let objectStream: any;
         try {
-            objectStream = await minioClient.getObject(BUCKET_NAME, link.file.storedName);
+            objectStream = await minioClient.getObject(BUCKET_NAME, file.storedName);
         } catch (getErr: any) {
             console.error(`[RAW] Failed to get object stream for link ${linkId}:`, getErr);
             return res.redirect(`${frontendUrl}/s/${linkId}?error=file_unavailable`);
         }
 
         // Set content headers before streaming
-        res.setHeader('Content-Type', link.file.mimeType || 'application/octet-stream');
+        res.setHeader('Content-Type', file.mimeType || 'application/octet-stream');
         res.setHeader('Content-Disposition', `inline; filename="${safeFilename}"`);
         res.setHeader('Cache-Control', 'public, max-age=3600');
 
-        // Handle stream errors (but don't try to send response if headers already sent)
+        // Handle stream errors
         objectStream.on('error', (streamErr: any) => {
             console.error(`[RAW] Stream error for link ${linkId}:`, streamErr);
-            // If headers already sent, we can't send an error response
-            // Just log and let the stream end naturally
             if (!res.headersSent) {
                 try {
                     res.status(500).json({ message: 'Error streaming file' });
-                } catch (e) {
-                    // Ignore errors if response already ended
-                }
+                } catch (e) {}
             }
         });
 
@@ -603,7 +626,7 @@ router.get('/:id/raw', async (req, res, next) => {
             }
         });
 
-        // Increment view count in background (don't wait for it)
+        // Increment view count in background
         prisma.link.update({
             where: { id: link.id },
             data: { views: { increment: 1 } },
@@ -619,9 +642,7 @@ router.get('/:id/raw', async (req, res, next) => {
                 if (!res.headersSent) {
                     try {
                         res.status(500).json({ message: 'Error streaming file' });
-                    } catch (e) {
-                        // Ignore errors if response already ended
-                    }
+                    } catch (e) {}
                 }
             });
             objectStream.pipe(throttledStream).pipe(res);
@@ -630,11 +651,9 @@ router.get('/:id/raw', async (req, res, next) => {
         }
     } catch (err: any) {
         console.error(`[RAW] General error for link ${linkId}:`, err);
-        // Handle error - redirect if headers not sent
         if (!res.headersSent) {
             return res.redirect(`${frontendUrl}/s/${linkId}?error=file_unavailable`);
         }
-        // If headers already sent, we can't redirect, just end the response
         if (!res.writableEnded) {
             res.end();
         }
@@ -809,83 +828,6 @@ router.get('/:id/download', async (req, res, next) => {
 
             dataStream.on('error', (err: any) => {
                 console.error('[PUBLIC DOWNLOAD] Stream Error', err);
-                res.end();
-            });
-
-            dataStream.pipe(res);
-        } catch (minioErr) {
-            next(minioErr);
-        }
-    } catch (err) {
-        next(err);
-    }
-});
-
-// @route   GET /api/links/:id/raw
-// @desc    Raw/inline file response for embed links (iframes, players, etc.)
-// @access  Public (restricted to links marked as isEmbed)
-router.get('/:id/raw', async (req, res, next) => {
-    try {
-        const link = await prisma.link.findFirst({
-            where: {
-                OR: [
-                    { id: req.params.id as string },
-                    { customSlug: req.params.id as string }
-                ]
-            },
-            include: {
-                file: true,
-            },
-        });
-
-        if (!link || !link.file) {
-            return res.status(404).json({ message: 'Link not found' });
-        }
-        if (!link.isEmbed) {
-            return res.status(403).json({ message: 'Link is not enabled for embeds' });
-        }
-        if (link.expiresAt && link.expiresAt < new Date()) {
-            return res.status(410).json({ message: 'Link expired' });
-        }
-
-        const file = link.file as any;
-        const safeFilename = encodeURIComponent(file.originalName);
-
-        try {
-            const stat = await minioClient.statObject(BUCKET_NAME, file.storedName);
-            const fileSize = stat.size;
-            const range = req.headers.range;
-
-            let dataStream;
-
-            if (range) {
-                const parts = range.replace(/bytes=/, "").split("-");
-                const start = parseInt(parts[0], 10);
-                const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
-                const chunksize = (end - start) + 1;
-
-                dataStream = await minioClient.getPartialObject(BUCKET_NAME, file.storedName, start, chunksize);
-
-                res.writeHead(206, {
-                    'Content-Range': `bytes ${start}-${end}/${fileSize}`,
-                    'Accept-Ranges': 'bytes',
-                    'Content-Length': chunksize,
-                    'Content-Type': file.mimeType,
-                    'Content-Disposition': `inline; filename="${safeFilename}"`,
-                });
-            } else {
-                dataStream = await minioClient.getObject(BUCKET_NAME, file.storedName);
-
-                res.writeHead(200, {
-                    'Content-Length': fileSize,
-                    'Content-Type': file.mimeType,
-                    'Content-Disposition': `inline; filename="${safeFilename}"`,
-                    'Accept-Ranges': 'bytes',
-                });
-            }
-
-            dataStream.on('error', (err: any) => {
-                console.error('[EMBED RAW] Stream Error', err);
                 res.end();
             });
 
