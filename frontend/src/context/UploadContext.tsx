@@ -170,8 +170,15 @@ export const UploadProvider: React.FC<{ children: React.ReactNode }> = ({ childr
                             updateStatus(item.id, 'completed', 100);
                         } catch (err: any) {
                             console.error("Upload failed for", item.file.name, err);
-                            updateStatus(item.id, 'error', 0, err.response?.data?.message || err.message || 'Upload failed');
-                            // Don't remove from queueRef - mark as done so we don't retry automatically
+                            const errorMessage = err.response?.data?.message || err.message || 'Upload failed';
+                            const virusName = err.response?.data?.virus;
+                            
+                            let displayMessage = errorMessage;
+                            if (errorMessage.includes('virus') || virusName) {
+                                displayMessage = `Archivo rechazado: virus detectado${virusName ? ` (${virusName.replace('FOUND', '').trim()})` : ''}`;
+                            }
+                            
+                            updateStatus(item.id, 'error', 0, displayMessage);
                         }
                         
                         // Remove from queueRef

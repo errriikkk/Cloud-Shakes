@@ -5,7 +5,7 @@ import { useUploads } from '@/context/UploadContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     CloudUpload, CheckCircle, XCircle, ChevronUp,
-    ChevronDown, X, Loader2, File
+    ChevronDown, X, Loader2, File, Trash2
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useTranslation } from '@/lib/i18n';
@@ -147,17 +147,17 @@ export function UploadProgress({ hasSelection }: { hasSelection?: boolean }) {
                         {!isUploading && (
                             <button
                                 onClick={clearCompleted}
-                                className="p-2 hover:bg-muted rounded-xl transition-colors"
-                                 title={t("common.clear")}
+                                className="p-2 hover:bg-green-500/10 hover:text-green-600 rounded-xl transition-all group"
+                                title={t("common.clearCompleted")}
                             >
-                                <X className="w-4 h-4" />
+                                <Trash2 className="w-4 h-4 text-green-500 group-hover:text-green-600" />
                             </button>
                         )}
                         {!isUploading && (
                             <button
                                 onClick={() => { setIsExpanded(false); setIsDismissed(true); }}
-                                className="p-2 hover:bg-muted rounded-xl transition-colors"
-                                 title={t("common.close")}
+                                className="p-2 hover:bg-red-500/10 hover:text-red-500 rounded-xl transition-all"
+                                title={t("common.close")}
                             >
                                 <X className="w-4 h-4" />
                             </button>

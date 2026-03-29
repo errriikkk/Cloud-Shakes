@@ -86,6 +86,7 @@ export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserPro
     const [selectedFile, setSelectedFile] = useState<string | null>(null);
     const [previewFile, setPreviewFile] = useState<FileItem | null>(null);
     const [previews, setPreviews] = useState<Record<string, string>>({});
+    const [loadingPreviews, setLoadingPreviews] = useState<Record<string, boolean>>({});
 
     // Navigation state
     const router = useRouter();
@@ -197,13 +198,16 @@ export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserPro
                 f.mimeType.startsWith('image/') || f.mimeType.startsWith('video/')
             );
             const newPreviews: Record<string, string> = {};
+            const newLoading: Record<string, boolean> = {};
             previewable.forEach((file) => {
                 if (!previews[file.id]) {
                     newPreviews[file.id] = `${API}/api/files/${file.id}/preview`;
+                    newLoading[file.id] = true;
                 }
             });
             if (Object.keys(newPreviews).length > 0) {
                 setPreviews(prev => ({ ...prev, ...newPreviews }));
+                setLoadingPreviews(prev => ({ ...prev, ...newLoading }));
             }
         };
         if (files.length > 0) loadPreviews();
@@ -1132,10 +1136,19 @@ export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserPro
                                         
                                         {/* Preview Area - Improved */}
                                         <div className="w-full aspect-[4/3] relative overflow-hidden bg-gradient-to-br from-muted/30 to-muted/10">
-                                            {previews[file.id] && file.mimeType.startsWith('image/') ? (
-                                                <img src={previews[file.id]} alt={file.originalName} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
+                                            {loadingPreviews[file.id] ? (
+                                                <div className="absolute inset-0 flex items-center justify-center">
+                                                    <div className="relative">
+                                                        <div className="w-10 h-10 border-3 border-primary/30 border-t-primary rounded-full animate-spin"></div>
+                                                        <div className="absolute inset-0 flex items-center justify-center">
+                                                            <div className="w-4 h-4 bg-primary/20 rounded-full animate-pulse"></div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ) : previews[file.id] && file.mimeType.startsWith('image/') ? (
+                                                <img src={previews[file.id]} alt={file.originalName} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" onLoad={() => setLoadingPreviews(prev => ({ ...prev, [file.id]: false }))} />
                                             ) : previews[file.id] && file.mimeType.startsWith('video/') ? (
-                                                <video src={previews[file.id]} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" muted playsInline preload="metadata" />
+                                                <video src={previews[file.id]} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" muted playsInline preload="metadata" onLoadedData={() => setLoadingPreviews(prev => ({ ...prev, [file.id]: false }))} />
                                             ) : (
                                                 <div className="absolute inset-0 flex items-center justify-center">
                                                     <div className="w-16 h-16 rounded-2xl bg-muted/50 flex items-center justify-center text-muted-foreground/60 group-hover:text-primary transition-colors">

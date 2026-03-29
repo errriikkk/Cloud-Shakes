@@ -16,6 +16,7 @@ const minioClient = new Minio.Client({
 });
 
 const BUCKET_NAME = process.env.MINIO_BUCKET_NAME || 'my-cloud-files';
+const QUARANTINE_BUCKET_NAME = process.env.QUARANTINE_BUCKET_NAME || 'my-cloud-quarantine';
 
 /**
  * Initialize storage: create bucket if needed and enforce private-only policy.
@@ -99,4 +100,4 @@ export const getPresignedUrl = async (objectName: string, expiry: number = 900, 
     return await minioClient.presignedGetObject(BUCKET_NAME, objectName, expiry, options);
 };
 
-export { minioClient, BUCKET_NAME };
+export { minioClient, BUCKET_NAME, QUARANTINE_BUCKET_NAME };

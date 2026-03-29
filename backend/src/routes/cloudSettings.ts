@@ -31,6 +31,7 @@ router.get('/', protect, requirePermission('view_settings'), async (_req, res, n
         res.json({
             storageLimitBytes: settings.storageLimitBytes ? settings.storageLimitBytes.toString() : null,
             maxUploadSpeedKB: settings.maxUploadSpeedKB ?? null,
+            antivirusEnabled: (settings as any).antivirusEnabled ?? false,
             updatedAt: settings.updatedAt,
         });
     } catch (err) {
@@ -43,7 +44,7 @@ router.get('/', protect, requirePermission('view_settings'), async (_req, res, n
 // @access  Private (manage_settings)
 router.put('/', protect, requirePermission('manage_settings'), async (req: AuthRequest, res, next) => {
     try {
-        const { storageLimitBytes, maxUploadSpeedKB } = req.body || {};
+        const { storageLimitBytes, maxUploadSpeedKB, antivirusEnabled } = req.body || {};
 
         let nextStorage: bigint | null | undefined = undefined;
         if (storageLimitBytes === null) nextStorage = null;
@@ -67,12 +68,14 @@ router.put('/', protect, requirePermission('manage_settings'), async (req: AuthR
             update: {
                 ...(nextStorage !== undefined ? { storageLimitBytes: nextStorage } : {}),
                 ...(nextSpeed !== undefined ? { maxUploadSpeedKB: nextSpeed } : {}),
+                ...(typeof antivirusEnabled === 'boolean' ? { antivirusEnabled } : {}),
                 updatedById: req.user.id,
             },
             create: {
                 id: DEFAULT_ID,
                 storageLimitBytes: nextStorage === undefined ? null : nextStorage,
                 maxUploadSpeedKB: nextSpeed === undefined ? null : nextSpeed,
+                antivirusEnabled: typeof antivirusEnabled === 'boolean' ? antivirusEnabled : false,
                 updatedById: req.user.id,
             },
         });
@@ -82,6 +85,7 @@ router.put('/', protect, requirePermission('manage_settings'), async (req: AuthR
         res.json({
             storageLimitBytes: updated.storageLimitBytes ? updated.storageLimitBytes.toString() : null,
             maxUploadSpeedKB: updated.maxUploadSpeedKB ?? null,
+            antivirusEnabled: updated.antivirusEnabled ?? false,
             updatedAt: updated.updatedAt,
         });
     } catch (err) {

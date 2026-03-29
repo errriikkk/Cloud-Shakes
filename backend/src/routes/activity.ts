@@ -175,6 +175,36 @@ router.get('/stats', protect, requirePermission('view_activity'), async (req: Au
     }
 });
 
+// @route   POST /api/activity
+// @desc    Create activity entry (for speed test and other internal uses)
+// @access  Private
+router.post('/', protect, async (req: AuthRequest, res, next) => {
+    try {
+        const { type, action, resourceId, resourceType, resourceName, metadata } = req.body;
+        
+        if (type === 'speed_test') {
+            // Just acknowledge the speed test request, don't create activity
+            return res.json({ success: true });
+        }
+
+        const activity = await prisma.activity.create({
+            data: {
+                ownerId: req.user.id,
+                type: type || 'system',
+                action: action || 'create',
+                resourceId,
+                resourceType,
+                resourceName,
+                metadata: metadata || undefined,
+            }
+        });
+        
+        res.json(activity);
+    } catch (err) {
+        next(err);
+    }
+});
+
 // Helper function to create activity (can be imported by other routes)
 export const createActivity = async (
     userId: string,

@@ -78,6 +78,7 @@ model File {
   createdAt        DateTime    @default(now())
   links            Link[]
   shares           FileShare[]
+  scan             FileScan?
 }
 
 model Link {
@@ -118,9 +119,22 @@ model CloudSettings {
   storageLimitBytes BigInt?
   // If null => use env default. If 0 => unlimited/no throttle.
   maxUploadSpeedKB  Int?
+  // Antivirus settings
+  antivirusEnabled  Boolean  @default(false)
   updatedAt         DateTime @updatedAt
   updatedById       String?
   updatedBy         User?    @relation("CloudSettingsUpdatedBy", fields: [updatedById], references: [id])
+}
+
+// ── Antivirus Scan ───────────────────────────────────────────────────
+model FileScan {
+  id          String    @id @default(uuid())
+  fileId      String    @unique
+  file        File      @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  status      String    @default("pending") // pending, scanning, clean, infected, error
+  result      String?   // virus name if infected
+  scannedAt   DateTime?
+  createdAt   DateTime  @default(now())
 }
 
 // ── Phase 2: Documents ───────────────────────────────────────────────

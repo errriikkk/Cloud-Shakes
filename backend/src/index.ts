@@ -53,6 +53,7 @@ import prisma from './config/db';
 import { hashPassword } from './utils/auth';
 import { seedAdmin } from './seed';
 import { csrfProtection, csrfProtectionLinks } from './middleware/csrfMiddleware';
+import { processPendingScans } from './services/antivirus';
 
 const isProduction = process.env.NODE_ENV === 'production';
 
@@ -490,6 +491,10 @@ const start = async () => {
         console.log(`🚀 Server running on port ${PORT}`);
         console.log(`🔒 Security: Helmet enabled, CSRF protection active, login rate-limited`);
         console.log(`📡 Socket.io: Ready for calls`);
+        
+        // Start antivirus scan worker
+        setInterval(processPendingScans, 30000);
+        processPendingScans().catch(err => console.error('[Antivirus] Initial scan error:', err));
     });
 
 };

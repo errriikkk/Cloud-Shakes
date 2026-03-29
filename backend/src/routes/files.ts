@@ -8,6 +8,12 @@ import { ThrottledStream } from '../utils/throttle';
 import { LIMITS } from '../config/limits';
 import { createActivity } from './activity';
 import { getCloudSettingsCached } from './cloudSettings';
+import * as fs from 'fs';
+import * as path from 'path';
+import { exec } from 'child_process';
+import { promisify } from 'util';
+
+const execAsync = promisify(exec);
 
 const router = express.Router();
 
@@ -101,13 +107,13 @@ router.post('/upload', protect, requirePermission('upload_files'), async (req: A
 
         try {
             const cloudSettings = await getCloudSettingsCached().catch(() => null);
-            // Storage Limit Check
+            
+            // Check storage limit FIRST
             const result = await prisma.file.aggregate({
                 where: { ownerId: req.user.id },
                 _sum: { size: true },
             });
             const currentUsage = BigInt(result._sum.size ?? 0);
-            // IMPORTANT: keep `null` (unlimited) distinct from `undefined` (not configured).
             const cloudLimit = cloudSettings ? cloudSettings.storageLimitBytes : undefined;
             const storageLimit = cloudLimit === null
                 ? null
@@ -120,21 +126,78 @@ router.post('/upload', protect, requirePermission('upload_files'), async (req: A
             }
 
             const storedName = `${uuidv4()}-${filename}`;
-            // Cloud/global upload speed (KB/s). null => env default, 0 => no throttle.
+            const tempDir = '/tmp/shakes-uploads';
+            const tempPath = path.join(tempDir, storedName);
+            
+            // Ensure temp directory exists
+            await fs.promises.mkdir(tempDir, { recursive: true });
+
+            // Upload to temp first (with throttling if enabled)
             const configuredSpeed = cloudSettings?.maxUploadSpeedKB;
             const uploadSpeedBytes = (configuredSpeed === null || configuredSpeed === undefined
                 ? LIMITS.MAX_UPLOAD_SPEED
                 : configuredSpeed) * 1024;
 
-            let streamToMinio: any = file;
+            let streamToDisk: any = file;
             if (uploadSpeedBytes > 0) {
                 const throttler = new ThrottledStream(uploadSpeedBytes);
-                streamToMinio = file.pipe(throttler);
+                streamToDisk = file.pipe(throttler);
             }
 
-            await minioClient.putObject(BUCKET_NAME, storedName, streamToMinio, undefined as any, {
+            const writeStream = fs.createWriteStream(tempPath);
+            streamToDisk.pipe(writeStream);
+
+            await new Promise<void>((resolve, reject) => {
+                writeStream.on('finish', resolve);
+                writeStream.on('error', reject);
+            });
+
+            // ANTIVIRUS SCAN - Check if enabled
+            const antivirusEnabled = (cloudSettings as any)?.antivirusEnabled;
+            if (antivirusEnabled) {
+                console.log(`[Antivirus] Scanning file: ${filename}`);
+                try {
+                    const { stdout } = await execAsync(
+                        `clamscan --no-summary "${tempPath}"`,
+                        { timeout: 300000 }
+                    );
+                    if (stdout.includes('Infected') || stdout.includes('FOUND')) {
+                        // Virus found - delete temp and reject
+                        await fs.promises.unlink(tempPath).catch(() => {});
+                        const virusMatch = stdout.match(/FOUND.*$/m);
+                        const virusName = virusMatch ? virusMatch[0].trim() : 'Unknown virus';
+                        console.log(`[Antivirus] REJECTED: ${filename} - ${virusName}`);
+                        return res.status(400).json({ 
+                            message: 'File rejected: virus detected',
+                            virus: virusName
+                        });
+                    }
+                    console.log(`[Antivirus] CLEAN: ${filename}`);
+                } catch (scanErr: any) {
+                    // ClamAV returns exit code 1 when virus found
+                    if (scanErr.code === 1 && scanErr.stdout?.includes('FOUND')) {
+                        await fs.promises.unlink(tempPath).catch(() => {});
+                        const virusMatch = scanErr.stdout.match(/FOUND.*$/m);
+                        const virusName = virusMatch ? virusMatch[0].trim() : 'Unknown virus';
+                        console.log(`[Antivirus] REJECTED: ${filename} - ${virusName}`);
+                        return res.status(400).json({ 
+                            message: 'File rejected: virus detected',
+                            virus: virusName
+                        });
+                    }
+                    // Other scan errors - log but continue (fail-open for usability)
+                    console.error('[Antivirus] Scan error:', scanErr.message);
+                }
+            }
+
+            // File is clean - move to MinIO
+            const fileBuffer = await fs.promises.readFile(tempPath);
+            await minioClient.putObject(BUCKET_NAME, storedName, fileBuffer, undefined as any, {
                 'Content-Type': mimeType,
             });
+            
+            // Delete temp file
+            await fs.promises.unlink(tempPath);
 
             const stat = await minioClient.statObject(BUCKET_NAME, storedName);
 
@@ -440,6 +503,8 @@ router.get('/:id/preview', protect, async (req: AuthRequest, res, next) => {
                 'Content-Type': file.mimeType,
                 'Content-Disposition': `inline; filename="${safeFilename}"`,
                 'Accept-Ranges': 'bytes',
+                'Cache-Control': 'public, max-age=86400', // Cache for 24 hours
+                'ETag': `"${file.id}-${(file as any).updatedAt?.getTime() || file.createdAt.getTime()}"`,
             });
 
             dataStream.on('error', (err: any) => {

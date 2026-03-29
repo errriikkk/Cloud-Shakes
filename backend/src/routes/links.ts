@@ -523,6 +523,11 @@ router.get('/:id/raw', async (req, res, next) => {
             return res.redirect(`${frontendUrl}/s/${linkId}`);
         }
 
+        // If link is marked as embed, skip this handler and let the embed handler process it
+        if (link.isEmbed) {
+            return next();
+        }
+
         // Check password if link is password protected
         if (link.password) {
             const providedPassword = req.query.password as string;

@@ -159,6 +159,7 @@ export default function SettingsPage() {
     const [cloudStorageGB, setCloudStorageGB] = useState("50");
     const [cloudUploadSpeedUnlimited, setCloudUploadSpeedUnlimited] = useState(false);
     const [cloudUploadSpeedMB, setCloudUploadSpeedMB] = useState("10");
+    const [antivirusEnabled, setAntivirusEnabled] = useState(false);
 
     const fetchCloudLimits = useCallback(async () => {
         if (!canManageSettings) return;
@@ -167,6 +168,7 @@ export default function SettingsPage() {
             const res = await axios.get(`${API_BASE}/api/cloud-settings`, { withCredentials: true });
             const storageLimitBytes = res.data?.storageLimitBytes;
             const maxUploadSpeedKB = res.data?.maxUploadSpeedKB;
+            setAntivirusEnabled(res.data?.antivirusEnabled ?? false);
 
             if (storageLimitBytes === null) {
                 setCloudStorageUnlimited(true);
@@ -205,6 +207,8 @@ export default function SettingsPage() {
             payload.maxUploadSpeedKB = cloudUploadSpeedUnlimited
                 ? 0
                 : Math.max(1, parseInt(cloudUploadSpeedMB || "1", 10)) * 1024;
+
+            payload.antivirusEnabled = antivirusEnabled;
 
             await axios.put(`${API_BASE}/api/cloud-settings`, payload, { withCredentials: true });
             alert(t("common.success"), t("common.saved") || t("common.success"), { type: 'success' });
@@ -689,6 +693,48 @@ export default function SettingsPage() {
                                 <p className="text-xs text-muted-foreground">
                                     Uses throttling; set Unlimited to remove throttling.
                                 </p>
+                            </div>
+
+                            {/* Antivirus Toggle */}
+                            <div className="flex items-center justify-between p-4 rounded-2xl bg-muted/30 border border-border/40">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-xl bg-red-500/10 flex items-center justify-center">
+                                        <Shield className="w-5 h-5 text-red-500" />
+                                    </div>
+                                    <div>
+                                        <p className="text-sm font-bold text-foreground">Antivirus (ClamAV)</p>
+                                        <p className="text-xs text-muted-foreground">
+                                            Escanea archivos subidos en busca de malware
+                                        </p>
+                                    </div>
+                                </div>
+                                <button
+                                    onClick={async () => {
+                                        const newValue = !antivirusEnabled;
+                                        setAntivirusEnabled(newValue);
+                                        try {
+                                            await axios.put(`${API_BASE}/api/cloud-settings`, 
+                                                { antivirusEnabled: newValue }, 
+                                                { withCredentials: true }
+                                            );
+                                            alert(t("common.success"), newValue ? "Antivirus activado" : "Antivirus desactivado", { type: 'success' });
+                                        } catch (err) {
+                                            setAntivirusEnabled(!newValue);
+                                            alert(t("common.error"), "Error al guardar", { type: 'danger' });
+                                        }
+                                    }}
+                                    className={cn(
+                                        "relative inline-flex h-6 w-11 items-center rounded-full transition-colors",
+                                        antivirusEnabled ? "bg-green-500" : "bg-muted"
+                                    )}
+                                >
+                                    <span
+                                        className={cn(
+                                            "inline-block h-4 w-4 transform rounded-full bg-white transition-transform",
+                                            antivirusEnabled ? "translate-x-6" : "translate-x-1"
+                                        )}
+                                    />
+                                </button>
                             </div>
 
                             <div className="flex items-center gap-3">

@@ -2,8 +2,14 @@ FROM node:20-alpine
 
 WORKDIR /app
 
-# Install netcat (wait for Postgres), wget (healthcheck), and postgresql tools for backups
-RUN apk add --no-cache openssl netcat-openbsd wget postgresql-client gzip
+# Install netcat (wait for Postgres), wget (healthcheck), postgresql tools for backups, and ClamAV for antivirus
+RUN apk add --no-cache openssl netcat-openbsd wget postgresql-client gzip clamav clamav-db freshclam
+
+# Configure ClamAV to not start daemon automatically (we'll use clamscan directly)
+RUN freshclam || true && \
+    sed -i 's/^Foreground yes$/Foreground no/' /etc/clamav/clamd.conf || true && \
+    mkdir -p /var/run/clamav && \
+    chown -R clamav:clamav /var/run/clamav /var/lib/clamav
 
 # Copy package files and Prisma schema
 COPY package*.json ./
