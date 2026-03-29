@@ -196,7 +196,7 @@ function SharedLinksContent() {
     };
 
     const handleCopyEmbed = async (id: string) => {
-        const url = `${window.location.origin}/api/links/${id}/raw`;
+        const url = `${window.location.origin}/s/${id}/raw`;
         await copyToClipboard(url);
         setCopiedId(`embed-${id}`);
         setCopiedUrl(url);

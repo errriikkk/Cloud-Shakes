@@ -32,7 +32,7 @@ export function CreateLinkModal({ isOpen, onClose, fileId, onSuccess }: CreateLi
     const origin = typeof window !== "undefined" ? window.location.origin : "";
 
     const shareUrlFor = (id: string) => `${origin}/s/${id}`;
-    const embedUrlFor = (id: string) => `${origin}/api/links/${id}/raw`;
+    const embedUrlFor = (id: string) => `${origin}/s/${id}/raw`;
 
     const loadExisting = async () => {
         try {
@@ -116,7 +116,7 @@ export function CreateLinkModal({ isOpen, onClose, fileId, onSuccess }: CreateLi
             }, { withCredentials: true });
 
             const linkUrl = isEmbed
-                ? `${window.location.origin}/api/links/${res.data.id}/raw`
+                ? `${window.location.origin}/s/${res.data.id}/raw`
                 : `${window.location.origin}/s/${res.data.id}`;
             onSuccess(linkUrl);
             // refresh list so user doesn't create duplicates blindly next time
