@@ -4,473 +4,473 @@ import { useState, useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
 import axios from "axios";
 import { API_ENDPOINTS } from "@/lib/api";
-import { 
-    FileText, Calendar, StickyNote, HardDrive, Folder, 
-    ArrowRight, Plus, Link as LinkIcon, Zap, Activity,
-    MessageSquare, Image, Video, BarChart3, Clock, Bell,
-    Users, Settings, File, ChevronRight, Star, TrendingUp, Upload
+import {
+    FileText, Calendar, StickyNote, HardDrive, Folder,
+    Link as LinkIcon, Activity, Image, Video, BarChart3,
+    Clock, Users, File, ChevronRight, Upload
 } from "lucide-react";
-import { format, isToday, isTomorrow, startOfDay, differenceInDays, addDays } from "date-fns";
+import {
+    format, isToday, isTomorrow, startOfDay,
+    differenceInDays, addDays, formatDistanceToNow
+} from "date-fns";
 import { es, enUS } from "date-fns/locale";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
 import { motion } from "framer-motion";
 
+/* ─── types ─────────────────────────────────────────────── */
 interface CalendarEvent {
-    id: string;
-    title: string;
-    startDate: string;
-    endDate: string | null;
-    allDay: boolean;
-    color: string;
+    id: string; title: string; startDate: string;
+    endDate: string | null; allDay: boolean; color: string;
+}
+interface ActivityItem {
+    id: string; type: string; action: string;
+    resourceName?: string; createdAt: string;
 }
 
+/* ─── helpers ────────────────────────────────────────────── */
 function formatBytes(bytes: number): string {
     if (!Number.isFinite(bytes)) return "∞";
     if (bytes === 0) return "0 B";
-    const k = 1024;
-    const sizes = ["B", "KB", "MB", "GB", "TB"];
+    const k = 1024, sizes = ["B", "KB", "MB", "GB", "TB"];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i];
 }
 
-const HOME_CACHE_KEY = "dashboard_home_cache_v1";
-const HOME_CACHE_TTL_MS = 60_000; // 1 minuto
-
-interface HomeCachePayload {
-    upcomingEvents: CalendarEvent[];
-    recentFiles: any[];
-    storageUsed: number;
-    storageLimit: number;
-    stats: {
-        files: number;
-        notes: number;
-        links: number;
-    };
-    timestamp: number;
-}
-
+/* ─── component ──────────────────────────────────────────── */
 export default function HomePage() {
     const { user } = useAuth();
     const { t, locale } = useTranslation();
-    const dateLocale = locale === 'es' ? es : enUS;
-    
+    const dateLocale = locale === "es" ? es : enUS;
+
     const [upcomingEvents, setUpcomingEvents] = useState<CalendarEvent[]>([]);
-    const [recentFiles, setRecentFiles] = useState<any[]>([]);
-    const [storageUsed, setStorageUsed] = useState(0);
-    const [storageLimit, setStorageLimit] = useState<number | null>(null);
-    const [loading, setLoading] = useState(true);
-    const [stats, setStats] = useState({ files: 0, notes: 0, links: 0 });
+    const [recentFiles, setRecentFiles]       = useState<any[]>([]);
+    const [recentNotes, setRecentNotes]       = useState<any[]>([]);
+    const [activities, setActivities]         = useState<ActivityItem[]>([]);
+    const [storageUsed, setStorageUsed]       = useState(0);
+    const [storageLimit, setStorageLimit]     = useState<number>(Number.POSITIVE_INFINITY);
+    const [loading, setLoading]               = useState(true);
+
+    const hasPerm = (p: string) => user?.permissions?.includes(p) || user?.isAdmin;
 
     const getGreeting = () => {
-        const hour = new Date().getHours();
-        if (hour >= 5 && hour < 12) return t("home.morning");
-        if (hour >= 12 && hour < 20) return t("home.afternoon");
-        return t("home.night");
+        const h = new Date().getHours();
+        if (h >= 5 && h < 12) return t("home.morning")  || "Good morning";
+        if (h >= 12 && h < 20) return t("home.afternoon") || "Good afternoon";
+        return t("home.night") || "Good evening";
     };
 
-    const applyHomeData = (data: Omit<HomeCachePayload, "timestamp">) => {
-        setUpcomingEvents(data.upcomingEvents || []);
-        setRecentFiles(data.recentFiles || []);
-        setStorageUsed(Number(data.storageUsed || 0));
-        const limitRaw = data.storageLimit;
-        setStorageLimit(Number.isFinite(limitRaw) ? Number(limitRaw) : Number.POSITIVE_INFINITY);
-        setStats({
-            files: data.stats.files || 0,
-            notes: data.stats.notes || 0,
-            links: data.stats.links || 0,
-        });
-    };
-
-    const fetchData = async (options?: { silent?: boolean }) => {
-        const silent = options?.silent;
-        if (!user) return;
-        if (!silent) {
-            setLoading(true);
-        }
-        
-        // Helper to extract data from API response
-        const extractData = (res: any) => {
-            if (Array.isArray(res.data)) return res.data;
-            if (res.data && Array.isArray(res.data.data)) return res.data.data;
-            return [];
-        };
-        
-        try {
-            const [eventsRes, usageRes, filesRes, notesRes, linksRes] = await Promise.all([
-                axios.get(API_ENDPOINTS.CALENDAR.BASE, {
-                    params: { month: new Date().getMonth() + 1, year: new Date().getFullYear() },
-                    withCredentials: true
-                }).catch(() => ({ data: [] })),
-                axios.get(API_ENDPOINTS.FILES.USAGE, { withCredentials: true }).catch(() => ({ data: { used: 0, limit: null } })),
-                axios.get(API_ENDPOINTS.FILES.BASE, { params: { limit: 6 }, withCredentials: true }).catch(() => ({ data: { data: [] } })),
-                axios.get(API_ENDPOINTS.NOTES.BASE, { params: { limit: 6 }, withCredentials: true }).catch(() => ({ data: { data: [] } })),
-                axios.get(API_ENDPOINTS.LINKS.BASE, { params: { limit: 6 }, withCredentials: true }).catch(() => ({ data: [] })),
-            ]);
-
-            const files = extractData(filesRes);
-            const notes = extractData(notesRes);
-
-            const now = startOfDay(new Date());
-            const nextWeek = addDays(now, 7);
-            
-            const upcoming = eventsRes.data
-                .filter((e: CalendarEvent) => startOfDay(new Date(e.startDate)) >= now && startOfDay(new Date(e.startDate)) <= nextWeek)
-                .sort((a: CalendarEvent, b: CalendarEvent) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime())
-                .slice(0, 4);
-
-            const nextState: Omit<HomeCachePayload, "timestamp"> = {
-                upcomingEvents: upcoming,
-                recentFiles: files || [],
-                storageUsed: Number(usageRes.data.used || 0),
-                storageLimit: usageRes.data.limit === null ? Number.POSITIVE_INFINITY : Number(usageRes.data.limit),
-                stats: {
-                    files: files?.length || 0,
-                    notes: notes?.length || 0,
-                    links: linksRes.data?.length || 0,
-                },
-            };
-
-            applyHomeData(nextState);
-
-            // Persist in sessionStorage para tener una carga más fluida la próxima vez
-            if (typeof window !== "undefined") {
-                const payload: HomeCachePayload = {
-                    ...nextState,
-                    timestamp: Date.now(),
-                };
-                try {
-                    sessionStorage.setItem(HOME_CACHE_KEY, JSON.stringify(payload));
-                } catch {
-                    // ignore storage errors
-                }
-            }
-        } catch (err) {
-            console.error("Failed to fetch home data:", err);
-        } finally {
-            if (!silent) {
-                setLoading(false);
-            }
-        }
-    };
-
+    /* fetch ------------------------------------------------ */
     useEffect(() => {
         if (!user) return;
+        setLoading(true);
 
-        let hasFreshCache = false;
+        const extract = (res: any): any[] => {
+            if (!res) return [];
+            if (Array.isArray(res.data)) return res.data;
+            if (Array.isArray(res.data?.data)) return res.data.data;
+            return [];
+        };
 
-        if (typeof window !== "undefined") {
-            try {
-                const raw = sessionStorage.getItem(HOME_CACHE_KEY);
-                if (raw) {
-                    const cached: HomeCachePayload = JSON.parse(raw);
-                    if (cached.timestamp && Date.now() - cached.timestamp < HOME_CACHE_TTL_MS) {
-                        hasFreshCache = true;
-                        applyHomeData(cached);
-                        setLoading(false);
-                    }
-                }
-            } catch {
-                // ignore cache errors
+        const reqs: Promise<any>[] = [
+            axios.get(API_ENDPOINTS.FILES.USAGE, { withCredentials: true }).catch(() => ({ data: { used: 0, limit: null } })),
+            axios.get(API_ENDPOINTS.FILES.BASE,  { params: { limit: 8 }, withCredentials: true }).catch(() => ({ data: [] })),
+            hasPerm("view_calendar")
+                ? axios.get(API_ENDPOINTS.CALENDAR.BASE, { params: { month: new Date().getMonth() + 1, year: new Date().getFullYear() }, withCredentials: true }).catch(() => ({ data: [] }))
+                : Promise.resolve(null),
+            hasPerm("view_notes")
+                ? axios.get(API_ENDPOINTS.NOTES.BASE, { params: { limit: 6 }, withCredentials: true }).catch(() => ({ data: [] }))
+                : Promise.resolve(null),
+            axios.get(API_ENDPOINTS.ACTIVITY.BASE, { params: { limit: 8 }, withCredentials: true }).catch(() => ({ data: [] })),
+        ];
+
+        Promise.all(reqs).then(([usageRes, filesRes, eventsRes, notesRes, actRes]) => {
+            setStorageUsed(Number(usageRes?.data?.used || 0));
+            setStorageLimit(
+                usageRes?.data?.limit == null
+                    ? Number.POSITIVE_INFINITY
+                    : Number(usageRes.data.limit)
+            );
+            setRecentFiles(extract(filesRes).slice(0, 8));
+
+            if (eventsRes) {
+                const now = startOfDay(new Date());
+                const next7 = addDays(now, 7);
+                setUpcomingEvents(
+                    extract(eventsRes)
+                        .filter((e: CalendarEvent) => {
+                            const d = startOfDay(new Date(e.startDate));
+                            return d >= now && d <= next7;
+                        })
+                        .sort((a: CalendarEvent, b: CalendarEvent) =>
+                            new Date(a.startDate).getTime() - new Date(b.startDate).getTime()
+                        )
+                        .slice(0, 5)
+                );
             }
-        }
-
-        // Siempre refrescamos en segundo plano; si había caché, lo hacemos en modo "silent"
-        fetchData({ silent: hasFreshCache });
+            if (notesRes) setRecentNotes(extract(notesRes).slice(0, 6));
+            setActivities(extract(actRes).slice(0, 8));
+        }).finally(() => setLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [user]);
 
-    const storagePercent = typeof storageLimit === "number" && Number.isFinite(storageLimit) && storageLimit > 0
-        ? Math.min((storageUsed / storageLimit) * 100, 100)
-        : 0;
+    /* derived ---------------------------------------------- */
+    const storagePercent = Number.isFinite(storageLimit) && storageLimit > 0
+        ? Math.min((storageUsed / storageLimit) * 100, 100) : 0;
     const isCritical = storagePercent > 90;
-    const isWarning = storagePercent > 70;
+    const isWarning  = storagePercent > 70;
 
-    const getEventDateLabel = (date: string) => {
-        const eventDate = startOfDay(new Date(date));
+    const getEventLabel = (date: string) => {
+        const d = startOfDay(new Date(date));
         const today = startOfDay(new Date());
-        if (isToday(eventDate)) return t("calendar.today");
-        if (isTomorrow(eventDate)) return t("common.next");
-        const daysDiff = differenceInDays(eventDate, today);
-        if (daysDiff <= 7) return format(eventDate, "EEE d", { locale: dateLocale });
-        return format(eventDate, "d MMM", { locale: dateLocale });
+        if (isToday(d))    return t("calendar.today") || "Today";
+        if (isTomorrow(d)) return t("common.next")    || "Tomorrow";
+        if (differenceInDays(d, today) <= 7) return format(d, "EEE d", { locale: dateLocale });
+        return format(d, "d MMM", { locale: dateLocale });
     };
 
-    const quickActions = [
-        { icon: Upload, label: t("files.upload"), href: "/dashboard/files", color: "bg-blue-500", permission: true },
-        { icon: StickyNote, label: t("nav.notes"), href: "/dashboard/notes", color: "bg-yellow-500", permission: user?.permissions?.includes('view_notes') || user?.isAdmin },
-        { icon: Calendar, label: t("nav.calendar"), href: "/dashboard/calendar", color: "bg-green-500", permission: user?.permissions?.includes('view_calendar') || user?.isAdmin },
-        { icon: LinkIcon, label: t("nav.shared"), href: "/dashboard/links", color: "bg-pink-500", permission: user?.permissions?.includes('view_links') || user?.isAdmin },
-        { icon: MessageSquare, label: t("nav.chat"), href: "/dashboard/chat", color: "bg-orange-500", permission: user?.permissions?.includes('view_chat') || user?.isAdmin },
-    ].filter(a => a.permission);
-
-    const statCards = [
-        { label: t("nav.files"), value: stats.files, icon: Folder, color: "from-blue-500 to-blue-600", href: "/dashboard/files" },
-        { label: t("nav.notes"), value: stats.notes, icon: StickyNote, color: "from-yellow-500 to-yellow-600", href: "/dashboard/notes" },
-        { label: t("nav.shared"), value: stats.links, icon: LinkIcon, color: "from-pink-500 to-pink-600", href: "/dashboard/links" },
-    ];
-
-    const getFileIcon = (mimeType: string) => {
-        if (mimeType?.includes('image')) return Image;
-        if (mimeType?.includes('video')) return Video;
-        if (mimeType?.includes('pdf') || mimeType?.includes('document')) return FileText;
+    const getFileIcon = (mime: string) => {
+        if (mime?.includes("image"))  return Image;
+        if (mime?.includes("video"))  return Video;
+        if (mime?.includes("pdf") || mime?.includes("document")) return FileText;
         return File;
     };
 
-    if (loading) {
-        return (
-            <div className="space-y-6">
-                <div className="h-20 bg-muted/40 rounded-2xl animate-pulse" />
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    {[1,2,3,4].map(i => <div key={i} className="h-24 bg-muted/40 rounded-2xl animate-pulse" />)}
-                </div>
-            </div>
-        );
-    }
+    const actionColor = (action: string) => {
+        const a = action?.toLowerCase() || "";
+        if (a.includes("create") || a.includes("upload")) return "text-green-500";
+        if (a.includes("edit")   || a.includes("update")) return "text-blue-500";
+        if (a.includes("delete") || a.includes("remove")) return "text-red-500";
+        return "text-muted-foreground";
+    };
 
+    /* quick actions (role-aware) */
+    const quickActions = [
+        { icon: Upload,      label: t("files.upload") || "Upload",   href: "/dashboard/files",    show: true },
+        { icon: StickyNote,  label: t("nav.notes")    || "Notes",    href: "/dashboard/notes",    show: hasPerm("view_notes") },
+        { icon: Calendar,    label: t("nav.calendar") || "Calendar", href: "/dashboard/calendar", show: hasPerm("view_calendar") },
+        { icon: LinkIcon,    label: t("nav.shared")   || "Links",    href: "/dashboard/links",    show: hasPerm("view_links") },
+    ].filter(a => a.show);
+
+    /* ── skeleton ── */
+    if (loading) return (
+        <div className="w-full max-w-[1400px] mx-auto px-4 space-y-8 pb-12">
+            <div className="h-16 bg-muted/40 rounded-2xl animate-pulse" />
+            <div className="grid grid-cols-3 gap-8">
+                {[1,2,3].map(i => <div key={i} className="h-72 bg-muted/40 rounded-3xl animate-pulse" />)}
+            </div>
+            <div className="grid grid-cols-3 gap-8">
+                {[1,2,3].map(i => <div key={i} className="h-56 bg-muted/40 rounded-3xl animate-pulse" />)}
+            </div>
+        </div>
+    );
+
+    /* ── render ── */
     return (
-        <div className="space-y-6">
-            {/* Header */}
-            <div className="bg-gradient-to-r from-primary/10 via-primary/5 to-transparent border border-primary/20 rounded-3xl p-6">
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                    <div>
-                        <h1 className="text-3xl md:text-4xl font-black text-foreground">
-                            {getGreeting()}, <span className="text-primary">{user?.displayName || user?.username}</span>
-                        </h1>
-                        <p className="text-muted-foreground mt-2 flex items-center gap-3">
-                            <Calendar className="w-4 h-4" />
-                            {format(new Date(), "EEEE, d MMMM yyyy", { locale: dateLocale })}
-                            <span className="mx-2">•</span>
-                            <Clock className="w-4 h-4" />
-                            {format(new Date(), "HH:mm")}
-                        </p>
-                    </div>
-                    <div className="flex items-center gap-3">
-                        <Link href="/dashboard/files" className="flex items-center gap-2 px-4 py-2.5 bg-primary text-white rounded-xl font-bold hover:brightness-110 transition-all shadow-lg shadow-primary/25">
-                            <Plus className="w-5 h-5" />
-                            {t("files.upload")}
+        <div className="w-full max-w-[1400px] mx-auto px-4 space-y-8 pb-12">
+
+            {/* ── HEADER ─────────────────────────────────── */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 flex-wrap">
+                {/* Greeting */}
+                <div>
+                    <h1 className="text-3xl font-black tracking-tight text-foreground">
+                        {getGreeting()},{" "}
+                        <span className="text-primary">{user?.displayName || user?.username}</span>
+                    </h1>
+                    <p className="text-sm text-muted-foreground flex items-center gap-2 mt-1 font-medium">
+                        <Calendar className="w-4 h-4" />
+                        {format(new Date(), "EEEE, d MMMM yyyy", { locale: dateLocale })}
+                        <span className="opacity-40">•</span>
+                        <Clock className="w-4 h-4" />
+                        {format(new Date(), "HH:mm")}
+                    </p>
+                </div>
+
+                {/* Quick actions */}
+                <div className="flex items-center gap-3 flex-wrap">
+                    {quickActions.map((a, i) => (
+                        <Link key={i} href={a.href}
+                            className="flex items-center gap-2.5 px-4 py-2.5 bg-card border border-border/60 hover:bg-muted/50 rounded-xl text-sm font-bold transition-all hover:shadow-sm">
+                            <a.icon className="w-4 h-4 text-primary" />
+                            {a.label}
                         </Link>
-                    </div>
+                    ))}
                 </div>
             </div>
 
-            {/* Quick Actions */}
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-                {quickActions.map((action, i) => (
-                    <Link key={i} href={action.href}>
-                        <motion.div 
-                            initial={{ opacity: 0, y: 20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: i * 0.05 }}
-                            className="group bg-background border border-border/60 rounded-2xl p-4 hover:border-primary/40 hover:shadow-lg hover:shadow-primary/10 transition-all"
-                        >
-                            <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center mb-3", action.color, "text-white")}>
-                                <action.icon className="w-5 h-5" />
-                            </div>
-                            <p className="text-sm font-bold text-foreground group-hover:text-primary transition-colors">{action.label}</p>
-                        </motion.div>
-                    </Link>
-                ))}
-            </div>
+            {/* ── ROW 1: [Storage + Files (2 cols)] [Notes (1 col)] ── */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
 
-            {/* Stats Grid */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                {statCards.map((stat, i) => (
-                    <Link key={i} href={stat.href}>
-                        <motion.div 
-                            initial={{ opacity: 0, scale: 0.95 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            transition={{ delay: i * 0.1 }}
-                            className="bg-background border border-border/60 rounded-2xl p-5 hover:border-primary/30 hover:shadow-lg transition-all group"
-                        >
-                            <div className={cn("w-12 h-12 rounded-2xl bg-gradient-to-br flex items-center justify-center mb-4 shadow-lg", stat.color, "text-white")}>
-                                <stat.icon className="w-6 h-6" />
-                            </div>
-                            <p className="text-3xl font-black text-foreground">{stat.value}</p>
-                            <p className="text-sm text-muted-foreground font-medium mt-1 group-hover:text-primary transition-colors">{stat.label}</p>
-                        </motion.div>
-                    </Link>
-                ))}
-            </div>
+                {/* Storage + Files — span 2 */}
+                <div className="md:col-span-2 flex flex-col gap-6">
 
-            {/* Main Content Grid */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {/* Upcoming Events */}
-                <div className="lg:col-span-2 bg-background border border-border/60 rounded-2xl p-6">
-                    <div className="flex items-center justify-between mb-6">
-                        <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-xl bg-purple-500/10 flex items-center justify-center">
-                                <Calendar className="w-5 h-5 text-purple-500" />
+                    {/* Storage compact bar */}
+                    <div className="bg-card border border-border/40 rounded-3xl px-6 py-4 flex items-center gap-5 hover:shadow-sm transition-shadow">
+                        <div className="w-10 h-10 rounded-xl bg-blue-500/10 flex items-center justify-center text-blue-500 shrink-0">
+                            <HardDrive className="w-5 h-5" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between mb-2">
+                                <span className="text-base font-bold text-foreground">{t("nav.storage") || "Storage"}</span>
+                                <span className="text-sm font-medium text-muted-foreground">
+                                    {formatBytes(storageUsed)} / {Number.isFinite(storageLimit) ? formatBytes(storageLimit) : "∞"}
+                                    {" "}· <span className="text-foreground">{Math.round(storagePercent)}%</span>
+                                </span>
                             </div>
-                            <div>
-                                <h2 className="text-lg font-bold text-foreground">{t("home.upcomingEvents")}</h2>
-                                <p className="text-xs text-muted-foreground">{t("home.thisWeek")}</p>
+                            <div className="h-2 bg-muted/60 rounded-full overflow-hidden">
+                                <motion.div
+                                    initial={{ width: 0 }}
+                                    animate={{ width: `${storagePercent}%` }}
+                                    transition={{ duration: 0.8, ease: "easeOut" }}
+                                    className={cn("h-full rounded-full",
+                                        isCritical ? "bg-red-500" :
+                                        isWarning  ? "bg-amber-500" :
+                                        "bg-gradient-to-r from-blue-500 to-indigo-500"
+                                    )}
+                                />
                             </div>
                         </div>
-                        <Link href="/dashboard/calendar" className="text-sm text-primary font-bold hover:underline flex items-center gap-1">
-                            {t("common.viewAll")} <ChevronRight className="w-4 h-4" />
-                        </Link>
+                        {isWarning && (
+                            <span className={cn("text-sm font-bold shrink-0", isCritical ? "text-red-500" : "text-amber-500")}>
+                                {isCritical ? "⚠ Critical" : "⚠ Warning"}
+                            </span>
+                        )}
                     </div>
 
-                    {upcomingEvents.length === 0 ? (
-                        <div className="text-center py-8 text-muted-foreground">
-                            <Calendar className="w-12 h-12 mx-auto mb-3 opacity-30" />
-                            <p className="font-medium">{t("home.noEvents")}</p>
+                    {/* Recent Files */}
+                    <div className="bg-card border border-border/40 rounded-3xl p-6 flex-1 hover:shadow-sm transition-shadow">
+                        <div className="flex items-center justify-between mb-5">
+                            <div className="flex items-center gap-3">
+                                <Folder className="w-5 h-5 text-green-500" />
+                                <span className="font-bold text-base text-foreground">{t("home.recentFiles") || "Recent Files"}</span>
+                            </div>
+                            <Link href="/dashboard/files" className="text-sm text-primary font-bold hover:underline flex items-center gap-1">
+                                {t("common.viewAll") || "View all"} <ChevronRight className="w-4 h-4" />
+                            </Link>
                         </div>
-                    ) : (
-                        <div className="space-y-3">
-                            {upcomingEvents.map((event, i) => (
-                                <motion.div 
-                                    key={event.id}
-                                    initial={{ opacity: 0, x: -20 }}
-                                    animate={{ opacity: 1, x: 0 }}
-                                    transition={{ delay: i * 0.1 }}
-                                    className="flex items-center gap-4 p-3 rounded-xl hover:bg-muted/50 transition-colors"
-                                >
-                                    <div className={cn("w-1 h-12 rounded-full", event.color || "bg-purple-500")} />
-                                    <div className="flex-1 min-w-0">
-                                        <p className="font-bold text-foreground truncate">{event.title}</p>
-                                        <p className="text-xs text-muted-foreground">{getEventDateLabel(event.startDate)}</p>
-                                    </div>
-                                    <ChevronRight className="w-4 h-4 text-muted-foreground" />
-                                </motion.div>
-                            ))}
+                        <div className="space-y-2">
+                            {recentFiles.length === 0 ? (
+                                <div className="py-10 text-center text-muted-foreground">
+                                    <Folder className="w-10 h-10 mx-auto mb-3 opacity-30" />
+                                    <p className="text-sm">{t("home.noFiles") || "No recent files"}</p>
+                                </div>
+                            ) : (
+                                recentFiles.map((f, i) => {
+                                    const FI = getFileIcon(f.mimeType);
+                                    return (
+                                        <Link key={f.id} href={`/dashboard/files?focus=${f.id}`}>
+                                            <motion.div
+                                                initial={{ opacity: 0, y: 6 }}
+                                                animate={{ opacity: 1, y: 0 }}
+                                                transition={{ delay: i * 0.04 }}
+                                                className="flex items-center gap-4 px-4 py-3 rounded-2xl hover:bg-muted/50 border border-transparent hover:border-border/50 transition-all group"
+                                            >
+                                                <div className="w-10 h-10 rounded-xl bg-muted/60 flex items-center justify-center text-muted-foreground group-hover:text-primary transition-colors shrink-0">
+                                                    <FI className="w-5 h-5" />
+                                                </div>
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="text-base font-semibold truncate text-foreground">{f.originalName}</p>
+                                                    <p className="text-sm text-muted-foreground">
+                                                        {formatBytes(f.size)}
+                                                        {f.updatedAt ? ` · ${formatDistanceToNow(new Date(f.updatedAt))} ago` : ""}
+                                                    </p>
+                                                </div>
+                                            </motion.div>
+                                        </Link>
+                                    );
+                                })
+                            )}
                         </div>
-                    )}
+                    </div>
+
                 </div>
 
-                {/* Storage */}
-                <div className="bg-background border border-border/60 rounded-2xl p-6">
-                    <div className="flex items-center gap-3 mb-6">
-                        <div className="w-10 h-10 rounded-xl bg-blue-500/10 flex items-center justify-center">
-                            <HardDrive className="w-5 h-5 text-blue-500" />
+                {/* Notes — span 1 */}
+                {hasPerm("view_notes") ? (
+                    <div className="md:col-span-1 bg-card border border-border/40 rounded-3xl p-6 hover:shadow-sm transition-shadow flex flex-col">
+                        <div className="flex items-center justify-between mb-5">
+                            <div className="flex items-center gap-3">
+                                <StickyNote className="w-5 h-5 text-yellow-500" />
+                                <span className="font-bold text-base text-foreground">{t("nav.notes") || "Notes"}</span>
+                            </div>
+                            <Link href="/dashboard/notes" className="text-sm text-primary font-bold hover:underline flex items-center gap-1">
+                                {t("common.viewAll") || "View all"} <ChevronRight className="w-4 h-4" />
+                            </Link>
                         </div>
-                        <div>
-                            <h2 className="text-lg font-bold text-foreground">{t("nav.storage")}</h2>
-                            <p className="text-xs text-muted-foreground">{t("home.usage")}</p>
+                        <div className="grid grid-cols-2 gap-4 flex-1">
+                            {recentNotes.length === 0 ? (
+                                <div className="col-span-2 flex flex-col items-center justify-center py-12 text-muted-foreground">
+                                    <StickyNote className="w-10 h-10 mb-3 opacity-30" />
+                                    <p className="text-sm">No notes yet</p>
+                                </div>
+                            ) : (
+                                recentNotes.map((n, i) => (
+                                    <Link key={n.id} href="/dashboard/notes">
+                                        <motion.div
+                                            initial={{ opacity: 0, scale: 0.95 }}
+                                            animate={{ opacity: 1, scale: 1 }}
+                                            transition={{ delay: i * 0.04 }}
+                                            className="h-32 bg-muted/30 border border-border/40 hover:border-primary/40 rounded-2xl p-4 flex flex-col justify-between cursor-pointer hover:bg-muted/60 transition-all group"
+                                        >
+                                            <p className="text-sm font-bold line-clamp-3 group-hover:text-primary transition-colors">{n.title || "Untitled"}</p>
+                                            <p className="text-xs font-medium text-muted-foreground mt-2">{formatDistanceToNow(new Date(n.updatedAt))} ago</p>
+                                        </motion.div>
+                                    </Link>
+                                ))
+                            )}
                         </div>
-                    </div>
-
-                    <div className="relative pt-8">
-                        <div className="flex justify-between items-end mb-2">
-                            <span className="text-3xl font-black text-foreground">{formatBytes(storageUsed)}</span>
-                            <span className="text-sm text-muted-foreground">/ {storageLimit === null ? "—" : formatBytes(storageLimit)}</span>
-                        </div>
-                        <div className="h-4 bg-muted/50 rounded-full overflow-hidden">
-                            <motion.div 
-                                initial={{ width: 0 }}
-                                animate={{ width: `${storagePercent}%` }}
-                                transition={{ duration: 1, ease: "easeOut" }}
-                                className={cn(
-                                    "h-full rounded-full",
-                                    isCritical ? "bg-gradient-to-r from-red-500 to-red-600" : 
-                                    isWarning ? "bg-gradient-to-r from-amber-500 to-amber-600" : 
-                                    "bg-gradient-to-r from-blue-500 to-primary"
-                                )}
-                            />
-                        </div>
-                        <p className="text-sm font-bold text-muted-foreground mt-3">
-                            {Math.round(storagePercent)}% {t("home.utilized")}
-                        </p>
-                    </div>
-
-                    {isWarning && (
-                        <div className="mt-4 p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl flex items-start gap-2">
-                            <Bell className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
-                            <p className="text-xs text-amber-600 dark:text-amber-400">
-                                {isCritical ? t("home.storageCritical") : t("home.storageWarning")}
-                            </p>
-                        </div>
-                    )}
-                </div>
-            </div>
-
-            {/* Recent Files */}
-            <div className="bg-background border border-border/60 rounded-2xl p-6">
-                <div className="flex items-center justify-between mb-6">
-                    <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-green-500/10 flex items-center justify-center">
-                            <Folder className="w-5 h-5 text-green-500" />
-                        </div>
-                        <div>
-                            <h2 className="text-lg font-bold text-foreground">{t("home.recentFiles")}</h2>
-                            <p className="text-xs text-muted-foreground">{t("home.lastActivity")}</p>
-                        </div>
-                    </div>
-                    <Link href="/dashboard/files" className="text-sm text-primary font-bold hover:underline flex items-center gap-1">
-                        {t("common.viewAll")} <ChevronRight className="w-4 h-4" />
-                    </Link>
-                </div>
-
-                {recentFiles.length === 0 ? (
-                    <div className="text-center py-8 text-muted-foreground">
-                        <Folder className="w-12 h-12 mx-auto mb-3 opacity-30" />
-                        <p className="font-medium">{t("home.noFiles")}</p>
                     </div>
                 ) : (
-                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-                        {recentFiles.slice(0, 6).map((file, i) => {
-                            const FileIcon = getFileIcon(file.mimeType);
-                            return (
-                                <motion.div 
-                                    key={file.id}
-                                    initial={{ opacity: 0, scale: 0.9 }}
-                                    animate={{ opacity: 1, scale: 1 }}
-                                    transition={{ delay: i * 0.05 }}
-                                    className="group p-4 border border-border/40 rounded-xl hover:border-primary/40 hover:bg-primary/5 transition-all cursor-pointer"
-                                >
-                                    <FileIcon className="w-8 h-8 text-muted-foreground mb-2 group-hover:text-primary transition-colors" />
-                                    <p className="text-sm font-medium text-foreground truncate">{file.originalName}</p>
-                                    <p className="text-xs text-muted-foreground">{formatBytes(file.size)}</p>
-                                </motion.div>
-                            );
-                        })}
+                    /* placeholder so layout stays 3-col even without notes perm */
+                    <div className="md:col-span-1 bg-card border border-border/40 rounded-3xl p-6 hover:shadow-sm transition-shadow flex flex-col">
+                        <div className="flex items-center gap-3 mb-5">
+                            <Activity className="w-5 h-5 text-orange-500" />
+                            <span className="font-bold text-base text-foreground">{t("activity.title") || "Activity"}</span>
+                        </div>
+                        <div className="space-y-4 flex-1">
+                            {activities.slice(0, 5).map((act, i) => (
+                                <div key={act.id} className="flex gap-4">
+                                    <div className="relative mt-1.5 flex flex-col items-center">
+                                        <div className="w-2 h-2 rounded-full bg-primary/50 ring-4 ring-background z-10" />
+                                        {i !== Math.min(activities.length, 5) - 1 && <div className="absolute top-2 w-px h-full bg-border" />}
+                                    </div>
+                                    <div className="pb-4 flex-1 min-w-0">
+                                        <p className="text-sm font-medium truncate">
+                                            <span className={cn("capitalize mr-1.5", actionColor(act.action))}>{act.action}</span>
+                                            {act.resourceName && <span className="font-bold">{act.resourceName}</span>}
+                                        </p>
+                                        <p className="text-xs text-muted-foreground mt-0.5">{formatDistanceToNow(new Date(act.createdAt))} ago</p>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
                     </div>
                 )}
+
             </div>
 
-            {/* Quick Links for Admin */}
-            {user?.isAdmin && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <Link href="/dashboard/settings/team">
-                        <motion.div 
-                            initial={{ opacity: 0, y: 20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            className="bg-gradient-to-r from-indigo-500/10 to-purple-500/10 border border-indigo-500/20 rounded-2xl p-5 hover:border-indigo-500/40 transition-all"
-                        >
-                            <div className="flex items-center gap-4">
-                                <div className="w-12 h-12 rounded-xl bg-indigo-500/20 flex items-center justify-center">
-                                    <Users className="w-6 h-6 text-indigo-500" />
-                                </div>
-                                <div>
-                                    <h3 className="font-bold text-foreground">{t("settings.team")}</h3>
-                                    <p className="text-sm text-muted-foreground">{t("settings.manageTeam")}</p>
-                                </div>
-                                <ChevronRight className="w-5 h-5 text-muted-foreground ml-auto" />
+            {/* ── ROW 2: [Activity] [Events] [Team+Stats] ── */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+
+                {/* Activity Log */}
+                <div className="bg-card border border-border/40 rounded-3xl p-6 hover:shadow-sm transition-shadow">
+                    <div className="flex items-center justify-between mb-5">
+                        <div className="flex items-center gap-3">
+                            <Activity className="w-5 h-5 text-orange-500" />
+                            <span className="font-bold text-base text-foreground">{t("activity.title") || "Activity"}</span>
+                        </div>
+                        <Link href="/dashboard/activity" className="text-sm text-primary font-bold hover:underline flex items-center gap-1">
+                            {t("common.viewAll") || "View all"} <ChevronRight className="w-4 h-4" />
+                        </Link>
+                    </div>
+                    <div className="space-y-4">
+                        {activities.length === 0 ? (
+                            <div className="py-10 text-center text-muted-foreground">
+                                <Activity className="w-10 h-10 mx-auto mb-3 opacity-30" />
+                                <p className="text-sm">No recent activity</p>
                             </div>
-                        </motion.div>
-                    </Link>
-                    <Link href="/dashboard/statistics">
-                        <motion.div 
-                            initial={{ opacity: 0, y: 20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: 0.1 }}
-                            className="bg-gradient-to-r from-cyan-500/10 to-blue-500/10 border border-cyan-500/20 rounded-2xl p-5 hover:border-cyan-500/40 transition-all"
-                        >
-                            <div className="flex items-center gap-4">
-                                <div className="w-12 h-12 rounded-xl bg-cyan-500/20 flex items-center justify-center">
-                                    <BarChart3 className="w-6 h-6 text-cyan-500" />
+                        ) : (
+                            activities.map((act, i) => (
+                                <div key={act.id} className="flex gap-4">
+                                    <div className="relative mt-1.5 flex flex-col items-center">
+                                        <div className="w-2 h-2 rounded-full bg-primary/50 ring-4 ring-background z-10" />
+                                        {i !== activities.length - 1 && <div className="absolute top-2 w-px h-full bg-border" />}
+                                    </div>
+                                    <div className="pb-3.5 flex-1 min-w-0">
+                                        <p className="text-sm font-medium truncate">
+                                            <span className={cn("capitalize mr-1.5", actionColor(act.action))}>{act.action}</span>
+                                            {act.resourceName && <span className="font-bold">{act.resourceName}</span>}
+                                        </p>
+                                        <p className="text-xs font-medium text-muted-foreground mt-0.5">{formatDistanceToNow(new Date(act.createdAt))} ago</p>
+                                    </div>
                                 </div>
-                                <div>
-                                    <h3 className="font-bold text-foreground">{t("nav.statistics")}</h3>
-                                    <p className="text-sm text-muted-foreground">{t("statistics.overview")}</p>
-                                </div>
-                                <ChevronRight className="w-5 h-5 text-muted-foreground ml-auto" />
-                            </div>
-                        </motion.div>
-                    </Link>
+                            ))
+                        )}
+                    </div>
                 </div>
-            )}
+
+                {/* Upcoming Events */}
+                {hasPerm("view_calendar") ? (
+                    <div className="bg-card border border-border/40 rounded-3xl p-6 hover:shadow-sm transition-shadow">
+                        <div className="flex items-center justify-between mb-5">
+                            <div className="flex items-center gap-3">
+                                <Calendar className="w-5 h-5 text-purple-500" />
+                                <span className="font-bold text-base text-foreground">{t("home.upcomingEvents") || "Upcoming Events"}</span>
+                            </div>
+                            <Link href="/dashboard/calendar" className="text-sm text-primary font-bold hover:underline flex items-center gap-1">
+                                {t("common.viewAll") || "View all"} <ChevronRight className="w-4 h-4" />
+                            </Link>
+                        </div>
+                        <div className="space-y-3">
+                            {upcomingEvents.length === 0 ? (
+                                <div className="py-10 text-center text-muted-foreground">
+                                    <Calendar className="w-10 h-10 mx-auto mb-3 opacity-30" />
+                                    <p className="text-sm">{t("home.noEvents") || "Empty agenda"}</p>
+                                </div>
+                            ) : (
+                                upcomingEvents.map((ev, i) => (
+                                    <motion.div key={ev.id}
+                                        initial={{ opacity: 0, x: -8 }}
+                                        animate={{ opacity: 1, x: 0 }}
+                                        transition={{ delay: i * 0.05 }}
+                                        className="flex items-center gap-4 px-4 py-3.5 rounded-2xl border border-border/40 hover:bg-muted/40 transition-colors">
+                                        <div className={cn("w-1.5 h-10 rounded-full shrink-0", ev.color || "bg-purple-500")} />
+                                        <div className="flex-1 min-w-0">
+                                            <p className="text-sm font-bold truncate">{ev.title}</p>
+                                            <p className="text-xs font-medium text-muted-foreground mt-1">{getEventLabel(ev.startDate)}</p>
+                                        </div>
+                                    </motion.div>
+                                ))
+                            )}
+                        </div>
+                    </div>
+                ) : (
+                    /* Filler for users without calendar permission */
+                    <div className="bg-muted/20 border border-dashed border-border/40 rounded-3xl p-6 flex items-center justify-center text-muted-foreground/40">
+                        <p className="text-sm font-medium">Calendar not available</p>
+                    </div>
+                )}
+
+                {/* Team + Statistics (admin only) or placeholder */}
+                {user?.isAdmin ? (
+                    <div className="flex flex-col gap-5">
+                        <Link href="/dashboard/settings/team">
+                            <div className="bg-gradient-to-r from-indigo-500/10 to-transparent border border-indigo-500/20 rounded-3xl p-5 flex items-center justify-between group hover:border-indigo-500/40 transition-all hover:shadow-sm">
+                                <div className="flex items-center gap-4">
+                                    <div className="w-10 h-10 rounded-xl bg-indigo-500/20 flex items-center justify-center">
+                                        <Users className="w-5 h-5 text-indigo-500" />
+                                    </div>
+                                    <div>
+                                        <p className="text-base font-bold text-foreground">{t("settings.team") || "Team"}</p>
+                                        <p className="text-sm font-medium text-muted-foreground mt-0.5">Manage users & roles</p>
+                                    </div>
+                                </div>
+                                <ChevronRight className="w-5 h-5 text-indigo-400 group-hover:translate-x-1 transition-transform" />
+                            </div>
+                        </Link>
+                        <Link href="/dashboard/statistics">
+                            <div className="bg-gradient-to-r from-cyan-500/10 to-transparent border border-cyan-500/20 rounded-3xl p-5 flex items-center justify-between group hover:border-cyan-500/40 transition-all hover:shadow-sm">
+                                <div className="flex items-center gap-4">
+                                    <div className="w-10 h-10 rounded-xl bg-cyan-500/20 flex items-center justify-center">
+                                        <BarChart3 className="w-5 h-5 text-cyan-500" />
+                                    </div>
+                                    <div>
+                                        <p className="text-base font-bold text-foreground">{t("nav.statistics") || "Statistics"}</p>
+                                        <p className="text-sm font-medium text-muted-foreground mt-0.5">Platform health & metrics</p>
+                                    </div>
+                                </div>
+                                <ChevronRight className="w-5 h-5 text-cyan-400 group-hover:translate-x-1 transition-transform" />
+                            </div>
+                        </Link>
+                    </div>
+                ) : (
+                    <div className="bg-muted/20 border border-dashed border-border/40 rounded-3xl p-6 flex items-center justify-center text-muted-foreground/40">
+                        <p className="text-sm font-medium">No admin widgets</p>
+                    </div>
+                )}
+
+            </div>
         </div>
     );
 }

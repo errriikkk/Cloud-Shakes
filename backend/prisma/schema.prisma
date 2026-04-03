@@ -431,6 +431,77 @@ model UserStatus {
 
 // ── Plugin System ───────────────────────────────────────────────────────────────
 
+// Claves de firma para el sistema de plugins
+model SigningKey {
+  id            String   @id @default(uuid())
+  keyId         String   @unique // Identificador público de la clave
+  publicKey     String   // Clave pública Ed25519 (hex)
+  privateKey    String?  // Clave privada (solo para la clave activa)
+  type          String   @default("signing") // root, signing
+  parentKeyId   String?  // Para clave raíz, null; para signing, referencia a root
+  expiresAt     DateTime?
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  revokedAt     DateTime?
+
+  signatures    PluginSignature[]
+}
+
+// Instancias self-hosted autenticadas
+model InstanceLicense {
+  id          String    @id @default(uuid())
+  licenseKey  String    @unique
+  instanceId  String    @unique // UUID de la instancia
+  name        String?   // Nombre de la instancia para display
+  plan        String    @default("free") // free, pro, enterprise
+  maxPlugins  Int       @default(10)
+  maxVersions Int       @default(3)
+  allowedPlugins String[] @default([]) // Plugins permitidos específicamente (vacío = todos)
+  blockedPlugins String[] @default([]) // Plugins bloqueados
+  isActive    Boolean   @default(true)
+  lastSeenAt  DateTime?
+  createdAt   DateTime  @default(now())
+  revokedAt   DateTime?
+
+  installations InstancePlugin[]
+}
+
+// Plugins instalados en una instancia self-hosted
+model InstancePlugin {
+  id            String         @id @default(uuid())
+  instanceId    String
+  instance      InstanceLicense @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+  pluginId      String
+  plugin        Plugin         @relation(fields: [pluginId], references: [id], onDelete: Cascade)
+  version       String
+  status        String         @default("installed") // installed, enabled, disabled, error
+  capabilities  String[]       @default([]) // Capabilities aprobadas por el admin
+  config        Json           @default("{}")
+  checksum      String?        // SHA-256 del zip descargado
+  verifiedAt    DateTime?      // Última verificación exitosa
+  errorMessage  String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@unique([instanceId, pluginId])
+}
+
+// Revocación de emergencia de plugins
+model PluginRevocation {
+  id          String   @id @default(uuid())
+  pluginId    String
+  plugin      Plugin   @relation(fields: [pluginId], references: [id], onDelete: Cascade)
+  version     String?  // Null = todas las versiones
+  reason      String
+  severity    String   @default("high") // low, medium, high, critical
+  revokedBy   String   // User ID que ejecutó la revocación
+  signature   String   // Firma de la revocación con clave raíz
+  createdAt   DateTime @default(now())
+  expiresAt   DateTime? // Null = permanente
+
+  @@unique([pluginId, version])
+}
+
 model Plugin {
   id          String  @id @default(uuid())
   name        String  @unique
@@ -438,7 +509,7 @@ model Plugin {
   description String?
   author      String
   authorId    String?
-  type        String  @default("backend") // backend, frontend, fullstack
+  type        String  @default("sandbox") // sandbox, docker, frontend
   category    String  @default("integration") // integration, automation, analytics, ai, storage, ui
   website     String?
   repository  String?
@@ -452,14 +523,19 @@ model Plugin {
   sdkVersion    String  @default("1.0.0")
   minSdkVersion String?
 
-  // Resources
+  // Runtime
+  runtime       String  @default("js") // js, node, docker
+  entryPoint    String? // index.js para sandbox, Dockerfile para docker
+
+  // Resources (configurables por tier)
   cpuLimit     String @default("500m")
-  memoryLimit  String @default("512Mi")
-  storageLimit String @default("1Gi")
+  memoryLimit  String @default("128Mi")
+  timeout      Int    @default(5) // segundos para ejecución
+  ioTimeout    Int    @default(30) // segundos para I/O (http requests)
 
   // Security
-  permissions    String[] @default([])
   allowedDomains String[] @default([])
+  requireApproval Boolean @default(true)
 
   // Stats
   downloads   Int   @default(0)
@@ -471,6 +547,9 @@ model Plugin {
 
   versions      PluginVersion[]
   installations UserPlugin[]
+  instanceInstallations InstancePlugin[]
+  revocations   PluginRevocation[]
+  auditLogs     PluginAuditLog[]
 }
 
 model PluginVersion {
@@ -486,9 +565,17 @@ model PluginVersion {
   // Artifact
   artifactUrl  String? // URL to ZIP file in MinIO
   artifactSize BigInt?
-  checksum     String?
+  checksum     String? // SHA-256 del zip completo
+  signature    String? // Firma Ed25519 del checksum
 
-  // Docker
+  // Review
+  reviewStatus String  @default("pending") // pending, approved, rejected, failed
+  reviewResults Json?
+  sastResults  Json?
+  dependencyResults Json?
+  capabilityMismatch String[] @default([])
+
+  // Docker (optional)
   dockerImage String?
   dockerfile  String?
 
@@ -497,9 +584,13 @@ model PluginVersion {
   minAppVersion   String?
   deprecated      Boolean @default(false)
   deprecationNote String?
+  isSecurityUpdate Boolean @default(false)
 
   createdAt   DateTime  @default(now())
   publishedAt DateTime?
+
+  capabilities PluginCapability[]
+  signatures   PluginSignature[]
 
   @@unique([pluginId, version])
 }
@@ -541,6 +632,47 @@ model PluginLog {
   message      String
   metadata     Json?
   timestamp    DateTime @default(now())
+}
+
+// Capabilities declaradas por un plugin (por versión)
+model PluginCapability {
+  id         String         @id @default(uuid())
+  versionId  String
+  version    PluginVersion  @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  name       String // http:request, fs:read, fs:write, storage:write, etc.
+  enabled    Boolean        @default(true)
+
+  @@unique([versionId, name])
+}
+
+// Firmas de plugins (una por cada signing key usada)
+model PluginSignature {
+  id          String        @id @default(uuid())
+  versionId   String
+  version     PluginVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  keyId       String
+  key         SigningKey    @relation(fields: [keyId], references: [id])
+  signature   String        // Firma Ed25519 en hex
+  signedAt    DateTime      @default(now())
+
+  @@unique([versionId, keyId])
+}
+
+// Audit log para trazabilidad de plugins
+model PluginAuditLog {
+  id         String   @id @default(uuid())
+  pluginId   String
+  plugin     Plugin   @relation(fields: [pluginId], references: [id], onDelete: Cascade)
+  action     String   // publish, update, revoke, install, enable, disable, verify_fail
+  version    String?
+  instanceId String?  // Para instalaciones en instancias
+  userId     String?  // Usuario que ejecutó la acción
+  metadata   Json?    // Datos adicionales
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+
+  @@index([pluginId, createdAt])
+  @@index([instanceId, createdAt])
 }
 
 // ── Blog Posts ─────────────────────────────────────────────────────────────

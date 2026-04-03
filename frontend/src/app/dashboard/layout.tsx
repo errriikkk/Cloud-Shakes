@@ -190,6 +190,13 @@ function SidebarContent({
                 {(user.isAdmin || user.permissions?.includes('view_activity')) && (
                     <NavItem href="/dashboard/activity" icon={Activity} label={t("nav.activity") || "Activity Log"} onSelect={() => setMobileSidebarOpen(false)} />
                 )}
+                {(user.isAdmin || user.permissions?.includes('view_plugins')) && (
+                    <div className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-muted-foreground/40 cursor-not-allowed select-none">
+                        <Zap className="w-5 h-5" />
+                        <span>Plugins</span>
+                        <span className="ml-auto text-[9px] font-bold uppercase tracking-widest bg-primary/10 text-primary/60 px-1.5 py-0.5 rounded-full">Soon</span>
+                    </div>
+                )}
                 {(user.isAdmin || user.permissions?.includes('view_settings')) && (
                     <NavItem href="/dashboard/settings" icon={Settings} label={t("nav.settings")} onSelect={() => setMobileSidebarOpen(false)} />
                 )}
@@ -424,7 +431,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
     if (!user) return null;
 
-    const isFullBleedRoute = /^\/dashboard\/chat(\/|$)/.test(pathname);
+    const isFullBleedRoute = /^\/dashboard\/(chat|plugins)(\/|$)/.test(pathname);
 
     const isOfficeEditor = false;
 

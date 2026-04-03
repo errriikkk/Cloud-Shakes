@@ -29,20 +29,22 @@ const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 const TEXT_EXTENSIONS = /\.(txt|md|json|xml|js|ts|jsx|tsx|css|html|htm|py|java|cpp|c|h|php|rb|go|rs|sh|bash|yaml|yml|toml|ini|conf|log|env|sql|graphql|vue|svelte)$/i;
 const CODE_MIME_PREFIXES = ["text/", "application/json", "application/xml", "application/javascript", "application/x-sh"];
 
-const getFileTypeIcon = (mimeType: string) => {
-    if (mimeType.startsWith('image/')) return <ImageIcon className="w-8 h-8" />;
-    if (mimeType.startsWith('video/')) return <Film className="w-8 h-8" />;
-    if (mimeType.startsWith('audio/')) return <FileAudio className="w-8 h-8" />;
-    if (CODE_MIME_PREFIXES.some(p => mimeType.startsWith(p)) || mimeType === "text/plain" || mimeType.match(TEXT_EXTENSIONS)) return <FileCode className="w-8 h-8" />;
-    if (mimeType.includes('pdf')) return <FileText className="w-8 h-8" />;
+const getFileTypeIcon = (mimeType?: string) => {
+    const type = mimeType || '';
+    if (type.startsWith('image/')) return <ImageIcon className="w-8 h-8" />;
+    if (type.startsWith('video/')) return <Film className="w-8 h-8" />;
+    if (type.startsWith('audio/')) return <FileAudio className="w-8 h-8" />;
+    if (CODE_MIME_PREFIXES.some(p => type.startsWith(p)) || type === "text/plain" || type.match(TEXT_EXTENSIONS)) return <FileCode className="w-8 h-8" />;
+    if (type.includes('pdf')) return <FileText className="w-8 h-8" />;
     return <File className="w-8 h-8" />;
 };
 
-const getFileTypeColor = (mimeType: string) => {
-    if (mimeType.startsWith('image/')) return "from-blue-500/20 to-blue-600/10 text-blue-500";
-    if (mimeType.startsWith('video/')) return "from-purple-500/20 to-purple-600/10 text-purple-500";
-    if (mimeType.startsWith('audio/')) return "from-pink-500/20 to-pink-600/10 text-pink-500";
-    if (mimeType.includes('pdf')) return "from-orange-500/20 to-orange-600/10 text-orange-500";
+const getFileTypeColor = (mimeType?: string) => {
+    const type = mimeType || '';
+    if (type.startsWith('image/')) return "from-blue-500/20 to-blue-600/10 text-blue-500";
+    if (type.startsWith('video/')) return "from-purple-500/20 to-purple-600/10 text-purple-500";
+    if (type.startsWith('audio/')) return "from-pink-500/20 to-pink-600/10 text-pink-500";
+    if (type.includes('pdf')) return "from-orange-500/20 to-orange-600/10 text-orange-500";
     return "from-primary/20 to-primary/10 text-primary";
 };
 
@@ -71,9 +73,10 @@ export function PreviewModal({ file, isOpen, onClose }: PreviewModalProps) {
                 setLoading(true);
                 setError("");
 
-                const isTextFile = CODE_MIME_PREFIXES.some(p => file.mimeType.startsWith(p)) ||
-                    file.mimeType === "text/plain" ||
-                    file.originalName.match(TEXT_EXTENSIONS);
+                const safeMime = file.mimeType || '';
+                const isTextFile = CODE_MIME_PREFIXES.some(p => safeMime.startsWith(p)) ||
+                    safeMime === "text/plain" ||
+                    (file.originalName && file.originalName.match(TEXT_EXTENSIONS));
 
                 if (isTextFile) {
                     try {
@@ -133,8 +136,10 @@ export function PreviewModal({ file, isOpen, onClose }: PreviewModalProps) {
             );
         }
 
+        const safeMime = file.mimeType || '';
+
         // PDFs - show friendly message instead of trying to preview
-        if (file.mimeType === "application/pdf") {
+        if (safeMime === "application/pdf") {
             return (
                 <div className="flex flex-col items-center justify-center h-full min-h-[300px] text-muted-foreground">
                     <div className="w-24 h-24 rounded-3xl bg-gradient-to-br from-orange-500/20 to-orange-600/10 flex items-center justify-center mb-6 shadow-xl">
@@ -164,7 +169,7 @@ export function PreviewModal({ file, isOpen, onClose }: PreviewModalProps) {
             );
         }
 
-        if (file.mimeType.startsWith("image/")) {
+        if (safeMime.startsWith("image/")) {
             const handleWheel = (e: React.WheelEvent) => {
                 if (!isFullscreen) return;
                 e.preventDefault();
@@ -205,7 +210,7 @@ export function PreviewModal({ file, isOpen, onClose }: PreviewModalProps) {
                 >
                     <img
                         src={url!}
-                        alt={file.originalName}
+                        alt={file.originalName || 'Preview'}
                         className="max-w-full max-h-[70vh] lg:max-h-[75vh] object-contain rounded-2xl shadow-2xl"
                         style={{ 
                             transform: isFullscreen ? `scale(${imageZoom}) translate(${imagePosition.x / imageZoom}px, ${imagePosition.y / imageZoom}px)` : undefined,
@@ -242,7 +247,7 @@ export function PreviewModal({ file, isOpen, onClose }: PreviewModalProps) {
             );
         }
 
-        if (file.mimeType.startsWith("video/")) {
+        if (safeMime.startsWith("video/")) {
             return (
                 <div className="flex items-center justify-center h-full min-h-[400px] bg-black/5 rounded-2xl overflow-hidden">
                     <video
@@ -255,9 +260,9 @@ export function PreviewModal({ file, isOpen, onClose }: PreviewModalProps) {
             );
         }
 
-        if (file.mimeType.startsWith("audio/")) {
+        if (safeMime.startsWith("audio/")) {
             return (
-                <div className={cn("flex flex-col items-center justify-center h-full min-h-[250px] rounded-3xl py-12 bg-gradient-to-br", getFileTypeColor(file.mimeType))}>
+                <div className={cn("flex flex-col items-center justify-center h-full min-h-[250px] rounded-3xl py-12 bg-gradient-to-br", getFileTypeColor(safeMime))}>
                     <div className="w-24 h-24 rounded-3xl bg-white/20 backdrop-blur-sm flex items-center justify-center mb-8 shadow-lg">
                         <Music className="w-12 h-12" />
                     </div>
@@ -276,8 +281,8 @@ export function PreviewModal({ file, isOpen, onClose }: PreviewModalProps) {
             "application/vnd.oasis.opendocument.spreadsheet",
         ];
         
-        if (officeMimes.includes(file.mimeType)) {
-            const ext = file.originalName.split('.').pop()?.toUpperCase() || 'DOC';
+        if (officeMimes.includes(safeMime)) {
+            const ext = file.originalName ? file.originalName.split('.').pop()?.toUpperCase() || 'DOC' : 'DOC';
             return (
                 <div className="flex flex-col items-center justify-center h-full min-h-[300px] text-muted-foreground">
                     <div className="w-24 h-24 rounded-3xl bg-gradient-to-br from-amber-500/20 to-amber-600/10 flex items-center justify-center mb-6 shadow-xl">
@@ -293,7 +298,7 @@ export function PreviewModal({ file, isOpen, onClose }: PreviewModalProps) {
             );
         }
 
-        if (textContent !== null || CODE_MIME_PREFIXES.some(p => file.mimeType.startsWith(p)) || file.originalName.match(TEXT_EXTENSIONS)) {
+        if (textContent !== null || CODE_MIME_PREFIXES.some(p => safeMime.startsWith(p)) || (file.originalName && file.originalName.match(TEXT_EXTENSIONS))) {
             return (
                 <div className="w-full h-[60vh] lg:h-[70vh] bg-muted/20 rounded-2xl overflow-auto border border-border/30 p-4 lg:p-8 custom-scrollbar">
                     {textContent !== null ? (
@@ -367,8 +372,8 @@ export function PreviewModal({ file, isOpen, onClose }: PreviewModalProps) {
                                         {getFileTypeIcon(file.mimeType)}
                                     </div>
                                     <div className="min-w-0">
-                                        <h3 className="text-base font-bold text-foreground truncate">{file.originalName}</h3>
-                                        <p className="text-xs text-muted-foreground">{formatSize(file.size || 0)} • {file.mimeType.split('/')[1]}</p>
+                                        <h3 className="text-base font-bold text-foreground truncate">{file.originalName || 'File'}</h3>
+                                        <p className="text-xs text-muted-foreground">{formatSize(file.size || 0)} • {file.mimeType ? file.mimeType.split('/')[1] : 'Unknown'}</p>
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-2 shrink-0">
@@ -398,7 +403,7 @@ export function PreviewModal({ file, isOpen, onClose }: PreviewModalProps) {
                             <div className="shrink-0 border-t border-border/40 bg-muted/20 px-6 py-4">
                                 <div className="flex flex-wrap items-center justify-between gap-4">
                                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                        <span className="px-2 py-1 rounded-md bg-muted/60 font-medium">{file.mimeType.split('/')[1]?.toUpperCase() || 'FILE'}</span>
+                                        <span className="px-2 py-1 rounded-md bg-muted/60 font-medium">{file.mimeType ? file.mimeType.split('/')[1]?.toUpperCase() : 'FILE'}</span>
                                         <span>•</span>
                                         <span>{file.createdAt ? new Date(file.createdAt).toLocaleDateString() : '-'}</span>
                                     </div>

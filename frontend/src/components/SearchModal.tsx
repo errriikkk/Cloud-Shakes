@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Search, X, File, Folder, ChevronRight, Loader2, Link as LinkIcon, FileText, Image as ImageIcon, Video, Music, StickyNote, Calendar, Share2, Copy, Check } from "lucide-react";
+import { Search, X, File, Folder, ChevronRight, Loader2, Link as LinkIcon, FileText, Image as ImageIcon, Video, Music, StickyNote, Calendar, Share2, Copy, Check, Command } from "lucide-react";
 import axios from "axios";
 import { cn } from "@/lib/utils";
 import { useRouter } from "next/navigation";
@@ -31,6 +31,20 @@ interface SearchModalProps {
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 
+/* --- Helper to Highlight Text --- */
+function HighlightedText({ text = "", highlight = "" }: { text?: string, highlight?: string }) {
+    if (!highlight.trim()) return <span>{text}</span>;
+    const regex = new RegExp(`(${highlight})`, "gi");
+    const parts = text.split(regex);
+    return (
+        <span>
+            {parts.map((part, i) => 
+                regex.test(part) ? <span key={i} className="text-primary font-black bg-primary/10 rounded px-0.5">{part}</span> : <span key={i}>{part}</span>
+            )}
+        </span>
+    );
+}
+
 export function SearchModal({ isOpen, onClose }: SearchModalProps) {
     const { t } = useTranslation();
     const [query, setQuery] = useState("");
@@ -45,8 +59,10 @@ export function SearchModal({ isOpen, onClose }: SearchModalProps) {
     const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
     const [copiedId, setCopiedId] = useState<string | null>(null);
     const [isMobile, setIsMobile] = useState(false);
+    const [isFocused, setIsFocused] = useState(false);
     const inputRef = useRef<HTMLInputElement>(null);
     const router = useRouter();
+    const resultListRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
         setIsMobile(window.innerWidth < 768);
@@ -61,7 +77,10 @@ export function SearchModal({ isOpen, onClose }: SearchModalProps) {
             setResults({ files: [], folders: [], notes: [], calendarEvents: [] });
             setSelectedIndex(0);
             setSelectedCategory(null);
-            setTimeout(() => inputRef.current?.focus(), 100);
+            setTimeout(() => {
+                inputRef.current?.focus();
+                setIsFocused(true);
+            }, 100);
         }
     }, [isOpen]);
 
@@ -76,7 +95,6 @@ export function SearchModal({ isOpen, onClose }: SearchModalProps) {
                     });
                     setResults(res.data);
                     setSelectedIndex(0);
-                    setSelectedCategory(null);
                 } catch (err) {
                     console.error("Search failed:", err);
                 } finally {
@@ -84,8 +102,9 @@ export function SearchModal({ isOpen, onClose }: SearchModalProps) {
                 }
             } else {
                 setResults({ files: [], folders: [], notes: [], calendarEvents: [] });
+                setSelectedIndex(0);
             }
-        }, 300);
+        }, 250); // slight debounce speedup for raycast feel
 
         return () => clearTimeout(timer);
     }, [query]);
@@ -118,10 +137,18 @@ export function SearchModal({ isOpen, onClose }: SearchModalProps) {
     const handleKeyDown = (e: React.KeyboardEvent) => {
         if (e.key === "ArrowDown") {
             e.preventDefault();
-            setSelectedIndex(prev => (prev + 1) % filteredResults.length);
+            setSelectedIndex(prev => {
+                const nextId = (prev + 1) % filteredResults.length;
+                scrollIntoView(nextId);
+                return nextId;
+            });
         } else if (e.key === "ArrowUp") {
             e.preventDefault();
-            setSelectedIndex(prev => (prev - 1 + filteredResults.length) % filteredResults.length);
+            setSelectedIndex(prev => {
+                const nextId = (prev - 1 + filteredResults.length) % filteredResults.length;
+                scrollIntoView(nextId);
+                return nextId;
+            });
         } else if (e.key === "Enter") {
             e.preventDefault();
             if (filteredResults[selectedIndex]) {
@@ -129,6 +156,22 @@ export function SearchModal({ isOpen, onClose }: SearchModalProps) {
             }
         } else if (e.key === "Escape") {
             onClose();
+        }
+    };
+
+    const scrollIntoView = (index: number) => {
+        if (!resultListRef.current) return;
+        const list = resultListRef.current;
+        const items = list.querySelectorAll('[data-search-item]');
+        const target = items[index] as HTMLElement;
+        if (target) {
+            const listRect = list.getBoundingClientRect();
+            const targetRect = target.getBoundingClientRect();
+            if (targetRect.bottom > listRect.bottom) {
+                list.scrollTop += (targetRect.bottom - listRect.bottom) + 12; // 12 padding offset
+            } else if (targetRect.top < listRect.top) {
+                list.scrollTop -= (listRect.top - targetRect.top) + 12;
+            }
         }
     };
 
@@ -166,7 +209,7 @@ export function SearchModal({ isOpen, onClose }: SearchModalProps) {
     };
 
     const getFileIcon = (item: SearchResult) => {
-        const iconClass = "w-4 h-4";
+        const iconClass = "w-5 h-5";
         if (item.type === 'folder') return <Folder className={iconClass} />;
         if (item.type === 'note') return <StickyNote className={cn(iconClass, "text-yellow-500")} />;
         if (item.type === 'calendar') return <Calendar className={cn(iconClass, "text-purple-500")} />;
@@ -188,16 +231,6 @@ export function SearchModal({ isOpen, onClose }: SearchModalProps) {
         return labels[type] || 'Item';
     };
 
-    const getTypeColor = (type: string) => {
-        const colors: Record<string, string> = {
-            'file': 'bg-muted/60 text-muted-foreground',
-            'folder': 'bg-primary/5 text-primary',
-            'note': 'bg-yellow-500/10 text-yellow-500',
-            'calendar': 'bg-purple-500/10 text-purple-500',
-        };
-        return colors[type] || 'bg-muted/60 text-muted-foreground';
-    };
-
     return (
         <AnimatePresence>
             {isOpen && (
@@ -206,219 +239,255 @@ export function SearchModal({ isOpen, onClose }: SearchModalProps) {
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
+                        transition={{ duration: 0.3 }}
                         onClick={onClose}
-                        className="fixed inset-0 bg-background/60 backdrop-blur-sm z-[100]"
+                        className="fixed inset-0 bg-background/50 backdrop-blur-md z-[100]"
                     />
 
                     <motion.div
-                        initial={{ opacity: 0, scale: isMobile ? 1 : 0.95, y: isMobile ? 0 : -20 }}
+                        initial={{ opacity: 0, scale: isMobile ? 1 : 0.98, y: isMobile ? 0 : -10 }}
                         animate={{ opacity: 1, scale: 1, y: 0 }}
-                        exit={{ opacity: 0, scale: isMobile ? 1 : 0.95, y: isMobile ? 0 : -20 }}
+                        exit={{ opacity: 0, scale: isMobile ? 1 : 0.98, y: isMobile ? 0 : -10 }}
+                        transition={{ duration: 0.15, ease: "easeOut" }}
                         className={cn(
-                            "fixed z-[101] bg-sidebar border border-border/60 shadow-2xl overflow-hidden",
+                            "fixed z-[101] bg-sidebar/98 border border-border/50 shadow-2xl overflow-hidden flex flex-col",
                             isMobile 
-                                ? "inset-0 rounded-none" 
-                                : "top-[15vh] left-1/2 -translate-x-1/2 w-full max-w-2xl rounded-3xl"
+                                ? "inset-0 rounded-none h-full" 
+                                : "top-[10vh] left-1/2 -translate-x-1/2 w-full max-w-3xl rounded-3xl max-h-[80vh]"
                         )}
                     >
-                        {/* Search Input */}
+                        {/* Search Input Area */}
                         <div className={cn(
-                            "flex items-center border-b border-border/40 gap-4 bg-background/50",
-                            isMobile ? "px-4 py-4" : "px-6 py-5"
+                            "flex items-center border-b border-border/30 gap-4 bg-background/30 transition-colors",
+                            isMobile ? "px-5 py-4" : "px-6 py-5",
+                            isFocused ? "bg-background/60 border-primary/20" : ""
                         )}>
-                            <Search className="w-5 h-5 text-muted-foreground/60 shrink-0" />
+                            <Search className={cn("w-6 h-6 shrink-0 transition-colors", isFocused ? "text-primary" : "text-muted-foreground/50")} />
                             <input
                                 ref={inputRef}
                                 type="text"
                                 value={query}
-                                onChange={(e) => setQuery(e.target.value)}
+                                onChange={(e) => {
+                                    setQuery(e.target.value);
+                                    setSelectedIndex(0);
+                                }}
+                                onFocus={() => setIsFocused(true)}
+                                onBlur={() => setIsFocused(false)}
                                 onKeyDown={handleKeyDown}
                                 placeholder={t("search.placeholder")}
-                                className="flex-1 bg-transparent border-none text-base md:text-lg text-foreground placeholder:text-muted-foreground/40 focus:outline-none"
+                                className="flex-1 bg-transparent border-none text-xl font-medium text-foreground placeholder:text-muted-foreground/40 focus:outline-none"
                             />
-                            {loading && <Loader2 className="w-5 h-5 animate-spin text-primary/40 shrink-0" />}
+                            {loading && <Loader2 className="w-5 h-5 animate-spin text-primary shrink-0" />}
                             {isMobile ? (
-                                <button
-                                    onClick={onClose}
-                                    className="p-2 hover:bg-muted rounded-lg transition-colors shrink-0"
-                                >
+                                <button onClick={onClose} className="p-2 hover:bg-muted rounded-full transition-colors shrink-0 bg-muted/40">
                                     <X className="w-5 h-5 text-muted-foreground" />
                                 </button>
                             ) : (
-                                <div className="flex items-center gap-1 px-2 py-1 rounded-lg bg-muted text-[10px] font-bold text-muted-foreground uppercase tracking-widest border border-border/40">
-                                    ESC
+                                <div className="flex flex-col items-center justify-center bg-muted/50 border border-border/50 rounded-md px-2 py-1 shrink-0">
+                                    <span className="text-[10px] font-black text-muted-foreground uppercase leading-none">ESC</span>
                                 </div>
                             )}
                         </div>
 
-                        {/* Categories (Mobile: horizontal scroll, Desktop: tabs) */}
-                        {query.trim().length > 1 && (
-                            <div className={cn(
-                                "border-b border-border/40 bg-muted/20",
-                                isMobile ? "overflow-x-auto no-scrollbar px-4 py-2" : "px-6 py-3"
-                            )}>
-                                <div className={cn(
-                                    "flex gap-2",
-                                    isMobile ? "flex-nowrap" : "flex-wrap"
-                                )}>
-                                    {categories.map((cat) => (
-                                        <button
-                                            key={cat.key}
-                                            onClick={() => {
-                                                setSelectedCategory(cat.key);
-                                                setSelectedIndex(0);
-                                            }}
-                                            className={cn(
-                                                "px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap",
-                                                selectedCategory === cat.key || (!selectedCategory && cat.key === 'all')
-                                                    ? "bg-primary text-primary-foreground shadow-sm"
-                                                    : "bg-background/50 text-muted-foreground hover:bg-muted"
-                                            )}
-                                        >
-                                            {cat.label} {cat.count > 0 && `(${cat.count})`}
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Results */}
-                        <div className={cn(
-                            "overflow-y-auto no-scrollbar",
-                            isMobile ? "h-[calc(100vh-140px)]" : "max-h-[60vh]"
-                        )}>
-                            {query.trim().length <= 1 ? (
-                                <div className={cn("text-center", isMobile ? "p-8" : "p-12")}>
-                                    <div className="w-16 h-16 rounded-2xl bg-muted/40 flex items-center justify-center mx-auto mb-4 border border-border/40">
-                                        <Search className="w-8 h-8 text-muted-foreground/20" />
-                                    </div>
-                                    <h3 className="text-sm font-bold text-foreground mb-1">{t("search.quickSearch")}</h3>
-                                    <p className="text-xs text-muted-foreground">{t("search.description")}</p>
-                                </div>
-                            ) : filteredResults.length === 0 && !loading ? (
-                                <div className={cn("text-center text-muted-foreground", isMobile ? "p-8" : "p-12")}>
-                                    {t("search.noResults")} "{query}"
-                                </div>
-                            ) : (
-                                <div className={cn("space-y-1", isMobile ? "p-2" : "p-2")}>
-                                    {filteredResults.map((item, index) => (
-                                        <div
-                                            key={`${item.type}-${item.id}`}
-                                            onClick={() => handleSelect(item)}
-                                            onMouseEnter={() => setSelectedIndex(index)}
-                                            className={cn(
-                                                "flex items-center gap-3 md:gap-4 rounded-2xl cursor-pointer transition-all border border-transparent",
-                                                isMobile ? "px-3 py-2.5" : "px-4 py-3",
-                                                index === selectedIndex && "bg-primary/10 border-primary/20 shadow-sm"
-                                            )}
-                                        >
-                                            <div className={cn(
-                                                "rounded-xl flex items-center justify-center shrink-0 border border-border/20 overflow-hidden bg-muted/20",
-                                                isMobile ? "w-9 h-9" : "w-10 h-10",
-                                                getTypeColor(item.type)
-                                            )}>
-                                                {item.type === 'file' && item.mimeType?.startsWith('image/') ? (
-                                                    <img 
-                                                        src={`${API}/api/files/${item.id}/preview`} 
-                                                        alt="" 
-                                                        className="w-full h-full object-cover"
-                                                    />
-                                                ) : item.type === 'file' && item.mimeType?.startsWith('video/') ? (
-                                                    <video 
-                                                        src={`${API}/api/files/${item.id}/preview`} 
-                                                        className="w-full h-full object-cover"
-                                                        muted
-                                                        playsInline
-                                                    />
-                                                ) : (
-                                                    getFileIcon(item)
-                                                )}
-                                            </div>
-
-                                            <div className="flex-1 min-w-0">
-                                                <div className="flex items-center gap-2 flex-wrap">
-                                                    <span className={cn(
-                                                        "font-bold text-foreground truncate",
-                                                        isMobile ? "text-sm" : "text-sm"
-                                                    )}>
-                                                        {item.originalName || item.name || item.title}
-                                                    </span>
-                                                    <span className="text-[10px] font-bold text-muted-foreground/40 uppercase tracking-widest">
-                                                        {getTypeLabel(item.type)}
-                                                    </span>
-                                                </div>
-                                                <div className={cn(
-                                                    "flex items-center text-muted-foreground/60 font-medium",
-                                                    isMobile ? "text-[10px]" : "text-[11px]"
-                                                )}>
-                                                    {item.type === 'calendar' && item.startDate && (
-                                                        <>
-                                                            <Calendar className="w-3 h-3 mr-1" />
-                                                            <span>{new Date(item.startDate).toLocaleDateString(undefined)}</span>
-                                                        </>
-                                                    )}
-                                                    {item.type !== 'calendar' && (
-                                                        <>
-                                                            <span>{t("files.myUnit")}</span>
-                                                            {(item.folder?.name || item.parent?.name) && (
-                                                                <>
-                                                                    <ChevronRight className="w-3 h-3 mx-1" />
-                                                                    <span className="truncate">{item.folder?.name || item.parent?.name}</span>
-                                                                </>
-                                                            )}
-                                                        </>
-                                                    )}
-                                                </div>
-                                            </div>
-
-                                            <ActivityAvatar
-                                                user={item.owner}
-                                                resourceId={item.id}
-                                                resourceType={item.type}
-                                            />
-
-                                            {(item.type === 'file') && (
+                        {/* Categories Tabs */}
+                        <AnimatePresence>
+                            {query.trim().length > 1 && (
+                                <motion.div 
+                                    initial={{ height: 0, opacity: 0 }}
+                                    animate={{ height: "auto", opacity: 1 }}
+                                    exit={{ height: 0, opacity: 0 }}
+                                    className="border-b border-border/30 bg-muted/10 overflow-hidden shrink-0"
+                                >
+                                    <div className={cn("flex gap-2 overflow-x-auto no-scrollbar", isMobile ? "px-4 py-2" : "px-6 py-3")}>
+                                        {categories.map((cat) => {
+                                            const isActive = selectedCategory === cat.key || (!selectedCategory && cat.key === 'all');
+                                            return (
                                                 <button
-                                                    onClick={(e) => handleShare(e, item)}
+                                                    key={cat.key}
+                                                    onClick={() => {
+                                                        setSelectedCategory(cat.key);
+                                                        setSelectedIndex(0);
+                                                    }}
                                                     className={cn(
-                                                        "p-2 rounded-lg transition-all shrink-0",
-                                                        isMobile ? "p-1.5" : "p-2",
-                                                        "hover:bg-muted text-muted-foreground hover:text-foreground"
+                                                        "relative px-4 py-1.5 rounded-full text-sm font-bold transition-all whitespace-nowrap overflow-hidden group",
+                                                        isActive ? "text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-muted/50"
                                                     )}
                                                 >
-                                                    {copiedId === item.id ? (
-                                                        <Check className="w-4 h-4 text-green-500" />
-                                                    ) : (
-                                                        <Share2 className="w-4 h-4" />
+                                                    {isActive && (
+                                                        <motion.div 
+                                                            layoutId="categoryIndicator" 
+                                                            className="absolute inset-0 bg-primary z-0" 
+                                                            transition={{ type: "spring", stiffness: 400, damping: 30 }}
+                                                        />
                                                     )}
+                                                    <span className="relative z-10">{cat.label} {cat.count > 0 && <span className="opacity-70 ml-1">({cat.count})</span>}</span>
                                                 </button>
-                                            )}
+                                            )
+                                        })}
+                                    </div>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
 
-                                            {!isMobile && index === selectedIndex && (
-                                                <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-background border border-border shadow-sm text-[10px] font-bold text-foreground uppercase tracking-widest">
-                                                    Enter
-                                                </div>
-                                            )}
-                                        </div>
-                                    ))}
+                        {/* Results Body */}
+                        <div 
+                            ref={resultListRef}
+                            className="flex-1 overflow-y-auto no-scrollbar relative p-2"
+                        >
+                            {query.trim().length <= 1 ? (
+                                <div className="flex flex-col items-center justify-center h-full min-h-[300px] text-center opacity-60">
+                                    <div className="relative">
+                                        <Command className="w-16 h-16 text-muted-foreground/30 mx-auto mb-6" />
+                                        <motion.div 
+                                            animate={{ scale: [1, 1.2, 1], opacity: [0.3, 0.6, 0.3] }}
+                                            transition={{ repeat: Infinity, duration: 2 }}
+                                            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-24 h-24 bg-primary/20 rounded-full blur-2xl -z-10"
+                                        />
+                                    </div>
+                                    <h3 className="text-xl font-bold text-foreground mb-2">Search Everything</h3>
+                                    <p className="text-sm text-muted-foreground max-w-sm">Files, folders, notes, calendar events, and team members. Start typing to begin.</p>
                                 </div>
+                            ) : loading && filteredResults.length === 0 ? (
+                                <div className="flex flex-col items-center justify-center h-full min-h-[300px] text-center">
+                                    <Loader2 className="w-10 h-10 animate-spin text-primary/30 mx-auto mb-4" />
+                                    <p className="text-sm font-medium text-muted-foreground">Searching backend...</p>
+                                </div>
+                            ) : filteredResults.length === 0 && !loading ? (
+                                <motion.div 
+                                    initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+                                    className="flex flex-col items-center justify-center h-full min-h-[300px] text-center"
+                                >
+                                    <div className="w-20 h-20 rounded-full bg-muted/40 flex items-center justify-center mx-auto mb-6 border border-border/40">
+                                        <Search className="w-8 h-8 text-muted-foreground/30" />
+                                    </div>
+                                    <h3 className="text-lg font-bold text-foreground">No results found</h3>
+                                    <p className="text-sm text-muted-foreground">We couldn't find anything matching <span className="text-foreground font-semibold">"{query}"</span></p>
+                                </motion.div>
+                            ) : (
+                                <motion.div 
+                                    initial={{ opacity: 0 }} 
+                                    animate={{ opacity: 1 }} 
+                                    transition={{ duration: 0.15 }}
+                                    className="space-y-1 relative"
+                                >
+                                    {filteredResults.map((item, index) => {
+                                        const isSelected = index === selectedIndex;
+                                        return (
+                                            <div
+                                                key={`${item.type}-${item.id}`}
+                                                data-search-item
+                                                onClick={() => handleSelect(item)}
+                                                onMouseMove={() => setSelectedIndex(index)}
+                                                className={cn(
+                                                    "relative flex items-center gap-4 rounded-2xl cursor-pointer p-3",
+                                                    isSelected ? "text-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted/30"
+                                                )}
+                                            >
+                                                {/* Animated Selection Background (Raycast style) */}
+                                                {isSelected && (
+                                                    <motion.div
+                                                        layoutId="searchResultHighlight"
+                                                        className="absolute inset-0 bg-primary/10 border border-primary/20 rounded-2xl z-0"
+                                                        initial={{ opacity: 0 }}
+                                                        animate={{ opacity: 1 }}
+                                                        exit={{ opacity: 0 }}
+                                                        transition={{ type: "spring", stiffness: 500, damping: 40 }}
+                                                    />
+                                                )}
+
+                                                <div className="relative z-10 flex items-center justify-center shrink-0 w-12 h-12 rounded-xl bg-background border border-border/20 shadow-sm overflow-hidden">
+                                                    {item.type === 'file' && item.mimeType?.startsWith('image/') ? (
+                                                        <img src={`${API}/api/files/${item.id}/preview`} alt="" className="w-full h-full object-cover" />
+                                                    ) : item.type === 'file' && item.mimeType?.startsWith('video/') ? (
+                                                        <div className="relative w-full h-full bg-black flex items-center justify-center">
+                                                            <Video className="w-5 h-5 text-white/50" />
+                                                        </div>
+                                                    ) : (
+                                                        getFileIcon(item)
+                                                    )}
+                                                </div>
+
+                                                <div className="relative z-10 flex-1 min-w-0">
+                                                    <div className="flex items-center gap-3">
+                                                        <span className="font-bold text-base truncate">
+                                                            <HighlightedText text={item.originalName || item.name || item.title} highlight={query} />
+                                                        </span>
+                                                        <span className="shrink-0 text-[10px] items-center px-1.5 py-0.5 rounded bg-muted/50 border border-border/40 font-bold text-muted-foreground uppercase tracking-widest">
+                                                            {getTypeLabel(item.type)}
+                                                        </span>
+                                                    </div>
+                                                    <div className="flex items-center text-sm mt-0.5 opacity-70">
+                                                        {item.type === 'calendar' && item.startDate && (
+                                                            <div className="flex items-center">
+                                                                <Calendar className="w-3.5 h-3.5 mr-1.5 shrink-0" />
+                                                                <span className="truncate">{new Date(item.startDate).toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</span>
+                                                            </div>
+                                                        )}
+                                                        {item.type !== 'calendar' && (
+                                                            <div className="flex items-center truncate">
+                                                                <span className="font-semibold">My Cloud</span>
+                                                                {(item.folder?.name || item.parent?.name) && (
+                                                                    <>
+                                                                        <ChevronRight className="w-3.5 h-3.5 mx-1" />
+                                                                        <span>{item.folder?.name || item.parent?.name}</span>
+                                                                    </>
+                                                                )}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+
+                                                {/* Right Side Icons & Actions */}
+                                                <div className="relative z-10 flex items-center gap-3 shrink-0">
+                                                    {item.owner && (
+                                                        <ActivityAvatar user={item.owner} resourceId={item.id} resourceType={item.type} />
+                                                    )}
+
+                                                    {(item.type === 'file') && (
+                                                        <button
+                                                            onClick={(e) => handleShare(e, item)}
+                                                            className={cn(
+                                                                "p-2 rounded-xl transition-all",
+                                                                copiedId === item.id ? "bg-green-500/10 text-green-500" : isSelected ? "bg-background shadow text-foreground" : "hover:bg-muted text-muted-foreground"
+                                                            )}
+                                                        >
+                                                            {copiedId === item.id ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                                                        </button>
+                                                    )}
+
+                                                    {!isMobile && (
+                                                        <div className={cn(
+                                                            "flex items-center gap-1.5 transition-all text-xs font-bold px-3 py-1.5 rounded-xl uppercase tracking-widest",
+                                                            isSelected ? "opacity-100 bg-primary text-primary-foreground shadow-sm" : "opacity-0 text-muted-foreground bg-muted border border-border"
+                                                        )}>
+                                                            ↵
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </motion.div>
                             )}
                         </div>
 
-                        {/* Footer */}
+                        {/* Footer Hints */}
                         {!isMobile && (
-                            <div className="px-6 py-3 border-t border-border/40 bg-muted/20 flex items-center justify-between text-[10px] font-bold text-muted-foreground/60 uppercase tracking-widest">
-                                <div className="flex items-center gap-4">
-                                    <div className="flex items-center gap-1.5">
-                                        <span className="bg-muted px-1.5 py-0.5 rounded border border-border/60">↑↓</span>
-                                        <span>{t("search.navigate")}</span>
+                            <div className="px-6 py-4 border-t border-border/30 bg-muted/10 flex items-center justify-between text-xs font-bold text-muted-foreground/60 uppercase tracking-widest shrink-0">
+                                <div className="flex items-center gap-6">
+                                    <div className="flex items-center gap-2">
+                                        <kbd className="bg-background px-2 py-1 rounded shadow-sm border border-border/40 font-sans">↑</kbd>
+                                        <kbd className="bg-background px-2 py-1 rounded shadow-sm border border-border/40 font-sans">↓</kbd>
+                                        <span>Navigate</span>
                                     </div>
-                                    <div className="flex items-center gap-1.5">
-                                        <span className="bg-muted px-1.5 py-0.5 rounded border border-border/60">Enter</span>
-                                        <span>{t("search.select")}</span>
+                                    <div className="flex items-center gap-2">
+                                        <kbd className="bg-background px-3 py-1 rounded shadow-sm border border-border/40 font-sans">Enter</kbd>
+                                        <span>Select</span>
                                     </div>
                                 </div>
-                                <span>{t("search.quickSearch")}</span>
+                                <div className="flex items-center gap-2">
+                                    <span>Shakes Search Engine</span>
+                                </div>
                             </div>
                         )}
                     </motion.div>

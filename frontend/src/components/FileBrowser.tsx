@@ -1136,8 +1136,31 @@ export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserPro
                                         
                                         {/* Preview Area - Improved */}
                                         <div className="w-full aspect-[4/3] relative overflow-hidden bg-gradient-to-br from-muted/30 to-muted/10">
-                                            {loadingPreviews[file.id] ? (
-                                                <div className="absolute inset-0 flex items-center justify-center">
+                                            {/* Media Elements (always in DOM to trigger load events) */}
+                                            {previews[file.id] && file.mimeType.startsWith('image/') && (
+                                                <img 
+                                                    src={previews[file.id]} 
+                                                    alt={file.originalName || 'Preview'} 
+                                                    className={cn("w-full h-full object-cover transition-all duration-500 group-hover:scale-110", loadingPreviews[file.id] ? "opacity-0" : "opacity-100")}
+                                                    onLoad={() => setLoadingPreviews(prev => ({ ...prev, [file.id]: false }))}
+                                                    onError={() => setLoadingPreviews(prev => ({ ...prev, [file.id]: false }))}
+                                                />
+                                            )}
+                                            {previews[file.id] && file.mimeType.startsWith('video/') && (
+                                                <video 
+                                                    src={previews[file.id]} 
+                                                    className={cn("w-full h-full object-cover transition-all duration-500 group-hover:scale-110 bg-black", loadingPreviews[file.id] ? "opacity-0" : "opacity-100")}
+                                                    muted 
+                                                    playsInline 
+                                                    preload="metadata" 
+                                                    onLoadedData={() => setLoadingPreviews(prev => ({ ...prev, [file.id]: false }))}
+                                                    onError={() => setLoadingPreviews(prev => ({ ...prev, [file.id]: false }))}
+                                                />
+                                            )}
+                                            
+                                            {/* Loader Overlay */}
+                                            {loadingPreviews[file.id] && (
+                                                <div className="absolute inset-0 flex items-center justify-center bg-muted/20">
                                                     <div className="relative">
                                                         <div className="w-10 h-10 border-3 border-primary/30 border-t-primary rounded-full animate-spin"></div>
                                                         <div className="absolute inset-0 flex items-center justify-center">
@@ -1145,28 +1168,13 @@ export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserPro
                                                         </div>
                                                     </div>
                                                 </div>
-                                            ) : previews[file.id] && file.mimeType.startsWith('image/') ? (
-                                                <img 
-                                                    src={previews[file.id]} 
-                                                    alt={file.originalName} 
-                                                    className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" 
-                                                    onLoad={() => setLoadingPreviews(prev => ({ ...prev, [file.id]: false }))}
-                                                    onError={() => setLoadingPreviews(prev => ({ ...prev, [file.id]: false }))}
-                                                />
-                                            ) : previews[file.id] && file.mimeType.startsWith('video/') ? (
-                                                <video 
-                                                    src={previews[file.id]} 
-                                                    className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" 
-                                                    muted 
-                                                    playsInline 
-                                                    preload="metadata" 
-                                                    onLoadedData={() => setLoadingPreviews(prev => ({ ...prev, [file.id]: false }))}
-                                                    onError={() => setLoadingPreviews(prev => ({ ...prev, [file.id]: false }))}
-                                                />
-                                            ) : (
+                                            )}
+
+                                            {/* Fallback Icon for non-media files */}
+                                            {!loadingPreviews[file.id] && (!previews[file.id] || (!file.mimeType.startsWith('image/') && !file.mimeType.startsWith('video/'))) && (
                                                 <div className="absolute inset-0 flex items-center justify-center">
                                                     <div className="w-16 h-16 rounded-2xl bg-muted/50 flex items-center justify-center text-muted-foreground/60 group-hover:text-primary transition-colors">
-                                                        {getFileIcon(file.mimeType, "w-10 h-10")}
+                                                        {getFileIcon(file.mimeType || '', "w-10 h-10")}
                                                     </div>
                                                 </div>
                                             )}

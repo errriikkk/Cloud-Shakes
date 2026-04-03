@@ -48,6 +48,8 @@ import brandingRoutes from './routes/branding';
 import cloudSettingsRoutes from './routes/cloudSettings';
 import backupsRoutes from './routes/backups';
 import notificationRoutes from './routes/notifications';
+import pluginRoutes from './routes/plugins';
+import { pluginRuntimeService } from './services/pluginRuntimeService.js';
 import { initStorage } from './utils/storage';
 import prisma from './config/db';
 import { hashPassword } from './utils/auth';
@@ -318,6 +320,7 @@ app.use('/api/roles', adminIpMiddleware, rolesRoutes);
 app.use('/api/users', adminIpMiddleware, usersRoutes);
 app.use('/api/team/invitations', teamInvitationsRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/plugins', pluginRoutes);
 // Custom API routes must be last to catch all /api/custom/* paths
 app.use('/api/custom', customRoutes);
 
@@ -486,6 +489,15 @@ const start = async () => {
     }
 
     setupCallHandlers(io);
+
+    // Initialize plugin runtime service
+    try {
+        await pluginRuntimeService.initialize();
+        console.log('✅ Plugin runtime initialized');
+    } catch (error) {
+        console.error('⚠️ Plugin runtime initialization failed:', error);
+        // Don't fail startup if plugins don't load
+    }
 
     httpServer.listen(PORT, () => {
         console.log(`🚀 Server running on port ${PORT}`);
