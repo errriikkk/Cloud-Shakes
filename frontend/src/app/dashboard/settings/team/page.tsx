@@ -194,6 +194,14 @@ export default function TeamRolesSettingsPage() {
         edit_notes: ["view_notes"],
         delete_notes: ["view_notes"],
 
+        // Documents
+        create_documents: ["view_documents"],
+        edit_documents: ["view_documents"],
+        delete_documents: ["view_documents"],
+        share_documents: ["view_documents"],
+        comment_documents: ["view_documents"],
+        review_documents: ["view_documents"],
+
         // Calendar
         create_events: ["view_calendar"],
         edit_events: ["view_calendar"],
@@ -229,6 +237,7 @@ export default function TeamRolesSettingsPage() {
         view_files: "Ver mis archivos",
         view_folders: "Ver carpetas",
         view_notes: "Ver notas",
+        view_documents: "Ver documentos",
         view_calendar: "Ver calendario",
         view_links: "Ver enlaces",
         view_gallery: "Ver galería",
@@ -330,6 +339,20 @@ export default function TeamRolesSettingsPage() {
                 { key: "create_notes", label: "Crear notas" },
                 { key: "edit_notes", label: "Editar notas" },
                 { key: "delete_notes", label: "Eliminar notas" },
+            ]
+        },
+        {
+            key: "documents",
+            label: t('nav.documents') || 'Documentos',
+            icon: FileText,
+            permissions: [
+                { key: "view_documents", label: "Ver documentos" },
+                { key: "create_documents", label: "Crear documentos" },
+                { key: "edit_documents", label: "Editar documentos" },
+                { key: "delete_documents", label: "Eliminar documentos" },
+                { key: "share_documents", label: "Compartir documentos" },
+                { key: "comment_documents", label: "Comentar documentos" },
+                { key: "review_documents", label: "Revisar cambios" },
             ]
         },
         {

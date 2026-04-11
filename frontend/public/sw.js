@@ -28,7 +28,20 @@ self.addEventListener('fetch', (event) => {
 
     event.respondWith(
         caches.match(event.request).then((response) => {
-            return response || fetch(event.request).catch(() => {
+            if (response) return response;
+
+            return fetch(event.request).catch(() => {
+                if (event.request.mode === 'navigate') {
+                    return caches.match('/').then((cachedRoot) => {
+                        if (cachedRoot) return cachedRoot;
+                        return new Response(
+                            '<!doctype html><html><body><h1>Offline</h1><p>No network connection.</p></body></html>',
+                            { status: 503, headers: { 'Content-Type': 'text/html' } }
+                        );
+                    });
+                }
+
+                return new Response('', { status: 504, statusText: 'Offline' });
             });
         })
     );

@@ -47,7 +47,7 @@ router.get('/', protect, async (req: AuthRequest, res, next) => {
             try {
                 // New private avatar storage (MinIO object key)
                 if ((user as any).avatar.startsWith('avatars/')) {
-                    avatarUrl = `${apiBase}/api/profile/avatar`;
+                    avatarUrl = `${apiBase}/api/profile/avatar?v=${Date.now()}`;
                 } else {
                 // Check if avatar is a file ID
                 const file = await prisma.file.findUnique({
@@ -93,7 +93,9 @@ router.get('/avatar', protect, async (req: AuthRequest, res, next) => {
         const objectKey = (user as any).avatar as string;
         const stream = await minioClient.getObject(BUCKET_NAME, objectKey);
         res.setHeader('Content-Type', 'image/jpeg');
-        res.setHeader('Cache-Control', 'private, max-age=300');
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+        res.setHeader('Pragma', 'no-cache');
+        res.setHeader('Expires', '0');
         stream.on('error', (err: any) => next(err));
         stream.pipe(res);
     } catch (err) {
@@ -155,7 +157,9 @@ router.get('/avatar/:userId', protect, async (req: AuthRequest, res, next) => {
 
         const stream = await minioClient.getObject(BUCKET_NAME, (target as any).avatar);
         res.setHeader('Content-Type', 'image/jpeg');
-        res.setHeader('Cache-Control', 'private, max-age=300');
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+        res.setHeader('Pragma', 'no-cache');
+        res.setHeader('Expires', '0');
         stream.on('error', (err: any) => next(err));
         stream.pipe(res);
     } catch (err) {
@@ -257,7 +261,7 @@ router.post('/avatar', protect, async (req: AuthRequest, res, next) => {
 
             res.json({
                 ...updated,
-                avatarUrl: `${apiBase}/api/profile/avatar`,
+                avatarUrl: `${apiBase}/api/profile/avatar?v=${Date.now()}`,
             });
         } catch (err) {
             console.error('Avatar upload error:', err);

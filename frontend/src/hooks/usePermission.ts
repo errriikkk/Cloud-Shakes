@@ -32,6 +32,15 @@ export function usePermission() {
     const canCreateNotes = () => hasPermission('create_notes');
     const canEditNotes = () => hasPermission('edit_notes');
     const canDeleteNotes = () => hasPermission('delete_notes');
+
+    // Documents
+    const canViewDocuments = () => hasPermission('view_documents');
+    const canCreateDocuments = () => hasPermission('create_documents');
+    const canEditDocuments = () => hasPermission('edit_documents');
+    const canDeleteDocuments = () => hasPermission('delete_documents');
+    const canShareDocuments = () => hasPermission('share_documents');
+    const canCommentDocuments = () => hasPermission('comment_documents');
+    const canReviewDocuments = () => hasPermission('review_documents');
     
     // Calendar
     const canViewCalendar = () => hasPermission('view_calendar');
@@ -109,6 +118,14 @@ export function usePermission() {
         canCreateNotes,
         canEditNotes,
         canDeleteNotes,
+        // Documents
+        canViewDocuments,
+        canCreateDocuments,
+        canEditDocuments,
+        canDeleteDocuments,
+        canShareDocuments,
+        canCommentDocuments,
+        canReviewDocuments,
         // Calendar
         canViewCalendar,
         canCreateEvents,

@@ -12,13 +12,15 @@ import Table from "@tiptap/extension-table";
 import TableRow from "@tiptap/extension-table-row";
 import TableCell from "@tiptap/extension-table-cell";
 import TableHeader from "@tiptap/extension-table-header";
+import TextAlign from "@tiptap/extension-text-align";
+import Highlight from "@tiptap/extension-highlight";
 import { useEffect, useCallback, useState } from "react";
 import { motion } from "framer-motion";
 import {
     Bold, Italic, Underline as UnderlineIcon, Strikethrough,
     Heading1, Heading2, Heading3, List, ListOrdered, CheckSquare,
     Quote, Code, Link as LinkIcon, Image as ImageIcon,
-    Table as TableIcon, Undo, Redo, Minus
+    Table as TableIcon, Undo, Redo, Minus, Highlighter, AlignLeft, AlignCenter, AlignRight
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -105,6 +107,10 @@ export function TipTapEditor({
             TableRow,
             TableHeader,
             TableCell,
+            TextAlign.configure({
+                types: ["heading", "paragraph"],
+            }),
+            Highlight,
         ],
         content: content || "",
         editable,
@@ -189,6 +195,12 @@ export function TipTapEditor({
                         label="Tachado"
                         isActive={editor.isActive("strike")}
                     />
+                    <ToolbarButton
+                        icon={Highlighter}
+                        onClick={() => editor.chain().focus().toggleHighlight().run()}
+                        label="Resaltar"
+                        isActive={editor.isActive("highlight")}
+                    />
                     
                     <div className="w-px h-6 bg-border mx-1" />
                     
@@ -253,6 +265,24 @@ export function TipTapEditor({
                         icon={Minus} 
                         onClick={() => editor.chain().focus().setHorizontalRule().run()} 
                         label="Separador"
+                    />
+                    <ToolbarButton
+                        icon={AlignLeft}
+                        onClick={() => editor.chain().focus().setTextAlign("left").run()}
+                        label="Alinear izquierda"
+                        isActive={editor.isActive({ textAlign: "left" })}
+                    />
+                    <ToolbarButton
+                        icon={AlignCenter}
+                        onClick={() => editor.chain().focus().setTextAlign("center").run()}
+                        label="Centrar"
+                        isActive={editor.isActive({ textAlign: "center" })}
+                    />
+                    <ToolbarButton
+                        icon={AlignRight}
+                        onClick={() => editor.chain().focus().setTextAlign("right").run()}
+                        label="Alinear derecha"
+                        isActive={editor.isActive({ textAlign: "right" })}
                     />
                     
                     <div className="w-px h-6 bg-border mx-1" />

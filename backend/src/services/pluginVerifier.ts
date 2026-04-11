@@ -1,14 +1,12 @@
 import { createHash } from 'crypto';
 import nacl from 'tweetnacl';
 import { encodeBase64, decodeBase64 } from 'tweetnacl-util';
-import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, symlinkSync, unlinkSync } from 'fs';
-import { join, dirname } from 'path';
-import { createWriteStream, createReadStream } from 'fs';
-import { pipeline } from 'stream/promises';
-import { createGunzip } from 'zlib';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, symlinkSync, unlinkSync, rmSync, renameSync, statSync } from 'fs';
+import { join } from 'path';
+import extractZip from 'extract-zip';
 
 const PLUGIN_PUBLIC_KEY = process.env.PLUGIN_PUBLIC_KEY || '';
-const PLUGIN_CACHE_DIR = process.env.PLUGIN_CACHE_DIR || '/data/plugins';
+const PLUGIN_CACHE_DIR = process.env.PLUGIN_CACHE_DIR || join(process.cwd(), 'data', 'plugins');
 const PLUGIN_CACHE_TTL = parseInt(process.env.PLUGIN_CACHE_TTL || '600'); // 10 minutos
 
 interface PluginVersion {
@@ -18,12 +16,14 @@ interface PluginVersion {
   downloadUrl: string;
   checksum: string;
   signature: string;
+  licenseJwt?: string;
   capabilities: string[];
   runtime: string;
   entryPoint: string;
   memoryLimit: string;
   timeout: number;
   ioTimeout: number;
+  downloadUrls?: string[];
 }
 
 interface CachedPlugin {
@@ -109,17 +109,36 @@ class PluginVerifier {
 
   async downloadAndVerify(version: PluginVersion): Promise<string> {
     const pluginDir = join(PLUGIN_CACHE_DIR, version.name, version.version);
-    
-    if (!existsSync(pluginDir)) {
-      mkdirSync(pluginDir, { recursive: true });
-    }
+
+    // Reinstalling same version should be idempotent.
+    // Clean stale partial files from previous failed extraction attempts.
+    rmSync(pluginDir, { recursive: true, force: true });
+    mkdirSync(pluginDir, { recursive: true });
 
     const zipPath = join(pluginDir, 'plugin.zip');
     const sigPath = join(pluginDir, 'plugin.sig');
 
-    const response = await fetch(version.downloadUrl);
-    if (!response.ok) {
-      throw new Error(`Failed to download plugin: ${response.statusText}`);
+    const candidateUrls = Array.from(
+      new Set([version.downloadUrl, ...(version.downloadUrls || [])].filter(Boolean))
+    );
+
+    let response: Response | null = null;
+    let lastError = 'Not Found';
+    for (const url of candidateUrls) {
+      try {
+        const res = await fetch(url);
+        if (res.ok) {
+          response = res;
+          break;
+        }
+        lastError = `${res.status} ${res.statusText}`.trim();
+      } catch (error: any) {
+        lastError = error?.message || 'Network error';
+      }
+    }
+
+    if (!response) {
+      throw new Error(`Failed to download plugin: ${lastError}`);
     }
 
     const buffer = await response.arrayBuffer();
@@ -135,6 +154,8 @@ class PluginVerifier {
 
     writeFileSync(zipPath, fileBuffer);
     writeFileSync(sigPath, version.signature);
+    await this.extractPluginZip(zipPath, pluginDir);
+    this.ensureRuntimeManifest(pluginDir, version);
 
     const manifest = {
       name: version.name,
@@ -149,6 +170,10 @@ class PluginVerifier {
     };
     writeFileSync(join(pluginDir, 'manifest.json'), JSON.stringify(manifest, null, 2));
 
+    if (version.licenseJwt) {
+      writeFileSync(join(pluginDir, 'license.jwt'), version.licenseJwt);
+    }
+
     this.cache.set(`${version.name}:${version.version}`, {
       version,
       downloadedAt: Date.now(),
@@ -157,6 +182,73 @@ class PluginVerifier {
     this.saveCacheMeta();
 
     return pluginDir;
+  }
+
+  private ensureRuntimeManifest(pluginDir: string, version: PluginVersion): void {
+    const runtimeManifestPath = join(pluginDir, 'plugin.json');
+    if (existsSync(runtimeManifestPath)) return;
+
+    let source: any = null;
+    const shakesManifestPath = join(pluginDir, 'shakes.json');
+    const legacyManifestPath = join(pluginDir, 'manifest.json');
+
+    try {
+      if (existsSync(shakesManifestPath)) {
+        source = JSON.parse(readFileSync(shakesManifestPath, 'utf-8'));
+      } else if (existsSync(legacyManifestPath)) {
+        source = JSON.parse(readFileSync(legacyManifestPath, 'utf-8'));
+      }
+    } catch (error) {
+      console.warn('[PluginVerifier] Could not parse source manifest, generating fallback plugin.json', error);
+    }
+
+    const normalized = {
+      name: source?.name || version.name,
+      version: source?.version || version.version,
+      displayName: source?.displayName || source?.name || version.displayName || version.name,
+      description: source?.description || '',
+      apiVersion: '1.0',
+      capabilities: Array.isArray(source?.capabilities) ? source.capabilities : (version.capabilities || []),
+      runtime: source?.runtime || version.runtime || 'js',
+      entryPoint: source?.entryPoint || version.entryPoint || 'index.js',
+      memoryLimit: source?.memoryLimit || version.memoryLimit || '128Mi',
+      timeout: source?.timeout || version.timeout || 5,
+      ioTimeout: source?.ioTimeout || version.ioTimeout || 30,
+      author: source?.author || 'unknown',
+      website: source?.website,
+      repository: source?.repository,
+      license: source?.license || 'MIT',
+      slots: Array.isArray(source?.slots) ? source.slots : [],
+      checksum: version.checksum,
+      signature: version.signature,
+    };
+
+    writeFileSync(runtimeManifestPath, JSON.stringify(normalized, null, 2));
+  }
+
+  private async extractPluginZip(zipPath: string, targetDir: string): Promise<void> {
+    const tempDir = join(targetDir, `.tmp-${Date.now()}`);
+    mkdirSync(tempDir, { recursive: true });
+    try {
+      await extractZip(zipPath, { dir: tempDir });
+      const extracted = readdirSync(tempDir);
+      if (extracted.length === 1 && statSync(join(tempDir, extracted[0])).isDirectory()) {
+        const inner = join(tempDir, extracted[0]);
+        for (const item of readdirSync(inner)) {
+          const destination = join(targetDir, item);
+          rmSync(destination, { recursive: true, force: true });
+          renameSync(join(inner, item), join(targetDir, item));
+        }
+      } else {
+        for (const item of extracted) {
+          const destination = join(targetDir, item);
+          rmSync(destination, { recursive: true, force: true });
+          renameSync(join(tempDir, item), join(targetDir, item));
+        }
+      }
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
   }
 
   async installPlugin(version: PluginVersion): Promise<string> {
@@ -215,6 +307,7 @@ class PluginVerifier {
     const pluginDir = join(PLUGIN_CACHE_DIR, name, version);
     const manifestPath = join(pluginDir, 'manifest.json');
     const sigPath = join(pluginDir, 'plugin.sig');
+    const jwtPath = join(pluginDir, 'license.jwt');
 
     if (!existsSync(manifestPath) || !existsSync(sigPath)) {
       return false;
@@ -222,6 +315,14 @@ class PluginVerifier {
 
     const manifest = JSON.parse(readFileSync(manifestPath, 'utf-8'));
     const signature = readFileSync(sigPath, 'utf-8');
+
+    if (existsSync(jwtPath)) {
+      const jwtContent = readFileSync(jwtPath, 'utf-8');
+      // In a full implementation, we'd verify the JWT signature offline here.
+      // E.g., jsonwebtoken.verify(jwtContent, PLUGIN_PUBLIC_KEY)
+      // For now, having it cached locally allows offline booting to proceed.
+      if (!jwtContent.trim()) return false;
+    }
 
     return this.verifySignature(manifest.checksum, signature);
   }

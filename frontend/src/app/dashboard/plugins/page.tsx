@@ -1,10 +1,22 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
-import { Search, Star, Download, X, Grid, List, Zap, ChevronRight, ArrowRight, Sparkles, HardDrive } from 'lucide-react';
-import Link from 'next/link';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
+import { useAuth } from '@/context/AuthContext';
+import { motion, AnimatePresence } from 'framer-motion';
+import {
+  Search, Star, Download, X,
+  Package, RefreshCw, Loader2,
+  CheckCircle, Shield, ArrowRight,
+  Filter, Grid, LayoutList, Upload, AlertTriangle, Zap, Github, Globe
+} from 'lucide-react';
+import { Button } from '@/components/ui/Button';
+import axios from 'axios';
+import { API_ENDPOINTS } from '@/lib/api';
+import { cn } from '@/lib/utils';
+import { useTranslation } from '@/lib/i18n';
 
-const PLUGIN_REGISTRY_URL = process.env.NEXT_PUBLIC_PLUGIN_REGISTRY_URL || 'http://localhost:5005';
+const PLUGIN_REGISTRY_URL = process.env.NEXT_PUBLIC_PLUGIN_REGISTRY_URL || 'https://cdn.shakes.es';
 
 interface Plugin {
   name: string;
@@ -16,359 +28,373 @@ interface Plugin {
   downloads: number;
   rating: number;
   latestVersion: string;
-  pricing: { type: string; price?: number; currency?: string } | null;
-  tags: string[];
+  status?: string;
+  sideloaded?: boolean;
 }
 
 interface Category {
   id: string;
   name: string;
-  description: string;
   icon: string;
   pluginCount: number;
 }
 
-const categoryMeta: Record<string, { color: string; accent: string; label: string }> = {
-  integration:   { color: '#0F172A', accent: '#38BDF8', label: 'Integration'   },
-  automation:    { color: '#1C1008', accent: '#FB923C', label: 'Automation'    },
-  analytics:     { color: '#071A10', accent: '#34D399', label: 'Analytics'     },
-  ai:            { color: '#120A1E', accent: '#C084FC', label: 'AI'            },
-  storage:       { color: '#1A1506', accent: '#FBBF24', label: 'Storage'       },
-  ui:            { color: '#1A0A12', accent: '#F472B6', label: 'UI'            },
-  communication: { color: '#051514', accent: '#2DD4BF', label: 'Comms'        },
-  security:      { color: '#190808', accent: '#F87171', label: 'Security'      },
-  productivity:  { color: '#0A0D1F', accent: '#818CF8', label: 'Productivity'  },
-  utilities:     { color: '#0F0F0F', accent: '#94A3B8', label: 'Utilities'     },
-};
+interface InstalledPlugin {
+  name: string;
+  displayName?: string;
+  version?: string;
+  currentVersion?: string;
+  latestVersion?: string;
+  sideloaded?: boolean;
+}
 
-const getAccent = (cat: string) => categoryMeta[cat]?.accent ?? '#94A3B8';
+interface SideloadResult {
+  success: boolean;
+  pluginName: string;
+  displayName: string;
+  version: string;
+  message: string;
+  activationWarning?: string | null;
+}
 
 export default function PluginsPage() {
+  const { user } = useAuth();
+  const { t } = useTranslation();
+  const canManagePlugins = user?.isAdmin || user?.permissions?.includes('manage_plugins');
+  const router = useRouter();
+  
   const [plugins, setPlugins]           = useState<Plugin[]>([]);
   const [categories, setCategories]     = useState<Category[]>([]);
-  const [featured, setFeatured]         = useState<Plugin[]>([]);
+  const [installedPlugins, setInstalledPlugins] = useState<InstalledPlugin[]>([]);
+  const [pluginLogs, setPluginLogs]     = useState<any[]>([]);
+  const [pluginStatus, setPluginStatus] = useState({ configured: true, message: '' });
   const [loading, setLoading]           = useState(true);
+  const [logsLoading, setLogsLoading]   = useState(false);
   const [searchQuery, setSearchQuery]   = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
-  const [viewMode, setViewMode]         = useState<'grid' | 'list'>('grid');
-  const inputRef = useRef<HTMLInputElement>(null);
+  const [selectedCategory, setSelectedCategory] = useState<string | 'all'>('all');
+  const [activeTab, setActiveTab]       = useState<'store' | 'installed' | 'logs'>('store');
 
-  useEffect(() => { fetchData(); }, []);
+  const [sideloadDragging, setSideloadDragging] = useState(false);
+  const [sideloadUploading, setSideloadUploading] = useState(false);
+  const [sideloadResult, setSideloadResult] = useState<SideloadResult | null>(null);
+  const [sideloadError, setSideloadError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
-      const [catsRes, featRes, allRes] = await Promise.all([
-        fetch(`${PLUGIN_REGISTRY_URL}/api/plugins/categories`),
-        fetch(`${PLUGIN_REGISTRY_URL}/api/plugins/featured`),
-        fetch(`${PLUGIN_REGISTRY_URL}/api/plugins`),
-      ]);
-      const [catsData, featData, allData] = await Promise.all([
-        catsRes.json(), featRes.json(), allRes.json(),
-      ]);
-      setCategories(catsData.categories || []);
-      setFeatured(featData.plugins || []);
-      setPlugins(allData.plugins || []);
-    } catch (err) {
-      console.error('Failed to fetch plugins:', err);
-    } finally {
-      setLoading(false);
+      setLoading(true);
+      const token = localStorage.getItem('token');
+      
+      const localInstalledRes = await axios.get(API_ENDPOINTS.PLUGINS.INSTALLED, {
+        headers: { Authorization: `Bearer ${token}` }, withCredentials: true
+      }).catch(() => null);
+      
+      if (localInstalledRes?.data?.plugins) {
+        setInstalledPlugins(localInstalledRes.data.plugins);
+      }
+
+      try {
+        const statusRes = await axios.get(API_ENDPOINTS.PLUGINS.INSTALLED.replace('/installed', '/status'), {
+          headers: { Authorization: `Bearer ${token}` }, withCredentials: true
+        });
+        setPluginStatus({ configured: statusRes.data?.configured !== false, message: statusRes.data?.message || '' });
+      } catch { setPluginStatus({ configured: true, message: '' }); }
+
+      const fetchCdn = (path: string) => fetch(`${PLUGIN_REGISTRY_URL}${path}`).then(r => r.json()).catch(() => null);
+      const [catsData, allData] = await Promise.all([fetchCdn('/api/plugins/categories'), fetchCdn('/api/plugins')]);
+      if (catsData?.categories) setCategories(catsData.categories);
+      if (allData?.plugins) setPlugins(allData.plugins);
+    } catch (err) { console.error('Data sync failed:', err); }
+    finally { setLoading(false); }
+  }, [PLUGIN_REGISTRY_URL]);
+
+  useEffect(() => { fetchData(); }, [fetchData]);
+
+  const fetchLogs = async () => {
+    if (!canManagePlugins) return;
+    setLogsLoading(true);
+    try {
+      const token = localStorage.getItem('token');
+      const res = await axios.get(API_ENDPOINTS.PLUGINS.LOGS, {
+        headers: { Authorization: `Bearer ${token}` }, withCredentials: true,
+      });
+      setPluginLogs(res.data.logs || []);
+    } catch (err) { console.error('Failed to fetch logs:', err); }
+    finally { setLogsLoading(false); }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'logs' && canManagePlugins) fetchLogs();
+  }, [activeTab, canManagePlugins]);
+
+  const handleSideloadFile = useCallback(async (file: File) => {
+    if (!file.name.endsWith('.zip')) {
+      setSideloadError('Only ZIP files are supported');
+      return;
     }
-  };
-
-  const handleSearch = async () => {
-    if (!searchQuery.trim()) { fetchData(); return; }
-    setLoading(true);
+    setSideloadError(null);
+    setSideloadResult(null);
+    setSideloadUploading(true);
     try {
-      const res = await fetch(`${PLUGIN_REGISTRY_URL}/api/plugins/search?q=${encodeURIComponent(searchQuery)}`);
-      const data = await res.json();
-      setPlugins(data.plugins || []);
-    } catch (err) { console.error('Search failed:', err); }
-    finally { setLoading(false); }
+      const token = localStorage.getItem('token');
+      const formData = new FormData();
+      formData.append('plugin', file);
+      const res = await axios.post(API_ENDPOINTS.PLUGINS.UPLOAD_ZIP, formData, {
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'multipart/form-data' },
+        withCredentials: true,
+      });
+      setSideloadResult(res.data);
+      setTimeout(() => fetchData(), 800);
+    } catch (err: any) {
+      setSideloadError(err?.response?.data?.error || 'Failed to install zip');
+    } finally {
+      setSideloadUploading(false);
+    }
+  }, [fetchData]);
+
+  const mergedStorePlugins = useMemo(() => {
+    const byName = new Map<string, Plugin>();
+    for (const p of plugins) byName.set(p.name, p);
+    for (const ip of installedPlugins) {
+      if (!byName.has(ip.name)) {
+        byName.set(ip.name, {
+          name: ip.name,
+          displayName: ip.displayName || ip.name,
+          description: ip.sideloaded ? 'Manual sideload.' : 'System Local.',
+          category: 'utilities',
+          iconUrl: null,
+          author: ip.sideloaded ? 'Local' : 'System',
+          downloads: 0, rating: 0,
+          latestVersion: ip.latestVersion || ip.version || ip.currentVersion || 'unknown',
+          status: 'installed',
+          sideloaded: ip.sideloaded,
+        });
+      }
+    }
+    let result = Array.from(byName.values());
+    if (searchQuery.trim().length >= 2) {
+      const q = searchQuery.toLowerCase();
+      result = result.filter(p => p.displayName.toLowerCase().includes(q) || p.description.toLowerCase().includes(q) || p.name.toLowerCase().includes(q));
+    }
+    if (selectedCategory !== 'all') result = result.filter(p => p.category === selectedCategory);
+    return result;
+  }, [plugins, installedPlugins, searchQuery, selectedCategory]);
+
+  const getInstalledVersion = (name: string) => {
+    const found = installedPlugins.find(p => p.name === name);
+    return found ? (found.version || found.currentVersion) : undefined;
   };
-
-  const handleCategoryFilter = async (category: string | null) => {
-    setSelectedCategory(category);
-    setLoading(true);
-    try {
-      const url = category
-        ? `${PLUGIN_REGISTRY_URL}/api/plugins?category=${category}`
-        : `${PLUGIN_REGISTRY_URL}/api/plugins`;
-      const res = await fetch(url);
-      const data = await res.json();
-      setPlugins(data.plugins || []);
-    } catch (err) { console.error('Filter failed:', err); }
-    finally { setLoading(false); }
-  };
-
-  const clearFilters = () => { setSearchQuery(''); setSelectedCategory(null); fetchData(); };
-
-  const isFiltering = !!(searchQuery || selectedCategory);
-
-  if (loading) {
-    return (
-      <div className="space-y-6">
-        <div className="h-32 bg-muted/40 rounded-3xl animate-pulse" />
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {[1,2,3,4].map(i => <div key={i} className="h-24 bg-muted/40 rounded-2xl animate-pulse" />)}
-        </div>
-      </div>
-    );
-  }
 
   return (
-    <div className="space-y-8">
-      {/* Header */}
-      <div className="bg-gradient-to-r from-primary/10 via-primary/5 to-transparent border border-primary/20 rounded-3xl p-6 md:p-8">
-        <div className="max-w-2xl mx-auto text-center">
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-primary/10 border border-primary/20 rounded-full text-xs font-medium text-primary mb-4">
-            <Sparkles className="w-3.5 h-3.5" />
-            Plugin Store
-          </div>
-          <h1 className="text-3xl md:text-4xl font-black text-foreground tracking-tight mb-3">
-            Extend your <span className="text-primary">Cloud Shakes</span>
-          </h1>
-          <p className="text-muted-foreground mb-6">
-            {plugins.length} plugins available · integrations, automations & more
-          </p>
-
-          {/* Search */}
-          <div className="relative max-w-md mx-auto">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/60" />
-            <input
-              ref={inputRef}
-              type="text"
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && handleSearch()}
-              placeholder="Search plugins..."
-              className="w-full bg-background/80 border border-border/60 rounded-xl py-3 pl-11 pr-10 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40 transition-all"
-            />
-            {searchQuery && (
-              <button 
-                onClick={clearFilters}
-                className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:bg-muted rounded-lg transition-colors"
-              >
-                <X className="w-4 h-4 text-muted-foreground" />
-              </button>
-            )}
-          </div>
-        </div>
+    <div className="bg-background min-h-screen text-foreground">
+      {/* Premium Red Gradient Background */}
+      <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
+        <div className="absolute top-0 left-1/4 w-[1000px] h-[1000px] rounded-full blur-[150px] opacity-10 bg-primary/10" />
+        <div className="absolute bottom-0 right-1/4 w-[800px] h-[800px] rounded-full blur-[120px] opacity-10 bg-secondary/10" />
       </div>
 
-      {/* Categories */}
-      {!isFiltering && categories.length > 0 && (
-        <div>
-          <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Browse by category</h2>
-          <div className="flex flex-wrap gap-2">
-            {categories.map(cat => (
-              <button
-                key={cat.id}
-                onClick={() => handleCategoryFilter(cat.id)}
-                className="inline-flex items-center gap-2 px-3 py-2 bg-muted/50 hover:bg-muted border border-border/60 hover:border-border rounded-lg text-sm text-foreground transition-all"
-              >
-                <span>{cat.icon}</span>
-                <span className="font-medium">{cat.name}</span>
-                <span className="text-muted-foreground text-xs">{cat.pluginCount}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Featured */}
-      {!isFiltering && featured.length > 0 && (
-        <div>
-          <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Featured</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {featured.slice(0, 6).map((plugin, i) => (
-              <FeaturedCard key={plugin.name} plugin={plugin} index={i} />
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* All plugins */}
-      <div>
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
-          <div className="flex items-center gap-3">
-            <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              {isFiltering ? 'Results' : 'All plugins'}
-            </h2>
-            <span className="px-2 py-0.5 bg-muted/60 rounded text-xs text-muted-foreground">
-              {plugins.length}
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            {isFiltering && (
-              <button 
-                onClick={clearFilters}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-muted/50 hover:bg-muted border border-border/60 rounded-lg text-xs text-muted-foreground hover:text-foreground transition-all"
-              >
-                <X className="w-3.5 h-3.5" /> Clear
-              </button>
-            )}
-            {selectedCategory && (
-              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-primary/10 border border-primary/20 rounded-lg text-xs text-primary">
-                {categories.find(c => c.id === selectedCategory)?.icon}{' '}
-                {categories.find(c => c.id === selectedCategory)?.name}
+      {/* Museum Header */}
+      <header className="relative pt-12 pb-16 overflow-hidden border-b border-border z-10">
+        <div className="absolute inset-0 bg-gradient-to-b from-primary/5 via-transparent to-transparent opacity-50" />
+        
+        <div className="relative mx-auto max-w-[1400px] px-8">
+          <div className="flex flex-col md:flex-row md:items-end justify-between gap-8 mb-12">
+            <div className="space-y-4">
+              <span className="px-4 py-1 bg-primary/10 text-primary border border-primary/20 rounded-full text-[10px] font-black uppercase tracking-widest">
+                Plugin Ecosystem
               </span>
-            )}
-            <div className="flex bg-muted/50 border border-border/60 rounded-lg p-0.5">
-              <button
-                onClick={() => setViewMode('grid')}
-                className={`p-1.5 rounded-md transition-all ${viewMode === 'grid' ? 'bg-background shadow-sm' : 'hover:text-foreground text-muted-foreground'}`}
-              >
-                <Grid className="w-4 h-4" />
-              </button>
-              <button
-                onClick={() => setViewMode('list')}
-                className={`p-1.5 rounded-md transition-all ${viewMode === 'list' ? 'bg-background shadow-sm' : 'hover:text-foreground text-muted-foreground'}`}
-              >
-                <List className="w-4 h-4" />
-              </button>
+              <h1 className="text-5xl md:text-6xl font-black text-foreground tracking-tighter leading-tight">
+                {activeTab === 'store' ? 'Plugin Catalog' : 'Active Plugins'}
+              </h1>
+              <p className="text-lg text-muted-foreground font-medium max-w-xl">
+                Explore, manage and optimize your project with premium extensions and modules.
+              </p>
+            </div>
+            
+            <div className="flex items-center gap-3">
+               <button onClick={fetchData} className="p-4 bg-muted/50 hover:bg-muted border border-border rounded-2xl text-foreground transition-all">
+                 <RefreshCw className={cn('w-5 h-5', loading && 'animate-spin')} />
+               </button>
+               <button 
+                 onClick={() => fileInputRef.current?.click()}
+                 className="flex items-center gap-3 px-8 py-4 bg-primary text-primary-foreground rounded-2xl font-black text-lg hover:brightness-110 shadow-lg shadow-primary/20 transition-all"
+               >
+                 <Upload className="w-5 h-5" /> Import ZIP
+               </button>
+               <input ref={fileInputRef} type="file" accept=".zip" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) handleSideloadFile(f); e.target.value = ''; }} />
             </div>
           </div>
-        </div>
 
-        {plugins.length === 0 ? (
-          <div className="text-center py-16">
-            <Search className="w-10 h-10 text-muted-foreground/40 mx-auto mb-3" />
-            <p className="text-foreground font-medium">No plugins found</p>
-            <p className="text-sm text-muted-foreground">Try adjusting your search or filters</p>
+          <div className="flex flex-col md:flex-row items-center gap-4 bg-card/40 backdrop-blur-xl border border-border p-4 rounded-[2rem] shadow-xl">
+             <div className="relative flex-1 w-full">
+               <Search className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground focus:text-primary transition-colors" />
+               <input
+                 value={searchQuery}
+                 onChange={e => setSearchQuery(e.target.value)}
+                 placeholder="Search by name, category or description..."
+                 className="w-full h-14 bg-transparent pl-14 pr-12 text-foreground font-bold outline-none placeholder:text-muted-foreground/30 text-lg"
+               />
+               {searchQuery && (
+                 <button onClick={() => setSearchQuery('')} className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                   <X className="w-5 h-5" />
+                 </button>
+               )}
+             </div>
+             <div className="flex items-center gap-2 p-1 bg-muted/30 rounded-2xl border border-border/50 shrink-0 overflow-x-auto scrollbar-hide max-w-full">
+               <TabButton active={activeTab === 'store'} onClick={() => setActiveTab('store')} icon={Grid} label="Store" />
+               <TabButton active={activeTab === 'installed'} onClick={() => setActiveTab('installed')} icon={CheckCircle} label="Local" />
+               {canManagePlugins && <TabButton active={activeTab === 'logs'} onClick={() => setActiveTab('logs')} icon={LayoutList} label="Logs" />}
+             </div>
           </div>
-        ) : viewMode === 'grid' ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {plugins.map(p => <PluginCard key={p.name} plugin={p} />)}
+        </div>
+      </header>
+
+      <main className="mx-auto max-w-[1400px] px-8 py-12 relative z-10">
+        {/* Feedback Section */}
+        <AnimatePresence>
+          {sideloadResult && (
+            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }}
+              className="mb-8 p-6 bg-green-500/10 border border-green-500/20 rounded-[2rem] flex items-center justify-between text-green-500 shadow-lg shadow-green-500/5">
+              <div className="flex items-center gap-4">
+                 <div className="w-12 h-12 bg-green-500/20 rounded-full flex items-center justify-center font-black">
+                   <Zap className="w-6 h-6" />
+                 </div>
+                 <div>
+                    <h3 className="font-black text-lg">{sideloadResult.displayName} v{sideloadResult.version}</h3>
+                    <p className="text-sm font-medium opacity-80">{sideloadResult.message}</p>
+                 </div>
+              </div>
+              <button onClick={() => setSideloadResult(null)} className="p-2 hover:bg-green-500/10 rounded-full transition-colors"><X className="w-6 h-6" /></button>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Main Grid */}
+        {activeTab === 'logs' ? (
+          <div className="space-y-4">
+            {pluginLogs.length === 0 ? (
+               <div className="py-40 text-center opacity-30 italic text-xl font-bold">No activity logs recorded yet.</div>
+            ) : pluginLogs.map(log => (
+              <div key={log.id} className="p-6 bg-card border border-border rounded-[2rem] font-mono text-sm group hover:border-primary/30 transition-colors">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-primary font-black uppercase text-xs tracking-widest">{log.pluginName}</span>
+                  <span className="text-muted-foreground opacity-50 text-[10px]">{new Date(log.timestamp).toLocaleString()}</span>
+                </div>
+                <div className="text-foreground/90 leading-relaxed font-bold">{log.message}</div>
+              </div>
+            ))}
           </div>
         ) : (
-          <div className="space-y-2">
-            {plugins.map(p => <PluginListRow key={p.name} plugin={p} />)}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
+            {loading ? (
+              Array.from({ length: 8 }).map((_, i) => (
+                <div key={i} className="h-64 bg-muted/20 animate-pulse rounded-[2.5rem] border border-border/50" />
+              ))
+            ) : (
+              (activeTab === 'store' ? mergedStorePlugins : installedPlugins.map(ip => mergedStorePlugins.find(p => p.name === ip.name) || ip as any)).map((plugin, idx) => {
+                if (!plugin || !plugin.name) return null;
+                const installedVer = getInstalledVersion(plugin.name);
+                return (
+                  <FeatureCard
+                    key={plugin.name + idx}
+                    plugin={plugin}
+                    isInstalled={!!installedVer}
+                    installedVer={installedVer}
+                    onClick={() => router.push(`/dashboard/plugins/${plugin.name}`)}
+                  />
+                );
+              })
+            )}
           </div>
         )}
-      </div>
+      </main>
+
+      {/* Modern Red Footer */}
+      <footer className="border-t border-border bg-card/10 backdrop-blur-xl py-24 px-8 mt-20 relative z-10">
+        <div className="max-w-[1400px] mx-auto">
+          <div className="flex flex-col md:flex-row items-center justify-between gap-12">
+            <div className="flex flex-col items-center md:items-start gap-4">
+              <div className="flex items-center gap-4">
+                <Image src="/Cloud-shakeslogo.png" alt="Shakes" width={32} height={32} className="rounded-xl" />
+                <span className="text-2xl font-black tracking-tight tracking-widest uppercase">Shakes Store</span>
+              </div>
+              <p className="text-sm font-bold text-muted-foreground max-w-xs text-center md:text-left opacity-50 capitalize">The next generation plugin ecosystem for modern creators.</p>
+            </div>
+            
+            <div className="flex items-center gap-12 text-sm font-black uppercase tracking-widest text-muted-foreground/60">
+               <a href="https://github.com/errriikkk/Cloud-Shakes" target="_blank" className="hover:text-primary transition-colors">Github</a>
+               <a href="https://docs.shakes.es" target="_blank" className="hover:text-primary transition-colors">Documentation</a>
+               <div className="relative group/discord cursor-help">
+                 <span className="group-hover/discord:opacity-0 transition-opacity duration-300">Discord</span>
+                 <span className="absolute inset-0 opacity-0 group-hover/discord:opacity-100 transition-all duration-300 text-primary pointer-events-none whitespace-nowrap translate-y-1 group-hover/discord:translate-y-0 text-[10px]">Próximamente</span>
+               </div>
+            </div>
+          </div>
+          
+          <div className="mt-20 pt-8 border-t border-border/30 flex flex-col md:flex-row items-center justify-between gap-6">
+             <p className="text-[10px] font-black text-muted-foreground/40 uppercase tracking-[0.2em]">© 2026 Cloud Shakes. {t('footerRights')}</p>
+             <div className="flex items-center gap-6 text-[10px] font-black uppercase tracking-widest opacity-30">
+                <a href="https://shakes.es/privacy" target="_blank" className="hover:opacity-100 transition-opacity">Privacy Policy</a>
+                <a href="https://shakes.es/privacy" target="_blank" className="hover:opacity-100 transition-opacity">Terms of Service</a>
+             </div>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }
 
-function FeaturedCard({ plugin, index }: { plugin: Plugin; index: number }) {
-  const accent = getAccent(plugin.category);
+function TabButton({ active, onClick, icon: Icon, label }: { active: boolean; onClick: () => void; icon: any; label: string }) {
   return (
-    <Link
-      href={`/dashboard/plugins/${plugin.name}`}
-      className="group block p-4 bg-muted/30 hover:bg-muted/50 border border-border/60 hover:border-primary/30 rounded-2xl transition-all duration-300 hover:shadow-lg hover:shadow-primary/5"
-      style={{ animationDelay: `${index * 80}ms` }}
-    >
-      <div className="flex items-start gap-3 mb-3">
-        <PluginIcon plugin={plugin} size={44} />
-        <div className="flex-1 min-w-0">
-          <h3 className="font-semibold text-foreground truncate group-hover:text-primary transition-colors">{plugin.displayName}</h3>
-          <p className="text-xs text-muted-foreground truncate">{plugin.author}</p>
-        </div>
-        <ArrowRight className="w-4 h-4 text-muted-foreground group-hover:text-primary group-hover:translate-x-1 transition-all" />
-      </div>
-      <p className="text-sm text-muted-foreground line-clamp-2 mb-3">{plugin.description}</p>
-      <div className="flex items-center gap-3 text-xs text-muted-foreground pt-3 border-t border-border/40">
-        {plugin.rating > 0 && (
-          <span className="flex items-center gap-1">
-            <Star className="w-3.5 h-3.5 fill-yellow-500 text-yellow-500" /> {plugin.rating.toFixed(1)}
-          </span>
-        )}
-        <span className="flex items-center gap-1">
-          <Download className="w-3.5 h-3.5" /> {fmtNum(plugin.downloads)}
-        </span>
-        {plugin.latestVersion && <span className="text-muted-foreground/70">v{plugin.latestVersion}</span>}
-        <span className="ml-auto font-medium text-foreground">{priceLabel(plugin)}</span>
-      </div>
-    </Link>
+    <button onClick={onClick} className={cn(
+      "flex items-center gap-2 px-6 py-3 rounded-xl font-black text-sm transition-all",
+      active ? "bg-primary text-primary-foreground shadow-lg shadow-primary/20 scale-105" : "text-muted-foreground hover:text-foreground"
+    )}>
+      <Icon className="w-4 h-4" /> {label}
+    </button>
   );
 }
 
-function PluginCard({ plugin }: { plugin: Plugin }) {
+function FeatureCard({ plugin, isInstalled, installedVer, onClick }: { plugin: Plugin; isInstalled: boolean; installedVer?: string; onClick: () => void }) {
+  const { t } = useTranslation();
+  const hasUpdate = isInstalled && installedVer && plugin.latestVersion && installedVer !== plugin.latestVersion;
+
   return (
-    <Link
-      href={`/dashboard/plugins/${plugin.name}`}
-      className="group block p-4 bg-muted/30 hover:bg-muted/50 border border-border/60 hover:border-primary/30 rounded-xl transition-all duration-200 hover:shadow-md"
+    <motion.div 
+      whileHover={{ y: -8, scale: 1.02 }} 
+      onClick={onClick}
+      className="group cursor-pointer p-8 bg-card border border-border rounded-[2.5rem] shadow-sm hover:shadow-2xl hover:border-primary/30 transition-all duration-500 flex flex-col h-[320px] relative overflow-hidden"
     >
-      <div className="flex items-start gap-3 mb-3">
-        <PluginIcon plugin={plugin} size={40} />
-        <div className="flex-1 min-w-0">
-          <h3 className="font-semibold text-foreground truncate group-hover:text-primary transition-colors">{plugin.displayName}</h3>
-          <p className="text-xs text-muted-foreground truncate">{plugin.author}</p>
+      <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-full -translate-y-1/2 translate-x-1/2 blur-2xl group-hover:bg-primary/10 transition-colors" />
+      
+      <div className="flex flex-col items-center text-center mb-6">
+        <div className="w-16 h-16 rounded-2xl bg-muted/50 flex items-center justify-center text-muted-foreground border border-border group-hover:border-primary/30 transition-colors overflow-hidden">
+          {plugin.iconUrl ? <img src={plugin.iconUrl} alt="icon" className="w-full h-full object-cover" /> : (plugin.displayName || '?')[0].toUpperCase()}
+        </div>
+        <div className="mt-4 w-full">
+           <h3 className="font-black text-xl text-foreground tracking-tight truncate px-2">{plugin.displayName}</h3>
+           <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">by {plugin.author}</p>
         </div>
       </div>
-      <p className="text-sm text-muted-foreground line-clamp-2 mb-3">{plugin.description}</p>
-      <div className="flex items-center justify-between text-xs text-muted-foreground pt-3 border-t border-border/40">
-        <div className="flex items-center gap-2">
-          {plugin.rating > 0 && (
-            <span className="flex items-center gap-1">
-              <Star className="w-3 h-3 fill-yellow-500 text-yellow-500" /> {plugin.rating.toFixed(1)}
+
+      <p className="text-sm text-muted-foreground font-medium line-clamp-3 leading-relaxed mb-auto text-center">{plugin.description}</p>
+      
+      <div className="flex items-center justify-between pt-6 mt-6 border-t border-border/50">
+        <div className="flex items-center gap-3">
+          {isInstalled && (
+            <span className={cn("px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest flex items-center gap-1", 
+              hasUpdate ? "bg-amber-500/10 text-amber-500" : "bg-green-500/10 text-green-500"
+            )}>
+              <span className={cn("w-1.5 h-1.5 rounded-full", hasUpdate ? "bg-amber-500" : "bg-green-500")} /> 
+              {hasUpdate ? 'Update' : 'Installed'}
             </span>
           )}
-          <span className="flex items-center gap-1">
-            <Download className="w-3 h-3" /> {fmtNum(plugin.downloads)}
-          </span>
-          {plugin.latestVersion && <span className="text-muted-foreground/70">v{plugin.latestVersion}</span>}
+          <span className="text-[10px] font-black font-mono text-muted-foreground/50 uppercase tracking-widest">v{plugin.latestVersion}</span>
         </div>
-        <span className="font-medium text-foreground">{priceLabel(plugin)}</span>
+        <button className="p-3 bg-muted group-hover:bg-primary group-hover:text-primary-foreground rounded-2xl transition-all transform group-hover:rotate-12">
+          <ArrowRight className="w-4 h-4" />
+        </button>
       </div>
-    </Link>
+    </motion.div>
   );
-}
-
-function PluginListRow({ plugin }: { plugin: Plugin }) {
-  return (
-    <Link
-      href={`/dashboard/plugins/${plugin.name}`}
-      className="group flex items-center gap-4 p-3 bg-muted/30 hover:bg-muted/50 border border-border/60 hover:border-primary/30 rounded-xl transition-all duration-200"
-    >
-      <PluginIcon plugin={plugin} size={36} />
-      <div className="flex-1 min-w-0">
-        <h3 className="font-semibold text-foreground truncate group-hover:text-primary transition-colors">{plugin.displayName}</h3>
-        <p className="text-sm text-muted-foreground truncate">{plugin.description}</p>
-      </div>
-      <div className="flex items-center gap-4 text-xs text-muted-foreground">
-        {plugin.rating > 0 && (
-          <span className="flex items-center gap-1">
-            <Star className="w-3 h-3 fill-yellow-500 text-yellow-500" /> {plugin.rating.toFixed(1)}
-          </span>
-        )}
-        <span className="flex items-center gap-1">
-          <Download className="w-3 h-3" /> {fmtNum(plugin.downloads)}
-        </span>
-        <span className="px-2 py-1 bg-muted/60 rounded text-xs capitalize">{plugin.category}</span>
-        <span className="font-medium text-foreground min-w-[60px] text-right">{priceLabel(plugin)}</span>
-      </div>
-    </Link>
-  );
-}
-
-function PluginIcon({ plugin, size }: { plugin: Plugin; size: number }) {
-  const accent = getAccent(plugin.category);
-  return (
-    <div
-      className="rounded-lg flex items-center justify-center text-sm font-semibold shrink-0"
-      style={{ 
-        width: size, 
-        height: size, 
-        backgroundColor: `${accent}15`,
-        color: accent,
-        border: `1px solid ${accent}30`
-      }}
-    >
-      {plugin.iconUrl
-        ? <img src={plugin.iconUrl} alt={plugin.displayName} className="w-full h-full object-cover rounded-lg" />
-        : plugin.displayName.charAt(0).toUpperCase()
-      }
-    </div>
-  );
-}
-
-function fmtNum(n: number) {
-  return n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n);
-}
-
-function priceLabel(p: Plugin) {
-  if (p.pricing?.type === 'free') return 'Free';
-  if (p.pricing?.price) return `${p.pricing.currency} ${p.pricing.price}`;
-  return '';
 }

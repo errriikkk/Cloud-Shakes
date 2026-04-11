@@ -331,6 +331,11 @@ export default function CalendarPage() {
                                 className="h-10 w-full rounded-2xl border border-border bg-muted/20 pl-9 pr-3 text-sm outline-none focus:ring-4 focus:ring-primary/10"
                             />
                         </div>
+                        {q.trim() && (
+                            <div className="text-xs text-muted-foreground">
+                                {filteredEvents.length} resultado(s)
+                            </div>
+                        )}
 
                         <div className="flex items-center gap-2">
                             <ViewPill active={view === "month"} onClick={() => setView("month")} icon={CalIcon} label={t("calendar.views.month")} />
@@ -348,6 +353,11 @@ export default function CalendarPage() {
                         {[1, 2, 3, 4].map(i => (
                             <div key={i} className="h-16 rounded-2xl border border-border bg-muted/20 animate-pulse" />
                         ))}
+                    </div>
+                ) : filteredEvents.length === 0 && q.trim() ? (
+                    <div className="text-center py-16 text-muted-foreground">
+                        <Search className="w-12 h-12 mx-auto mb-3 opacity-20" />
+                        <p className="text-sm">No hay resultados para "{q.trim()}"</p>
                     </div>
                 ) : view === "month" ? (
                     <div className="overflow-hidden rounded-2xl border border-border bg-background">

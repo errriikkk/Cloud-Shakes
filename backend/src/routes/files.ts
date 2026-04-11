@@ -8,6 +8,7 @@ import { ThrottledStream } from '../utils/throttle';
 import { LIMITS } from '../config/limits';
 import { createActivity } from './activity';
 import { getCloudSettingsCached } from './cloudSettings';
+import { redisGetJson, redisSetJson } from '../utils/redisCache';
 import * as fs from 'fs';
 import * as path from 'path';
 import { exec } from 'child_process';
@@ -16,6 +17,8 @@ import { promisify } from 'util';
 const execAsync = promisify(exec);
 
 const router = express.Router();
+const PREVIEW_FILE_CACHE_TTL = 20;
+const PREVIEW_STAT_CACHE_TTL = 25;
 
 // Allowed MIME types for uploads (whitelist) — broad compatibility for open source
 const ALLOWED_MIME_TYPES = [
@@ -466,9 +469,19 @@ router.post('/bulk-move', protect, requirePermission('upload_files'), async (req
 // @access  Private
 router.get('/:id/preview', protect, async (req: AuthRequest, res, next) => {
     try {
-        const file = await prisma.file.findUnique({
-            where: { id: req.params.id as string },
-        });
+        const fileId = req.params.id as string;
+        const fileCacheKey = `preview:file:${fileId}`;
+        const statCacheKey = `preview:stat:${fileId}`;
+
+        let file = await redisGetJson<any>(fileCacheKey);
+        if (!file) {
+            file = await prisma.file.findUnique({
+                where: { id: fileId },
+            });
+            if (file) {
+                await redisSetJson(fileCacheKey, file, PREVIEW_FILE_CACHE_TTL);
+            }
+        }
 
         if (!file) return res.status(404).json({ message: 'File not found' });
 
@@ -492,20 +505,63 @@ router.get('/:id/preview', protect, async (req: AuthRequest, res, next) => {
         const shouldThrottle = previewSpeedBytes > 0;
 
         try {
-            const stat = await minioClient.statObject(BUCKET_NAME, file.storedName);
-            const fileSize = stat.size;
+            const cachedStat = await redisGetJson<{ size: number }>(statCacheKey);
+            let fileSize = cachedStat?.size;
+            if (fileSize === undefined || fileSize === null) {
+                const stat = await minioClient.statObject(BUCKET_NAME, file.storedName);
+                fileSize = stat.size;
+                await redisSetJson(statCacheKey, { size: fileSize }, PREVIEW_STAT_CACHE_TTL);
+            }
+            const range = req.headers.range;
+            const etag = `"${file.id}-${(file as any).updatedAt?.getTime() || file.createdAt.getTime()}"`;
+            const isMediaPreview = file.mimeType.startsWith('video/') || file.mimeType.startsWith('audio/');
 
-            // For previews we always serve full content with inline disposition.
-            const dataStream = await minioClient.getObject(BUCKET_NAME, file.storedName);
+            let dataStream: any;
+            let useThrottle = shouldThrottle;
 
-            res.writeHead(200, {
-                'Content-Length': fileSize,
-                'Content-Type': file.mimeType,
-                'Content-Disposition': `inline; filename="${safeFilename}"`,
-                'Accept-Ranges': 'bytes',
-                'Cache-Control': 'public, max-age=86400', // Cache for 24 hours
-                'ETag': `"${file.id}-${(file as any).updatedAt?.getTime() || file.createdAt.getTime()}"`,
-            });
+            if (range) {
+                const parts = String(range).replace(/bytes=/, "").split("-");
+                const start = Number.parseInt(parts[0] || "0", 10);
+                const rawEnd = parts[1] ? Number.parseInt(parts[1], 10) : fileSize - 1;
+                const end = Number.isFinite(rawEnd) ? Math.min(rawEnd, fileSize - 1) : fileSize - 1;
+
+                if (!Number.isFinite(start) || start < 0 || start >= fileSize || end < start) {
+                    res.status(416).set({
+                        'Content-Range': `bytes */${fileSize}`,
+                        'Accept-Ranges': 'bytes',
+                    }).end();
+                    return;
+                }
+
+                const chunkSize = (end - start) + 1;
+                dataStream = await minioClient.getPartialObject(BUCKET_NAME, file.storedName, start, chunkSize);
+
+                // Prioritize fast seeking/startup for media previews.
+                if (isMediaPreview) {
+                    useThrottle = false;
+                }
+
+                res.writeHead(206, {
+                    'Content-Range': `bytes ${start}-${end}/${fileSize}`,
+                    'Accept-Ranges': 'bytes',
+                    'Content-Length': chunkSize,
+                    'Content-Type': file.mimeType,
+                    'Content-Disposition': `inline; filename="${safeFilename}"`,
+                    'Cache-Control': 'public, max-age=86400',
+                    'ETag': etag,
+                });
+            } else {
+                dataStream = await minioClient.getObject(BUCKET_NAME, file.storedName);
+
+                res.writeHead(200, {
+                    'Content-Length': fileSize,
+                    'Content-Type': file.mimeType,
+                    'Content-Disposition': `inline; filename="${safeFilename}"`,
+                    'Accept-Ranges': 'bytes',
+                    'Cache-Control': 'public, max-age=86400', // Cache for 24 hours
+                    'ETag': etag,
+                });
+            }
 
             dataStream.on('error', (err: any) => {
                 console.error('[PREVIEW] Stream Error', err);
@@ -516,7 +572,7 @@ router.get('/:id/preview', protect, async (req: AuthRequest, res, next) => {
                 }
             });
 
-            if (shouldThrottle) {
+            if (useThrottle) {
                 const throttler = new ThrottledStream(previewSpeedBytes);
                 dataStream.pipe(throttler).pipe(res);
             } else {

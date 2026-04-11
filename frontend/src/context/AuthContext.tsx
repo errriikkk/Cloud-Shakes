@@ -195,6 +195,15 @@ function setupAxiosInterceptors(onLogout: () => void, setCsrfToken: (token: stri
                 }
             }
 
+            if (
+                error.response?.status === 403 &&
+                !isCsrfError &&
+                typeof window !== 'undefined'
+            ) {
+                const message = (error.response?.data as any)?.message || 'No tienes permisos para esta acción.';
+                window.dispatchEvent(new CustomEvent('permissionDenied', { detail: { message } }));
+            }
+
             return Promise.reject(error);
         }
     );
@@ -243,30 +252,30 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         };
     }, [router]);
 
-    useEffect(() => {
-        const checkAuth = async () => {
-            try {
-                const res = await axios.get(API_ENDPOINTS.AUTH.ME, {
-                    withCredentials: true,
-                });
-                setUser(res.data);
-                if (res.data.csrfToken) {
-                    setCsrfToken(res.data.csrfToken);
-                    globalCsrfToken = res.data.csrfToken;
-                }
-            } catch (err) {
-                setUser(null);
-                setCsrfToken(null);
-                globalCsrfToken = null;
-                // Solo redirigir si está en dashboard, no en talk (permite acceso anónimo)
-                if (pathname.startsWith("/dashboard") && !pathname.startsWith("/talk")) {
-                    router.push("/");
-                }
-            } finally {
-                setLoading(false);
+    const checkAuth = useCallback(async () => {
+        try {
+            const res = await axios.get(API_ENDPOINTS.AUTH.ME, {
+                withCredentials: true,
+            });
+            setUser(res.data);
+            if (res.data.csrfToken) {
+                setCsrfToken(res.data.csrfToken);
+                globalCsrfToken = res.data.csrfToken;
             }
-        };
+        } catch (err) {
+            setUser(null);
+            setCsrfToken(null);
+            globalCsrfToken = null;
+            // Solo redirigir si está en dashboard, no en talk (permite acceso anónimo)
+            if (pathname.startsWith("/dashboard") && !pathname.startsWith("/talk")) {
+                router.push("/");
+            }
+        } finally {
+            setLoading(false);
+        }
+    }, [pathname, router]);
 
+    useEffect(() => {
         if (!user) {
             checkAuth();
         }
@@ -278,10 +287,27 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             }
         };
 
-        window.addEventListener("focus", onFocus);
-        return () => window.removeEventListener("focus", onFocus);
+        const onPluginsChanged = () => {
+            if (window.location.pathname.startsWith("/dashboard")) {
+                checkAuth();
+            }
+        };
+        const onProfileUpdated = () => {
+            if (window.location.pathname.startsWith("/dashboard")) {
+                checkAuth();
+            }
+        };
 
-    }, [pathname, router]); // deliberately left 'user' out of deps so the focus event always references latest checkAuth
+        window.addEventListener("focus", onFocus);
+        window.addEventListener("pluginsChanged", onPluginsChanged);
+        window.addEventListener("profileUpdated", onProfileUpdated);
+        return () => {
+            window.removeEventListener("focus", onFocus);
+            window.removeEventListener("pluginsChanged", onPluginsChanged);
+            window.removeEventListener("profileUpdated", onProfileUpdated);
+        };
+
+    }, [checkAuth, user]);
 
     return (
         <AuthContext.Provider value={{ user, csrfToken, loading, logout }}>

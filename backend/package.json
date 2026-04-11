@@ -33,6 +33,7 @@
   "dependencies": {
     "@prisma/client": "5.22.0",
     "@types/dockerode": "^4.0.1",
+    "adm-zip": "^0.5.17",
     "argon2": "^0.40.3",
     "busboy": "^1.6.0",
     "cookie-parser": "^1.4.7",
@@ -51,13 +52,16 @@
     "nanoid": "^5.0.7",
     "pg": "^8.13.1",
     "prisma": "5.22.0",
+    "redis": "^5.11.0",
     "socket.io": "^4.8.1",
     "tweetnacl": "^1.0.3",
     "tweetnacl-util": "^0.15.1",
     "uuid": "^10.0.0",
+    "web-push": "^3.6.7",
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@types/adm-zip": "^0.5.8",
     "@types/busboy": "^1.5.4",
     "@types/cookie-parser": "^1.4.10",
     "@types/cors": "^2.8.19",
@@ -68,6 +72,7 @@
     "@types/pg": "^8.16.0",
     "@types/socket.io": "^3.0.1",
     "@types/uuid": "^10.0.0",
+    "@types/web-push": "^3.6.4",
     "@vitest/coverage-v8": "^2.1.8",
     "nodemon": "^3.1.11",
     "supertest": "^7.0.0",

@@ -42,6 +42,13 @@ const PERM_ICONS: Record<string, LucideIcon> = {
     create_notes: FileText,
     edit_notes: Edit3,
     delete_notes: Trash2,
+    view_documents: FileText,
+    create_documents: Plus,
+    edit_documents: Edit3,
+    delete_documents: Trash2,
+    share_documents: Users,
+    comment_documents: MessageSquare,
+    review_documents: Shield,
     view_calendar: Calendar,
     create_events: Calendar,
     edit_events: Edit3,
@@ -142,7 +149,7 @@ export function PermissionGuard({
                         className="fixed inset-0 z-[10000] flex items-center justify-center p-4"
                     >
                         <div 
-                            className="absolute inset-0 bg-black/70 backdrop-blur-md"
+                            className="absolute inset-0 bg-black/45 backdrop-blur-sm"
                             onClick={() => setShowModal(false)}
                         />
                         
@@ -151,13 +158,13 @@ export function PermissionGuard({
                             animate={{ scale: 1, opacity: 1, y: 0 }}
                             exit={{ scale: 0.8, opacity: 0, y: 20 }}
                             transition={{ type: "spring", duration: 0.5 }}
-                            className="relative bg-gradient-to-br from-card via-card to-card/95 border border-border/50 rounded-3xl shadow-2xl max-w-lg w-full p-8 overflow-hidden"
+                            className="relative bg-white text-zinc-900 border border-zinc-200 rounded-3xl shadow-2xl max-w-lg w-full p-8 overflow-hidden"
                         >
-                            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-red-500 via-orange-500 to-red-500" />
+                            <div className="absolute top-0 left-0 right-0 h-1 bg-zinc-200" />
                             
                             <button
                                 onClick={() => setShowModal(false)}
-                                className="absolute top-4 right-4 text-muted-foreground hover:text-foreground transition-colors p-1 rounded-lg hover:bg-muted"
+                                className="absolute top-4 right-4 text-zinc-500 hover:text-zinc-900 transition-colors p-1 rounded-lg hover:bg-zinc-100"
                             >
                                 <X className="w-5 h-5" />
                             </button>
@@ -196,7 +203,7 @@ export function PermissionGuard({
                                     initial={{ opacity: 0, y: 10 }}
                                     animate={{ opacity: 1, y: 0 }}
                                     transition={{ delay: 0.35 }}
-                                    className="text-muted-foreground mb-6"
+                                    className="text-zinc-600 mb-6"
                                 >
                                     {t('permissions.youCannot')}
                                 </motion.p>
@@ -205,17 +212,16 @@ export function PermissionGuard({
                                     initial={{ opacity: 0, y: 10 }}
                                     animate={{ opacity: 1, y: 0 }}
                                     transition={{ delay: 0.4 }}
-                                    className="w-full bg-gradient-to-r from-muted/50 to-muted/30 rounded-2xl p-4 mb-6 border border-border/50"
+                                    className="w-full bg-zinc-50 rounded-2xl p-4 mb-6 border border-zinc-200"
                                 >
                                     <div className="flex items-center gap-3">
                                         <div 
-                                            className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
-                                            style={{ backgroundColor: `${permColor}20` }}
+                                            className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 bg-zinc-100"
                                         >
                                             <AlertTriangle className="w-5 h-5" style={{ color: permColor }} />
                                         </div>
                                         <div className="text-left">
-                                            <p className="text-xs text-muted-foreground uppercase tracking-wider mb-0.5">
+                                            <p className="text-xs text-zinc-500 uppercase tracking-wider mb-0.5">
                                                 {t('permissions.required')}
                                             </p>
                                             <p className="font-semibold" style={{ color: permColor }}>
@@ -233,7 +239,7 @@ export function PermissionGuard({
                                 >
                                     <button
                                         onClick={() => setShowModal(false)}
-                                        className="flex-1 px-4 py-3 rounded-xl bg-muted/50 hover:bg-muted transition-colors text-sm font-medium flex items-center justify-center gap-2"
+                                        className="flex-1 px-4 py-3 rounded-xl bg-zinc-100 hover:bg-zinc-200 transition-colors text-sm font-medium flex items-center justify-center gap-2"
                                     >
                                         <X className="w-4 h-4" />
                                         {t('permissions.close')}
@@ -244,7 +250,7 @@ export function PermissionGuard({
                                                 setShowModal(false);
                                                 router.push(redirectUrl);
                                             }}
-                                            className="flex-1 px-4 py-3 rounded-xl bg-gradient-to-r from-primary to-primary/80 text-primary-foreground hover:from-primary/90 hover:to-primary/70 transition-all text-sm font-medium flex items-center justify-center gap-2 shadow-lg shadow-primary/25"
+                                            className="flex-1 px-4 py-3 rounded-xl bg-zinc-900 text-white hover:bg-zinc-800 transition-all text-sm font-medium flex items-center justify-center gap-2"
                                         >
                                             <Shield className="w-4 h-4" />
                                             {t('permissions.goBack')}
@@ -252,7 +258,7 @@ export function PermissionGuard({
                                     ) : (
                                         <a
                                             href="mailto:admin@shakes.es?subject=Solicitud de acceso"
-                                            className="flex-1 px-4 py-3 rounded-xl bg-gradient-to-r from-blue-600 to-blue-500 text-white hover:from-blue-500 hover:to-blue-400 transition-all text-sm font-medium flex items-center justify-center gap-2 shadow-lg shadow-blue-600/25"
+                                            className="flex-1 px-4 py-3 rounded-xl bg-zinc-900 text-white hover:bg-zinc-800 transition-all text-sm font-medium flex items-center justify-center gap-2"
                                         >
                                             <Mail className="w-4 h-4" />
                                             {t('permissions.contactAdmin')}
@@ -299,7 +305,7 @@ export function usePermissionCheck() {
                         className="fixed inset-0 z-[10000] flex items-center justify-center p-4"
                     >
                         <div 
-                            className="absolute inset-0 bg-black/70 backdrop-blur-md"
+                            className="absolute inset-0 bg-black/45 backdrop-blur-sm"
                             onClick={clearDenied}
                         />
                         <motion.div
@@ -307,13 +313,13 @@ export function usePermissionCheck() {
                             animate={{ scale: 1, opacity: 1, y: 0 }}
                             exit={{ scale: 0.8, opacity: 0, y: 20 }}
                             transition={{ type: "spring", duration: 0.5 }}
-                            className="relative bg-gradient-to-br from-card via-card to-card/95 border border-border/50 rounded-3xl shadow-2xl max-w-lg w-full p-8 overflow-hidden"
+                            className="relative bg-white text-zinc-900 border border-zinc-200 rounded-3xl shadow-2xl max-w-lg w-full p-8 overflow-hidden"
                         >
-                            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-red-500 via-orange-500 to-red-500" />
+                            <div className="absolute top-0 left-0 right-0 h-1 bg-zinc-200" />
                             
                             <button
                                 onClick={clearDenied}
-                                className="absolute top-4 right-4 text-muted-foreground hover:text-foreground transition-colors p-1 rounded-lg hover:bg-muted"
+                                className="absolute top-4 right-4 text-zinc-500 hover:text-zinc-900 transition-colors p-1 rounded-lg hover:bg-zinc-100"
                             >
                                 <X className="w-5 h-5" />
                             </button>
@@ -352,7 +358,7 @@ export function usePermissionCheck() {
                                     initial={{ opacity: 0, y: 10 }}
                                     animate={{ opacity: 1, y: 0 }}
                                     transition={{ delay: 0.35 }}
-                                    className="text-muted-foreground mb-6"
+                                    className="text-zinc-600 mb-6"
                                 >
                                     {t('permissions.youCannot')}
                                 </motion.p>
@@ -361,7 +367,7 @@ export function usePermissionCheck() {
                                     initial={{ opacity: 0, y: 10 }}
                                     animate={{ opacity: 1, y: 0 }}
                                     transition={{ delay: 0.4 }}
-                                    className="w-full bg-gradient-to-r from-muted/50 to-muted/30 rounded-2xl p-4 mb-6 border border-border/50"
+                                    className="w-full bg-zinc-50 rounded-2xl p-4 mb-6 border border-zinc-200"
                                 >
                                     <div className="flex items-center gap-3">
                                         <div 
@@ -386,7 +392,7 @@ export function usePermissionCheck() {
                                     animate={{ opacity: 1, y: 0 }}
                                     transition={{ delay: 0.45 }}
                                     onClick={clearDenied}
-                                    className="w-full px-4 py-3 rounded-xl bg-muted/50 hover:bg-muted transition-colors text-sm font-medium flex items-center justify-center gap-2"
+                                    className="w-full px-4 py-3 rounded-xl bg-zinc-100 hover:bg-zinc-200 transition-colors text-sm font-medium flex items-center justify-center gap-2"
                                 >
                                     <X className="w-4 h-4" />
                                     {t('permissions.close')}

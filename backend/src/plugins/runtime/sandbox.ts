@@ -11,15 +11,23 @@ const DEFAULT_TIMEOUT_MS = 5000;
 const MAX_BUNDLE_SIZE = 10 * 1024 * 1024;
 const MAX_LOG_ENTRIES = 1000;
 
-const FORBIDDEN_PATTERNS = [
-  /require\s*\(/,
-  /process\./,
-  /child_process/,
-  /fs\./,
-  /eval\s*\(/,
-  /Function\s*\(/,
-  /setTimeout\s*\(/,
-  /setInterval\s*\(/,
+const FORBIDDEN_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
+  {
+    pattern: /\b(?:require\s*\(\s*['"]child_process['"]\s*\)|\bchild_process\b)/,
+    reason: 'child_process access is not allowed',
+  },
+  {
+    pattern: /\b(?:require\s*\(\s*['"]fs['"]\s*\)|\bfs\.)/,
+    reason: 'filesystem access is not allowed',
+  },
+  {
+    pattern: /\beval\s*\(/,
+    reason: 'eval is not allowed',
+  },
+  {
+    pattern: /\bprocess\s*\.\s*(?:binding|mainModule|dlopen|_linkedBinding)\b/,
+    reason: 'dangerous process internals are not allowed',
+  },
 ];
 
 interface SandboxOptions {
@@ -58,9 +66,9 @@ export class PluginSandbox {
     if (code.length > MAX_BUNDLE_SIZE) {
       return { valid: false, error: `Bundle size exceeds ${MAX_BUNDLE_SIZE} bytes` };
     }
-    for (const pattern of FORBIDDEN_PATTERNS) {
-      if (pattern.test(code)) {
-        return { valid: false, error: `Forbidden pattern detected` };
+    for (const item of FORBIDDEN_PATTERNS) {
+      if (item.pattern.test(code)) {
+        return { valid: false, error: `Forbidden pattern detected: ${item.reason}` };
       }
     }
     if (!capabilities.includes('http.external')) {
@@ -83,6 +91,7 @@ export class PluginSandbox {
     const context = await this.isolate.createContext();
     const jail = context.global;
 
+    let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
     try {
       await jail.set('global', jail.derefInto());
       const bridge = this.createBridge();
@@ -93,14 +102,21 @@ export class PluginSandbox {
       const script = await this.isolate.compileScript(wrappedCode);
 
       const timeoutPromise = new Promise<never>((_, reject) => {
-        setTimeout(() => {
-          this.isolate.dispose();
+        timeoutHandle = setTimeout(() => {
+          try {
+            this.isolate.dispose();
+          } catch {
+            // Isolate can already be disposed by normal lifecycle/cleanup.
+          }
           reject(new Error(`Execution timeout after ${this.options.timeoutMs}ms`));
         }, this.options.timeoutMs);
       });
 
       const runPromise = script.run(context, { timeout: this.options.timeoutMs });
       await Promise.race([runPromise, timeoutPromise]);
+      if (timeoutHandle) {
+        clearTimeout(timeoutHandle);
+      }
 
       let output: T | undefined;
       try {
@@ -123,6 +139,9 @@ export class PluginSandbox {
       const endTime = Date.now();
       return { success: false, error: error instanceof Error ? error.message : 'Unknown error', logs: [...this.logs], duration: endTime - startTime, memoryUsed: 0 };
     } finally {
+      if (timeoutHandle) {
+        clearTimeout(timeoutHandle);
+      }
       context.release?.();
     }
   }
@@ -182,11 +201,155 @@ export class PluginSandbox {
           post: (url, body, opts) => http.request({ ...opts, url, method: 'POST', body }),
         };
         const plugin = ${JSON.stringify(pluginData)};
-        const require = undefined;
-        const process = undefined;
+        const module = { exports: {} };
+        const exports = module.exports;
+        const context = { 
+          plugin: { name: plugin.name }, 
+          config: {},
+          log: (level, msg) => console.log(\`[PluginSandbox:\${plugin.name}] \${level}: \${msg}\`)
+        };
+        const api = {
+          http,
+          files: {
+            list: async () => [],
+            get: async () => null,
+          },
+        };
+        class __SandboxEventEmitter {
+          on() { return this; }
+          once() { return this; }
+          emit() { return false; }
+          off() { return this; }
+          removeListener() { return this; }
+          removeAllListeners() { return this; }
+        }
+        class __SandboxReadable extends __SandboxEventEmitter {
+          pipe() { return this; }
+        }
+        class __SandboxWritable extends __SandboxEventEmitter {
+          write() { return true; }
+          end() { return undefined; }
+        }
+        class __SandboxTransform extends __SandboxReadable {}
+        class __SandboxPassThrough extends __SandboxTransform {}
+        class __SandboxTextEncoder {
+          encode(input = '') {
+            const str = String(input);
+            const out = [];
+            for (let i = 0; i < str.length; i++) out.push(str.charCodeAt(i) & 0xff);
+            return out;
+          }
+        }
+        class __SandboxTextDecoder {
+          decode(input = []) {
+            if (!input || typeof input.length !== 'number') return '';
+            let s = '';
+            for (let i = 0; i < input.length; i++) s += String.fromCharCode(input[i] & 0xff);
+            return s;
+          }
+        }
+        class ShakesPlugin {
+          constructor(name) {
+            this.name = name;
+            this.manifest = { name };
+            this._slots = {};
+            this._hooks = {};
+          }
+          setDisplayName(n) { this.manifest.displayName = n; return this; }
+          setDescription(d) { this.manifest.description = d; return this; }
+          setVersion(v) { this.manifest.version = v; return this; }
+          registerSidebarWidget(f) { this._slots['sidebar'] = f; return this; }
+          registerPage(f) { this._slots['page'] = f; return this; }
+          onActivate(h) { this._hooks['onActivate'] = h; return this; }
+          onExecute(h) { this._hooks['execute'] = h; return this; }
+          export() {
+            return {
+              manifest: this.manifest,
+              slots: this._slots,
+              hooks: this._hooks,
+              default: async (ctx, a, i) => {
+                if (this._hooks['execute']) return await this._hooks['execute'](ctx, a, i);
+              }
+            };
+          }
+        }
+        ShakesPlugin.isShakesPlugin = true;
+
+        const __sandboxModules = {
+          '@shakes/sdk': { ShakesPlugin },
+          stream: {
+            Readable: __SandboxReadable,
+            Writable: __SandboxWritable,
+            Transform: __SandboxTransform,
+            PassThrough: __SandboxPassThrough,
+          },
+          events: { EventEmitter: __SandboxEventEmitter },
+          util: {
+            inherits: () => undefined,
+            inspect: (v) => {
+              try { return JSON.stringify(v); } catch { return String(v); }
+            },
+            format: (...args) => args.map((a) => String(a)).join(' '),
+            TextEncoder: __SandboxTextEncoder,
+            TextDecoder: __SandboxTextDecoder,
+          },
+          buffer: {
+            Buffer: {
+              from: (v) => (typeof v === 'string' ? v : ''),
+              isBuffer: () => false,
+            },
+          },
+        };
+        const require = (moduleName) => {
+          const name = String(moduleName || '');
+          if (Object.prototype.hasOwnProperty.call(__sandboxModules, name)) {
+            return __sandboxModules[name];
+          }
+          throw new Error('require is not available in plugin sandbox: ' + name);
+        };
+        const TextEncoder = __SandboxTextEncoder;
+        const TextDecoder = __SandboxTextDecoder;
+        const process = Object.freeze({
+          env: Object.freeze({
+            NODE_ENV: 'production'
+          })
+        });
         const globalThis = undefined;
         ${userCode}
-        if (typeof run === 'function') global.__run = run;
+        if (typeof run === 'function') {
+          global.__run = run;
+        } else if (module && module.exports) {
+          const exp = module.exports;
+          if (typeof exp === 'function') {
+            global.__run = async (input) => exp(context, api, input);
+          } else if (typeof exp === 'object' && exp.default && typeof exp.default === 'function') {
+            global.__run = async (input) => exp.default(context, api, input);
+          } else if (exp && exp.isShakesPlugin) {
+            // Support both Class and Instance
+            let exported;
+            if (typeof exp === 'function') {
+              const instance = new exp(plugin.name);
+              exported = instance.export();
+            } else {
+              exported = exp.export();
+            }
+            
+            // Register slots in the global scope if needed for the runtime to pick up
+            global.__pluginSlots = exported.slots;
+            
+            // Use the instance's activate hook if available
+            if (exported.hooks && exported.hooks.onActivate) {
+              global.__run = async (input) => {
+                if (input && input.type === 'lifecycle' && input.hook === 'onActivate') {
+                  return await exported.hooks.onActivate(context, api);
+                }
+                return await exported.default(context, api, input);
+              };
+            } else {
+              global.__run = async (input) => await exported.default(context, api, input);
+            }
+          }
+        }
       })()
     `;
   }

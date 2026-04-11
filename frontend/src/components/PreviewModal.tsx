@@ -26,7 +26,7 @@ interface PreviewModalProps {
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 
-const TEXT_EXTENSIONS = /\.(txt|md|json|xml|js|ts|jsx|tsx|css|html|htm|py|java|cpp|c|h|php|rb|go|rs|sh|bash|yaml|yml|toml|ini|conf|log|env|sql|graphql|vue|svelte)$/i;
+const TEXT_EXTENSIONS = /\.(txt|md|json|xml|js|ts|jsx|tsx|css|html|htm|py|java|cpp|c|h|php|rb|go|rs|sh|bash|yaml|yml|toml|ini|conf|log|env|sql|graphql|vue|svelte|csv)$/i;
 const CODE_MIME_PREFIXES = ["text/", "application/json", "application/xml", "application/javascript", "application/x-sh"];
 
 const getFileTypeIcon = (mimeType?: string) => {
@@ -298,7 +298,75 @@ export function PreviewModal({ file, isOpen, onClose }: PreviewModalProps) {
             );
         }
 
+        const isCSV = file.originalName?.toLowerCase().endsWith('.csv') || safeMime === 'text/csv';
+
         if (textContent !== null || CODE_MIME_PREFIXES.some(p => safeMime.startsWith(p)) || (file.originalName && file.originalName.match(TEXT_EXTENSIONS))) {
+            if (isCSV && textContent) {
+                const parseCSV = (csv: string) => {
+                    const lines = csv.split(/\r?\n/).filter(line => line.trim());
+                    return lines.map(line => {
+                        const result: string[] = [];
+                        let current = '';
+                        let inQuotes = false;
+                        for (let i = 0; i < line.length; i++) {
+                            const char = line[i];
+                            if (char === '"') {
+                                if (inQuotes && line[i + 1] === '"') {
+                                    current += '"';
+                                    i++;
+                                } else {
+                                    inQuotes = !inQuotes;
+                                }
+                            } else if (char === ',' && !inQuotes) {
+                                result.push(current.trim());
+                                current = '';
+                            } else {
+                                current += char;
+                            }
+                        }
+                        result.push(current.trim());
+                        return result;
+                    });
+                };
+                const rows = parseCSV(textContent);
+                const headers = rows[0] || [];
+                const data = rows.slice(1);
+
+                return (
+                    <div className="w-full h-[60vh] lg:h-[70vh] bg-muted/20 rounded-2xl overflow-auto border border-border/30 custom-scrollbar">
+                        <table className="w-full text-xs lg:text-sm">
+                            <thead className="sticky top-0 bg-muted/80 backdrop-blur-sm">
+                                <tr>
+                                    <th className="px-3 py-2 text-left font-semibold text-foreground border-b border-border/50 w-12">#</th>
+                                    {headers.map((header, i) => (
+                                        <th key={i} className="px-3 py-2 text-left font-semibold text-foreground border-b border-border/50 min-w-[120px]">
+                                            {header}
+                                        </th>
+                                    ))}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {data.map((row, rowIndex) => (
+                                    <tr key={rowIndex} className="hover:bg-muted/30 transition-colors">
+                                        <td className="px-3 py-2 text-muted-foreground border-b border-border/20 font-mono">{rowIndex + 1}</td>
+                                        {row.map((cell, cellIndex) => (
+                                            <td key={cellIndex} className="px-3 py-2 text-foreground border-b border-border/20 max-w-[300px] truncate">
+                                                {cell}
+                                            </td>
+                                        ))}
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                        {data.length === 0 && (
+                            <div className="flex flex-col items-center justify-center h-full text-muted-foreground py-12">
+                                <p className="text-sm">CSV vacío</p>
+                            </div>
+                        )}
+                    </div>
+                );
+            }
+
             return (
                 <div className="w-full h-[60vh] lg:h-[70vh] bg-muted/20 rounded-2xl overflow-auto border border-border/30 p-4 lg:p-8 custom-scrollbar">
                     {textContent !== null ? (

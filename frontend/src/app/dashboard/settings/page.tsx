@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
-import { Settings, User, Lock, Camera, Save, X, Loader2, Globe, Shield, Users, Database, ServerCog, RotateCcw, Bell, BellOff } from "lucide-react";
+import { Settings, User, Lock, Camera, Save, X, Loader2, Globe, Shield, Users, Database, ServerCog, RotateCcw, Bell, BellOff, KeyRound, Upload } from "lucide-react";
 import { useNotifications } from "@/hooks/useNotifications";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -30,6 +30,7 @@ export default function SettingsPage() {
     const [uploadingAvatar, setUploadingAvatar] = useState(false);
     const [pendingAvatarFile, setPendingAvatarFile] = useState<File | null>(null);
     const [avatarCropOpen, setAvatarCropOpen] = useState(false);
+    const [avatarDragActive, setAvatarDragActive] = useState(false);
     const [profile, setProfile] = useState({
         displayName: "",
         avatarUrl: null as string | null,
@@ -223,6 +224,11 @@ export default function SettingsPage() {
     const [brandingLoading, setBrandingLoading] = useState(false);
     const [cloudName, setCloudName] = useState("");
     const [logoUrl, setLogoUrl] = useState("");
+    const [pluginsConfigLoading, setPluginsConfigLoading] = useState(false);
+    const [pluginLicenseKey, setPluginLicenseKey] = useState("");
+    const [pluginPublicKey, setPluginPublicKey] = useState("");
+    const [pluginConfigured, setPluginConfigured] = useState(false);
+    const [pluginConfiguredAt, setPluginConfiguredAt] = useState<number | null>(null);
 
     const fetchBranding = useCallback(async () => {
         if (!canManageSettings) return;
@@ -253,6 +259,46 @@ export default function SettingsPage() {
         }
     };
 
+    const fetchPluginConfig = useCallback(async () => {
+        if (!canManageSettings) return;
+        setPluginsConfigLoading(true);
+        try {
+            const res = await axios.get(`${API_BASE}/api/plugins/config`, { withCredentials: true });
+            setPluginConfigured(!!res.data?.configured);
+            setPluginConfiguredAt(res.data?.configuredAt || null);
+            setPluginLicenseKey("");
+        } catch {
+            // ignore
+        } finally {
+            setPluginsConfigLoading(false);
+        }
+    }, [canManageSettings]);
+
+    const savePluginConfig = async () => {
+        if (!canManageSettings) return;
+        if (!pluginLicenseKey.trim()) {
+            alert("Error", "License key is required.", { type: "danger" });
+            return;
+        }
+        setPluginsConfigLoading(true);
+        try {
+            await axios.post(`${API_BASE}/api/plugins/config`, {
+                licenseKey: pluginLicenseKey.trim(),
+                publicKey: pluginPublicKey.trim(),
+            }, { withCredentials: true });
+
+            alert("Success", "Plugin license configured correctly.", { type: "success" });
+            setPluginConfigured(true);
+            setPluginConfiguredAt(Date.now());
+            setPluginLicenseKey("");
+            await fetchPluginConfig();
+        } catch (err: any) {
+            alert("Error", err.response?.data?.error || "Could not configure plugin license.", { type: "danger" });
+        } finally {
+            setPluginsConfigLoading(false);
+        }
+    };
+
     useEffect(() => {
         if (user) {
             setProfile({
@@ -265,7 +311,11 @@ export default function SettingsPage() {
     const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
+        if (fileInputRef.current) fileInputRef.current.value = "";
+        handleAvatarFile(file);
+    };
 
+    const handleAvatarFile = (file: File) => {
         if (!file.type.startsWith('image/')) {
             alert(t("common.error"), t("settings.onlyImages"), { type: 'danger' });
             return;
@@ -279,7 +329,33 @@ export default function SettingsPage() {
         // Crop before uploading (WhatsApp-like)
         setPendingAvatarFile(file);
         setAvatarCropOpen(true);
-        if (fileInputRef.current) fileInputRef.current.value = '';
+    };
+
+    const openAvatarPicker = () => {
+        if (uploadingAvatar) return;
+        const input = fileInputRef.current;
+        if (!input) return;
+
+        // Ensure re-selecting the same file always triggers onChange.
+        input.value = '';
+        input.click();
+
+        // Fallback for browsers that occasionally ignore the first synthetic click.
+        window.setTimeout(() => {
+            if (document.activeElement !== input) {
+                input.click();
+            }
+        }, 80);
+    };
+
+    const handleAvatarDrop = (e: React.DragEvent<HTMLDivElement>) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setAvatarDragActive(false);
+        if (uploadingAvatar) return;
+        const file = e.dataTransfer.files?.[0];
+        if (!file) return;
+        handleAvatarFile(file);
     };
 
     const uploadAvatarBlob = async (blob: Blob) => {
@@ -303,6 +379,7 @@ export default function SettingsPage() {
                 user.avatarUrl = newAvatarUrl;
                 localStorage.setItem('shakes_user', JSON.stringify(user));
             }
+            window.dispatchEvent(new CustomEvent('profileUpdated'));
             alert(t("common.success"), t("settings.profileUpdated"), { type: 'success' });
         } catch (err: any) {
             alert(t("common.error"), err.response?.data?.message || t("settings.uploadFailed"), { type: 'danger' });
@@ -335,7 +412,13 @@ export default function SettingsPage() {
         try {
             await axios.delete(`${API_BASE}/api/profile/avatar`, { withCredentials: true });
             setProfile(prev => ({ ...prev, avatarUrl: null }));
-            window.location.reload();
+            const userData = localStorage.getItem('shakes_user');
+            if (userData) {
+                const user = JSON.parse(userData);
+                user.avatarUrl = null;
+                localStorage.setItem('shakes_user', JSON.stringify(user));
+            }
+            window.dispatchEvent(new CustomEvent('profileUpdated'));
         } catch (err: any) {
             alert(t("common.error"), err.response?.data?.message || t("settings.updateFailed"), { type: 'danger' });
         } finally {
@@ -379,6 +462,10 @@ export default function SettingsPage() {
     useEffect(() => {
         fetchBranding();
     }, [fetchBranding]);
+
+    useEffect(() => {
+        fetchPluginConfig();
+    }, [fetchPluginConfig]);
 
     useEffect(() => {
         fetchBackupConfigs();
@@ -542,22 +629,57 @@ export default function SettingsPage() {
                                 <p className="text-xs text-muted-foreground mb-3">{t("settings.profilePhotoDesc")}</p>
                                 {/* NOTE: keep input "visible" to the browser (not display:none) so file picker can open reliably */}
                                 <input
+                                    id="settings-avatar-input"
                                     ref={fileInputRef}
                                     type="file"
                                     accept="image/*"
                                     onChange={handleAvatarUpload}
                                     className="absolute -left-[9999px] w-px h-px opacity-0"
                                 />
-                                <Button
-                                    type="button"
-                                    variant="outline"
-                                    className="cursor-pointer"
-                                    disabled={uploadingAvatar}
-                                    onClick={() => fileInputRef.current?.click()}
-                                >
-                                    <Camera className="w-4 h-4 mr-2" />
-                                    {uploadingAvatar ? t("common.uploading") : t("settings.changePhoto")}
-                                </Button>
+                                <div className="space-y-3">
+                                    <div
+                                        onDragEnter={(e) => { e.preventDefault(); setAvatarDragActive(true); }}
+                                        onDragOver={(e) => { e.preventDefault(); setAvatarDragActive(true); }}
+                                        onDragLeave={(e) => {
+                                            e.preventDefault();
+                                            const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
+                                            if (e.clientX < rect.left || e.clientX > rect.right || e.clientY < rect.top || e.clientY > rect.bottom) {
+                                                setAvatarDragActive(false);
+                                            }
+                                        }}
+                                        onDrop={handleAvatarDrop}
+                                        className={cn(
+                                            "rounded-2xl border border-dashed p-4 transition-all bg-muted/20",
+                                            avatarDragActive
+                                                ? "border-primary bg-primary/5"
+                                                : "border-border/70 hover:border-primary/40"
+                                        )}
+                                    >
+                                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                                            <div className="min-w-0">
+                                                <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
+                                                    Upload
+                                                </p>
+                                                <p className="text-sm font-semibold text-foreground">
+                                                    {avatarDragActive ? "Drop your image here" : "Choose or drag an image"}
+                                                </p>
+                                                <p className="text-[11px] text-muted-foreground mt-1">
+                                                    JPG/PNG/WebP - max 5MB
+                                                </p>
+                                            </div>
+                                            <Button
+                                                type="button"
+                                                variant="outline"
+                                                className="cursor-pointer rounded-xl"
+                                                disabled={uploadingAvatar}
+                                                onClick={openAvatarPicker}
+                                            >
+                                                <Upload className="w-4 h-4 mr-2" />
+                                                {uploadingAvatar ? t("common.uploading") : t("settings.changePhoto")}
+                                            </Button>
+                                        </div>
+                                    </div>
+                                </div>
                                 {profile.avatarUrl && (
                                     <Button
                                         type="button"
@@ -819,6 +941,69 @@ export default function SettingsPage() {
                                     Save
                                 </Button>
                                 <Button variant="ghost" onClick={fetchBranding} className="rounded-xl" disabled={brandingLoading}>
+                                    Refresh
+                                </Button>
+                            </div>
+                        </div>
+                    </motion.div>
+                )}
+
+                {/* Plugin License */}
+                {canManageSettings && (
+                    <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="bg-background border border-border/60 rounded-2xl p-6 shadow-sm"
+                    >
+                        <div className="flex items-center gap-3 mb-6">
+                            <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+                                <KeyRound className="w-5 h-5 text-primary" />
+                            </div>
+                            <div>
+                                <h2 className="text-xl font-bold text-foreground">Plugins</h2>
+                                <p className="text-xs text-muted-foreground">Configure your plugin license key for marketplace installs.</p>
+                            </div>
+                        </div>
+
+                        <div className="space-y-4">
+                            <div className={cn(
+                                "rounded-xl border px-3 py-2 text-sm",
+                                pluginConfigured
+                                    ? "bg-green-500/10 border-green-500/30 text-green-700 dark:text-green-300"
+                                    : "bg-amber-500/10 border-amber-500/30 text-amber-700 dark:text-amber-300"
+                            )}>
+                                {pluginConfigured
+                                    ? `License configured${pluginConfiguredAt ? ` (${new Date(pluginConfiguredAt).toLocaleString()})` : ""}`
+                                    : "License not configured yet"}
+                            </div>
+
+                            <div className="space-y-2">
+                                <label className="text-sm font-bold text-foreground">License key</label>
+                                <Input
+                                    type="password"
+                                    value={pluginLicenseKey}
+                                    onChange={(e) => setPluginLicenseKey(e.target.value)}
+                                    placeholder="Paste your plugin license key"
+                                    className="rounded-xl"
+                                />
+                            </div>
+
+                            <div className="space-y-2">
+                                <label className="text-sm font-bold text-foreground">Public key (optional)</label>
+                                <Input
+                                    value={pluginPublicKey}
+                                    onChange={(e) => setPluginPublicKey(e.target.value)}
+                                    placeholder="Optional plugin signing public key"
+                                    className="rounded-xl"
+                                />
+                            </div>
+
+                            <div className="flex items-center gap-3">
+                                <Button onClick={savePluginConfig} className="rounded-xl" isLoading={pluginsConfigLoading} disabled={pluginsConfigLoading}>
+                                    <Save className="w-4 h-4 mr-2" />
+                                    Save Plugin License
+                                </Button>
+                                <Button variant="ghost" onClick={fetchPluginConfig} className="rounded-xl" disabled={pluginsConfigLoading}>
                                     Refresh
                                 </Button>
                             </div>

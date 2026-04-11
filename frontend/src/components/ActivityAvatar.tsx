@@ -55,6 +55,7 @@ export function ActivityAvatar({ user, resourceId, resourceType, size = "sm", cl
         <>
             <div
                 ref={ref}
+                onMouseDown={(e) => e.stopPropagation()}
                 onClick={(e) => { e.stopPropagation(); setShowPanel(true); }}
                 className={cn(
                     "rounded-full flex items-center justify-center font-bold text-white cursor-pointer transition-transform hover:scale-110 shrink-0 ring-2 ring-background shadow-sm overflow-hidden",
@@ -155,7 +156,11 @@ function ActivityHistoryPanel({ user, resourceId, resourceType, onClose }: Activ
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.2 }}
-                onClick={onClose}
+                onMouseDown={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                    e.stopPropagation();
+                    onClose();
+                }}
                 style={{ position: 'fixed', inset: 0, zIndex: 99998 }}
                 className="bg-black/50 backdrop-blur-sm"
             />
@@ -176,6 +181,8 @@ function ActivityHistoryPanel({ user, resourceId, resourceType, onClose }: Activ
                         ? "inset-x-0 bottom-0 rounded-t-3xl max-h-[80vh]"
                         : "top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md rounded-3xl max-h-[70vh]"
                 )}
+                onMouseDown={(e) => e.stopPropagation()}
+                onClick={(e) => e.stopPropagation()}
             >
                 {/* Drag handle on mobile */}
                 {isMobile && (
@@ -199,7 +206,11 @@ function ActivityHistoryPanel({ user, resourceId, resourceType, onClose }: Activ
                         </div>
                     </div>
                     <button
-                        onClick={onClose}
+                        onMouseDown={(e) => e.stopPropagation()}
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onClose();
+                        }}
                         className="p-2.5 hover:bg-muted rounded-xl transition-colors"
                     >
                         <X className="w-5 h-5 text-muted-foreground" />

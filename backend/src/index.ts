@@ -1,3 +1,4 @@
+import './plugins/sdk-shim';
 import express from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
@@ -8,6 +9,7 @@ import path from 'path';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import { setupCallHandlers, getActiveRooms } from './sockets/callHandler';
+import { setupDocumentHandlers } from './sockets/documentHandler';
 
 
 // Global BigInt serialization fix — BigInt can't be serialized by JSON.stringify natively
@@ -35,6 +37,7 @@ import folderRoutes from './routes/folders';
 import linkRoutes from './routes/links';
 import searchRoutes from './routes/search';
 import noteRoutes from './routes/notes';
+import documentRoutes from './routes/documents';
 import calendarRoutes from './routes/calendar';
 import chatRoutes from './routes/chat';
 import apiFlowRoutes from './routes/apiFlows';
@@ -294,6 +297,7 @@ app.use('/api/folders', csrfProtection);
 app.use('/api/links', csrfProtectionLinks); // Custom CSRF for links (excludes public endpoints)
 app.use('/api/search', csrfProtection);
 app.use('/api/notes', csrfProtection);
+app.use('/api/documents', csrfProtection);
 app.use('/api/calendar', csrfProtection);
 app.use('/api/chat', csrfProtection);
 app.use('/api/api-flows', csrfProtection);
@@ -307,6 +311,7 @@ app.use('/api/folders', folderRoutes);
 app.use('/api/links', linkRoutes);
 app.use('/api/search', searchRoutes);
 app.use('/api/notes', noteRoutes);
+app.use('/api/documents', documentRoutes);
 app.use('/api/calendar', calendarRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/api-flows', apiFlowRoutes);
@@ -489,6 +494,7 @@ const start = async () => {
     }
 
     setupCallHandlers(io);
+    setupDocumentHandlers(io);
 
     // Initialize plugin runtime service
     try {

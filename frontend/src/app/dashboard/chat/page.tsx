@@ -565,9 +565,9 @@ export default function ChatPage() {
         <div className="h-dvh min-h-0">
             <div className="grid h-dvh min-h-0 grid-cols-1 md:grid-cols-[360px_1fr]">
                 {/* Left: Conversations */}
-                <aside className={cn("min-h-0 border-r border-border bg-sidebar", panel === "chat" ? "hidden md:block" : "block")}>
+                <aside className={cn("min-h-0 border-r border-border bg-sidebar/70 backdrop-blur", panel === "chat" ? "hidden md:block" : "block")}>
                     <div className="flex h-full min-h-0 flex-col">
-                        <div className="sticky top-0 z-10 border-b border-border bg-sidebar/90 backdrop-blur">
+                        <div className="sticky top-0 z-10 border-b border-border bg-sidebar/95 backdrop-blur">
                             <div className="p-4">
                                 <div className="flex items-center justify-between gap-3">
                                     <div className="min-w-0 flex items-center gap-2">
@@ -599,7 +599,7 @@ export default function ChatPage() {
                                 </div>
 
                                 <div className="mt-3 flex items-center gap-2">
-                                    <div className="flex-1 rounded-xl border border-border bg-background px-3 py-2">
+                                    <div className="flex-1 rounded-2xl border border-border bg-background px-3 py-2 shadow-sm">
                                         <div className="flex items-center gap-2">
                                             <Search className="h-4 w-4 text-muted-foreground" />
                                             <input
@@ -613,7 +613,7 @@ export default function ChatPage() {
                                     <select
                                         value={userStatus}
                                         onChange={(e) => updateStatus(e.target.value)}
-                                        className="h-10 rounded-xl border border-border bg-background px-3 text-xs font-semibold text-foreground"
+                                        className="h-10 rounded-2xl border border-border bg-background px-3 text-xs font-semibold text-foreground shadow-sm"
                                         aria-label="Status"
                                     >
                                         <option value="online">{t("chat.status.online")}</option>
@@ -643,13 +643,13 @@ export default function ChatPage() {
                                             <button
                                                 key={conv.id}
                                                 onClick={() => setActiveConversation(conv)}
-                                                className={cn(
+                                            className={cn(
                                                     "w-full px-4 py-3 text-left hover:bg-muted/40 transition-colors",
-                                                    isActive && "bg-muted/50"
+                                                    isActive && "bg-primary/5"
                                                 )}
                                             >
                                                 <div className="flex items-center gap-3">
-                                                    <div className="relative h-10 w-10 shrink-0 rounded-xl border border-border bg-background flex items-center justify-center">
+                                                    <div className="relative h-10 w-10 shrink-0 rounded-xl border border-border bg-background flex items-center justify-center shadow-sm">
                                                         <span className="text-sm font-semibold text-foreground">
                                                             {avatar?.displayName?.[0] || avatar?.username?.[0] || "?"}
                                                         </span>
@@ -708,7 +708,7 @@ export default function ChatPage() {
                     ) : (
                         <div className="flex h-full min-h-0 flex-col">
                             {/* Header */}
-                            <div className="sticky top-0 z-10 border-b border-border bg-background/90 backdrop-blur">
+                            <div className="sticky top-0 z-10 border-b border-border bg-background/95 backdrop-blur">
                                 <div className="flex items-center justify-between gap-3 px-4 py-3">
                                     <div className="flex items-center gap-3 min-w-0">
                                         <button
@@ -761,7 +761,7 @@ export default function ChatPage() {
                             </div>
 
                             {/* Messages */}
-                            <div className="min-h-0 flex-1 overflow-auto px-4 py-4">
+                            <div className="min-h-0 flex-1 overflow-auto px-4 py-4 bg-gradient-to-b from-muted/10 to-background">
                             {messages.map((msg, idx) => {
                                 const isOwn = msg.senderId === user?.id;
                                 const showAvatar = idx === 0 || messages[idx - 1].senderId !== msg.senderId;
@@ -769,7 +769,7 @@ export default function ChatPage() {
                                 return (
                                     <div
                                         key={msg.id}
-                                        className={cn("flex gap-3 group", isOwn && "flex-row-reverse")}
+                                        className={cn("flex gap-3 group mb-2", isOwn && "flex-row-reverse")}
                                     >
                                         {showAvatar ? (
                                             <div className="w-9 h-9 rounded-xl border border-border bg-muted/30 flex items-center justify-center flex-shrink-0">
@@ -788,7 +788,7 @@ export default function ChatPage() {
                                             )}
                                             <div className="flex items-end gap-1">
                                                 <div className={cn(
-                                                    "inline-block px-3 py-2 rounded-2xl border transition-colors",
+                                                    "inline-block px-3 py-2 rounded-2xl border shadow-sm transition-colors",
                                                     isOwn 
                                                         ? "bg-foreground text-background border-foreground rounded-br-md"
                                                         : "bg-background text-foreground border-border rounded-bl-md"
@@ -855,7 +855,7 @@ export default function ChatPage() {
                                     }}
                                     placeholder={canSendMessages() ? t('chat.input.placeholder') : t('chat.noPermission')}
                                     disabled={!canSendMessages()}
-                                    className="flex-1 h-11 rounded-2xl border border-border bg-muted/30 px-4 text-sm outline-none focus:ring-4 focus:ring-primary/10 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    className="flex-1 h-11 rounded-2xl border border-border bg-muted/20 px-4 text-sm outline-none focus:ring-4 focus:ring-primary/10 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
                                 />
                                 
                                 {/* @mentions dropdown */}
@@ -897,7 +897,7 @@ export default function ChatPage() {
                                     onClick={sendMessage}
                                     disabled={!newMessage.trim() || !canSendMessages()}
                                     title={canSendMessages() ? t('chat.input.send') : t('chat.noPermission')}
-                                    className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-foreground text-background disabled:opacity-40 disabled:cursor-not-allowed"
+                                    className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-foreground text-background shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
                                 >
                                     <Send className="w-5 h-5" />
                                 </button>

@@ -9,8 +9,10 @@ import { PluginRuntime } from '../plugins/runtime/index.js';
 import { PluginSandbox } from '../plugins/runtime/sandbox.js';
 import { pluginVerifier } from './pluginVerifier.js';
 import { pluginUpdateService } from './pluginUpdateService.js';
-import { existsSync, readFileSync } from 'fs';
-import { join } from 'path';
+import { join, basename } from 'path';
+import path from 'path';
+import { pluginRouteRegistry } from '../plugins/runtime/routeRegistry.js';
+import { writeFileSync, existsSync, readFileSync, mkdirSync } from 'fs';
 
 const PLUGIN_CACHE_DIR = process.env.PLUGIN_CACHE_DIR || join(process.cwd(), 'data', 'plugins');
 
@@ -20,6 +22,7 @@ const PLUGIN_CACHE_DIR = process.env.PLUGIN_CACHE_DIR || join(process.cwd(), 'da
 export class PluginRuntimeService {
   private runtime: PluginRuntime;
   private activePlugins: Map<string, { name: string; version: string }> = new Map();
+  private hostActivatedVersions: Map<string, string> = new Map();
 
   constructor() {
     this.runtime = new PluginRuntime({
@@ -86,8 +89,161 @@ export class PluginRuntimeService {
     }
 
     this.activePlugins.set(name, { name, version });
-    console.log(`[PluginRuntimeService] Activated ${name}@${version}`);
+    
+    // 6. Host-level Activation (Route Registration)
+    await this.hostActivate(name, version);
+
+    // 7. Trigger Sandbox onActivate Hook if it exists
+    try {
+      if (manifest.hooks?.includes('onActivate')) {
+        await this.runtime.execute(name, { type: 'lifecycle', hook: 'onActivate' });
+      }
+    } catch (e) {
+      console.warn(`[PluginRuntimeService] Plugin ${name} sandbox onActivate failed:`, e);
+    }
+
+    console.log(`[PluginRuntimeService] Fully activated ${name}@${version}`);
   }
+
+  /**
+   * Performs host-level activation (Express routes registration)
+   */
+  async hostActivate(name: string, version: string): Promise<void> {
+    const pluginDir = join(PLUGIN_CACHE_DIR, name, version);
+    const manifest = this.loadManifest(pluginDir);
+    const entryPoint = manifest.entryPoint || 'index.js';
+    const entryPath = join(pluginDir, entryPoint);
+
+    if (!existsSync(entryPath)) return;
+
+    // Hot-reload support: clear require cache
+    try {
+      delete require.cache[require.resolve(entryPath)];
+    } catch {}
+
+    try {
+      const mod = require(entryPath);
+      let runtimeExport = mod?.default || mod;
+
+      // Handle ShakesPlugin Class or Instance
+      if (runtimeExport && runtimeExport.isShakesPlugin) {
+        if (typeof runtimeExport === 'function') {
+          const instance = new runtimeExport(name);
+          runtimeExport = instance.export();
+        } else {
+          runtimeExport = runtimeExport.export();
+        }
+      }
+
+      const onActivate = runtimeExport?.hooks?.onActivate || runtimeExport?.onActivate;
+      const currentlyActivated = this.hostActivatedVersions.get(name);
+
+      if (typeof onActivate === 'function' && currentlyActivated !== version) {
+        if (currentlyActivated) {
+          pluginRouteRegistry.unregister(name);
+          console.log(`[PluginRuntimeService] Version change for ${name} (${currentlyActivated} -> ${version}). Unregistered old routes.`);
+        }
+
+        const api = this.createHostApi(name);
+        const context = {
+          plugin: { name, version }, // Legacy support
+          manifest,                  // SDK v2 support
+          config: {},
+          log: (level: string, msg: string) => console.log(`[Plugin:${name}] ${level}: ${msg}`)
+        };
+        
+        await Promise.resolve(onActivate(context, api));
+        this.hostActivatedVersions.set(name, version);
+        console.log(`[PluginRuntimeService] Registered host routes for ${name}`);
+      }
+    } catch (error) {
+      console.warn(`[PluginRuntimeService] Host activation failed for ${name}:`, error);
+    }
+  }
+
+  /**
+   * Utility to create Host API for backend route registration
+   */
+  private createHostApi(pluginName: string) {
+    const dataDir = join(PLUGIN_CACHE_DIR, pluginName, 'data');
+    if (!existsSync(dataDir)) mkdirSync(dataDir, { recursive: true });
+
+    return {
+      routes: pluginRouteRegistry.getApiForPlugin(pluginName),
+      system: {
+        log: (level: string, msg: string) => console.log(`[Plugin:${pluginName}] ${level}: ${msg}`)
+      },
+      storage: {
+        read: (filename: string) => {
+          const filePath = join(dataDir, filename);
+          if (!filePath.startsWith(dataDir)) throw new Error('Security: Out of bounds access');
+          if (!existsSync(filePath)) return null;
+          return readFileSync(filePath, 'utf-8');
+        },
+        write: (filename: string, content: string) => {
+          const filePath = join(dataDir, filename);
+          if (!filePath.startsWith(dataDir)) throw new Error('Security: Out of bounds access');
+          writeFileSync(filePath, content, 'utf-8');
+          return true;
+        },
+        exists: (filename: string) => {
+          const filePath = join(dataDir, filename);
+          return filePath.startsWith(dataDir) && existsSync(filePath);
+        }
+      }
+    };
+  }
+
+  /**
+   * Activates a sideloaded (locally uploaded) plugin, skipping CDN/checksum verification.
+   * The user explicitly uploaded this ZIP so we trust it — but still run sandbox code validation.
+   */
+  async activateSideloadedPlugin(name: string, version: string): Promise<void> {
+    const pluginDir = join(PLUGIN_CACHE_DIR, name, version);
+
+    if (!existsSync(pluginDir)) {
+      throw new Error(`Sideloaded plugin directory not found: ${name}@${version}`);
+    }
+
+    // Load manifest (support plugin.json, shakes.json, or manifest.json)
+    const manifest = this.loadManifest(pluginDir);
+
+    // Resolve entry point
+    const entryPoint = manifest.entryPoint || 'index.js';
+    const entryPath = join(pluginDir, entryPoint);
+
+    if (!existsSync(entryPath)) {
+      throw new Error(`Entry point "${entryPoint}" not found in sideloaded plugin ${name}@${version}`);
+    }
+
+    const code = readFileSync(entryPath, 'utf-8');
+
+    // Still run sandbox static code validation (safety baseline)
+    const validation = PluginSandbox.validateCode(code, manifest.capabilities || []);
+    if (!validation.valid) {
+      throw new Error(`Sideloaded plugin code validation failed: ${validation.error}`);
+    }
+
+    // Activate in runtime (no CDN verification)
+    const result = await this.runtime.activate(name, version);
+    if (!result.success) {
+      throw new Error(`Runtime activation failed for sideloaded ${name}: ${result.error}`);
+    }
+
+    this.activePlugins.set(name, { name, version });
+
+    // Trigger lifecycle hook if defined
+    try {
+      if (manifest.hooks?.includes('onActivate')) {
+        await this.runtime.execute(name, { type: 'lifecycle', hook: 'onActivate' });
+      }
+    } catch (e) {
+      console.warn(`[PluginRuntimeService] Sideloaded ${name} hit an error during onActivate:`, e);
+    }
+
+    console.log(`[PluginRuntimeService] Sideloaded plugin activated: ${name}@${version}`);
+  }
+
 
   /**
    * Ejecuta un plugin
@@ -117,6 +273,15 @@ export class PluginRuntimeService {
    * Desactiva un plugin
    */
   async deactivatePlugin(name: string): Promise<void> {
+    // Trigger onDeactivate Hook
+    try {
+      if (this.activePlugins.has(name)) {
+        await this.runtime.execute(name, { type: 'lifecycle', hook: 'onDeactivate' });
+      }
+    } catch (e) {
+      console.warn(`[PluginRuntimeService] Plugin ${name} hit an error during onDeactivate:`, e);
+    }
+
     this.runtime.deactivate(name);
     this.activePlugins.delete(name);
     console.log(`[PluginRuntimeService] Deactivated ${name}`);
@@ -194,7 +359,7 @@ export class PluginRuntimeService {
 
         if (versions.length > 0) {
           const currentVersion = isActive
-            ? require('fs').readlinkSync(activeLink).split('/').pop()
+            ? path.basename(require('fs').readlinkSync(activeLink))
             : versions[0];
 
           plugins.push({
@@ -215,25 +380,28 @@ export class PluginRuntimeService {
    * Carga manifest de plugin
    */
   private loadManifest(pluginDir: string): PluginManifest {
-    const manifestPath = join(pluginDir, 'plugin.json');
-
-    if (!existsSync(manifestPath)) {
-      // Default manifest si no existe
-      return {
-        name: require('path').basename(pluginDir),
-        version: '1.0.0',
-        displayName: 'Unknown Plugin',
-        apiVersion: '1.0',
-        capabilities: [],
-        runtime: 'js',
-        entryPoint: 'index.js',
-        memoryLimit: '128Mi',
-        timeout: 5,
-        author: 'unknown',
-      };
+    // Try all known manifest filenames in order of preference
+    const candidates = ['plugin.json', 'shakes.json', 'manifest.json'];
+    for (const filename of candidates) {
+      const manifestPath = join(pluginDir, filename);
+      if (existsSync(manifestPath)) {
+        return JSON.parse(readFileSync(manifestPath, 'utf-8'));
+      }
     }
 
-    return JSON.parse(readFileSync(manifestPath, 'utf-8'));
+    // Default manifest if no file found (graceful fallback)
+    return {
+      name: require('path').basename(pluginDir),
+      version: '1.0.0',
+      displayName: 'Unknown Plugin',
+      apiVersion: '1.0',
+      capabilities: [],
+      runtime: 'js',
+      entryPoint: 'index.js',
+      memoryLimit: '128Mi',
+      timeout: 5,
+      author: 'unknown',
+    };
   }
 
   /**

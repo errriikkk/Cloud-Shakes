@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useEffect, useRef } from "react";
+import { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { Check, Filter, Globe, Lock, Pin, Plus, Search, StickyNote, Trash2, User } from "lucide-react";
 import { Button } from "@/components/ui/Button";
@@ -54,13 +54,8 @@ export default function NotesPage() {
     const [author, setAuthor] = useState<"all" | "me">("all");
     const [showPinnedOnly, setShowPinnedOnly] = useState(false);
 
-    useEffect(() => {
-        if (user && (user.isAdmin || user.permissions?.includes('view_notes'))) {
-            fetchNotes();
-        }
-    }, [user]);
-
-    const fetchNotes = async () => {
+    const fetchNotes = useCallback(async () => {
+        if (!user || !(user.isAdmin || user.permissions?.includes('view_notes'))) return;
         try {
             const res = await axios.get(API_ENDPOINTS.NOTES.BASE, {
                 withCredentials: true,
@@ -80,7 +75,16 @@ export default function NotesPage() {
         } finally {
             setLoading(false);
         }
-    };
+    }, [author, q, scope, showPinnedOnly, user]);
+
+    useEffect(() => {
+        if (!user || !(user.isAdmin || user.permissions?.includes('view_notes'))) return;
+        const timer = setTimeout(() => {
+            setLoading(true);
+            fetchNotes();
+        }, 220);
+        return () => clearTimeout(timer);
+    }, [fetchNotes, user, q, scope, author, showPinnedOnly]);
 
     const handleCreate = async () => {
         setIsCreating(true);
@@ -222,9 +226,12 @@ export default function NotesPage() {
                                 <Button
                                     variant="outline"
                                     className="h-9 rounded-xl"
-                                    onClick={() => fetchNotes()}
+                                    onClick={() => {
+                                        setLoading(true);
+                                        fetchNotes();
+                                    }}
                                 >
-                                    Apply
+                                    Refresh
                                 </Button>
                             </div>
                         </div>

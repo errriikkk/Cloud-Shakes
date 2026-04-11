@@ -1,4 +1,5 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://192.168.1.142:5000";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+const CDN_URL = process.env.NEXT_PUBLIC_CDN_URL || "https://cdn.shakes.es";
 
 export const API_ENDPOINTS = {
     AUTH: {
@@ -27,6 +28,18 @@ export const API_ENDPOINTS = {
     NOTES: {
         BASE: `${API_URL}/api/notes`,
         DETAIL: (id: string) => `${API_URL}/api/notes/${id}`,
+    },
+    DOCUMENTS: {
+        BASE: `${API_URL}/api/documents`,
+        DETAIL: (id: string) => `${API_URL}/api/documents/${id}`,
+        VERSIONS: (id: string) => `${API_URL}/api/documents/${id}/versions`,
+        RESTORE: (id: string, versionId: string) => `${API_URL}/api/documents/${id}/restore/${versionId}`,
+        ACCESS: (id: string) => `${API_URL}/api/documents/${id}/access`,
+        ACCESS_USER: (id: string, userId: string) => `${API_URL}/api/documents/${id}/access/${userId}`,
+        COMMENTS: (id: string) => `${API_URL}/api/documents/${id}/comments`,
+        RESOLVE_COMMENT: (id: string, commentId: string) => `${API_URL}/api/documents/${id}/comments/${commentId}/resolve`,
+        SUGGESTIONS: (id: string) => `${API_URL}/api/documents/${id}/suggestions`,
+        REVIEW_SUGGESTION: (id: string, suggestionId: string) => `${API_URL}/api/documents/${id}/suggestions/${suggestionId}`,
     },
     CALENDAR: {
         BASE: `${API_URL}/api/calendar`,
@@ -59,6 +72,26 @@ export const API_ENDPOINTS = {
         MESSAGE: (id: string) => `${API_URL}/api/chat/messages/${id}`,
         SEARCH_MENTIONS: `${API_URL}/api/chat/search-mentions`,
         VALIDATE_SHARE: `${API_URL}/api/chat/validate-share`,
+    },
+    PLUGINS: {
+        // Discovery / Marketplace (CDN)
+        BASE: `${CDN_URL}/api/plugins`,
+        
+        // Configuration / Local Management (Local Backend)
+        INSTALLED: `${API_URL}/api/plugins/installed`,
+        SIDEBAR: `${API_URL}/api/plugins/sidebar`,
+        INSTALL: `${API_URL}/api/plugins/install`,
+        RUN: `${API_URL}/api/plugins/run`,
+        UNINSTALL: `${API_URL}/api/plugins/uninstall`,
+        LOGS: `${API_URL}/api/plugins/logs`,
+        PAGE: (name: string) => `${API_URL}/api/plugins/page/${name}`,
+        
+        UPLOAD_ZIP: `${API_URL}/api/plugins/upload-zip`,
+        
+        // Instance-based management
+        INSTANCE_INSTALLED: (instanceId: string) => `${API_URL}/api/plugins/i/${instanceId}`,
+        INSTANCE_INSTALL: (instanceId: string) => `${API_URL}/api/plugins/i/${instanceId}/install`,
+        INSTANCE_UNINSTALL: (instanceId: string) => `${API_URL}/api/plugins/i/${instanceId}/uninstall`,
     },
 };
 

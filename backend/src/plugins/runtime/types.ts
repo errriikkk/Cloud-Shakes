@@ -66,6 +66,13 @@ export interface PluginManifest {
   runtime: Runtime;
   entryPoint: string;     // Relativo a raíz del plugin
   
+  // Extensions
+  hooks?: string[];
+  slots?: Array<{
+    name: string;
+    description?: string;
+  } | string>;
+  
   // Límites
   memoryLimit: string;    // e.g., '128Mi', '256Mi', '512Mi'
   timeout: number;        // Segundos (default: 5)

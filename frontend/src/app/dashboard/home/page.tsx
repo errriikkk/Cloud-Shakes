@@ -82,7 +82,9 @@ export default function HomePage() {
             hasPerm("view_notes")
                 ? axios.get(API_ENDPOINTS.NOTES.BASE, { params: { limit: 6 }, withCredentials: true }).catch(() => ({ data: [] }))
                 : Promise.resolve(null),
-            axios.get(API_ENDPOINTS.ACTIVITY.BASE, { params: { limit: 8 }, withCredentials: true }).catch(() => ({ data: [] })),
+            hasPerm("view_activity")
+                ? axios.get(API_ENDPOINTS.ACTIVITY.BASE, { params: { limit: 8 }, withCredentials: true }).catch(() => ({ data: [] }))
+                : Promise.resolve(null),
         ];
 
         Promise.all(reqs).then(([usageRes, filesRes, eventsRes, notesRes, actRes]) => {
@@ -354,6 +356,7 @@ export default function HomePage() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
 
                 {/* Activity Log */}
+                {hasPerm("view_activity") ? (
                 <div className="bg-card border border-border/40 rounded-3xl p-6 hover:shadow-sm transition-shadow">
                     <div className="flex items-center justify-between mb-5">
                         <div className="flex items-center gap-3">
@@ -389,6 +392,11 @@ export default function HomePage() {
                         )}
                     </div>
                 </div>
+                ) : (
+                    <div className="bg-muted/20 border border-dashed border-border/40 rounded-3xl p-6 flex items-center justify-center text-muted-foreground/40">
+                        <p className="text-sm font-medium">Activity not available</p>
+                    </div>
+                )}
 
                 {/* Upcoming Events */}
                 {hasPerm("view_calendar") ? (

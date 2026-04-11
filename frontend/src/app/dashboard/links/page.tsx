@@ -60,16 +60,6 @@ function SharedLinksContent() {
     const [links, setLinks] = useState<LinkItem[]>([]);
     const [folders, setFolders] = useState<FolderItem[]>([]);
     const [trail, setTrail] = useState<{ id: string | null, name: string }[]>([]);
-    const [view, setView] = useState<'grid' | 'list'>(() => {
-        if (typeof window !== 'undefined') {
-            return (localStorage.getItem('sharedViewMode') as 'grid' | 'list') || 'grid';
-        }
-        return 'grid';
-    });
-
-    useEffect(() => {
-        localStorage.setItem('sharedViewMode', view);
-    }, [view]);
 
     const router = useRouter();
 
@@ -384,36 +374,12 @@ function SharedLinksContent() {
                         </div>
                     </div>
 
-                    {/* View Switcher */}
-                    <div className="flex items-center bg-muted/50 border border-border/60 rounded-2xl p-1">
-                        <button
-                            onClick={() => setView('grid')}
-                            className={cn(
-                                "px-3 py-1.5 rounded-xl transition-all",
-                                view === 'grid' ? "bg-background shadow-sm border border-border/40 text-foreground" : "text-muted-foreground hover:text-foreground"
-                            )}
-                        >
-                            <span className="text-[10px] font-bold uppercase tracking-wider">{t('files.viewGrid')}</span>
-                        </button>
-                        <button
-                            onClick={() => setView('list')}
-                            className={cn(
-                                "px-3 py-1.5 rounded-xl transition-all",
-                                view === 'list' ? "bg-background shadow-sm border border-border/40 text-foreground" : "text-muted-foreground hover:text-foreground"
-                            )}
-                        >
-                            <span className="text-[10px] font-bold uppercase tracking-wider">{t('files.viewList')}</span>
-                        </button>
-                    </div>
                 </div>
             </div>
 
 
             {/* Content Display */}
-            <div className={cn(
-                "gap-4",
-                view === 'grid' ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4" : "flex flex-col"
-            )}>
+            <div className="flex flex-col gap-4">
                 <AnimatePresence mode="popLayout">
                     {/* Folders (Mirrors) */}
                     {folders.map((folder, idx) => (
@@ -424,19 +390,10 @@ function SharedLinksContent() {
                             exit={{ opacity: 0, x: -20 }}
                             transition={{ delay: idx * 0.05 }}
                             onClick={() => router.push(`/dashboard/links?folder=${folder.id}`)}
-                            className={cn(
-                                "group bg-background border border-border/60 rounded-3xl p-4 transition-all hover:border-border hover:shadow-xl hover:shadow-black/[0.03] active:scale-[0.995] cursor-pointer flex items-center gap-4",
-                                view === 'list' ? "flex-row" : "flex-col text-center"
-                            )}
+                            className="group bg-background border border-border/60 rounded-3xl p-4 transition-all hover:border-border hover:shadow-xl hover:shadow-black/[0.03] active:scale-[0.995] cursor-pointer flex items-center gap-4"
                         >
-                            <div className={cn(
-                                "rounded-2xl bg-muted/60 flex items-center justify-center shrink-0 border border-border/40",
-                                view === 'list' ? "w-12 h-12" : "w-16 h-16"
-                            )}>
-                                <Folder className={cn(
-                                    "text-primary",
-                                    view === 'list' ? "w-6 h-6" : "w-8 h-8"
-                                )} />
+                            <div className="rounded-2xl bg-muted/60 flex items-center justify-center shrink-0 border border-border/40 w-12 h-12">
+                                <Folder className="text-primary w-6 h-6" />
                             </div>
                             <div className="min-w-0 flex-1">
                                 <h3 className="text-sm font-bold text-foreground truncate">{folder.name}</h3>
@@ -461,24 +418,12 @@ function SharedLinksContent() {
                                     animate={{ opacity: 1, y: 0 }}
                                     exit={{ opacity: 0, x: -20 }}
                                     transition={{ delay: (folders.length + idx) * 0.05 }}
-                                    className={cn(
-                                        "group bg-background border border-border/60 rounded-3xl transition-all hover:border-border hover:shadow-xl hover:shadow-black/[0.03]",
-                                        view === 'list' ? "p-5" : "p-4"
-                                    )}
+                                    className="group bg-background border border-border/60 rounded-3xl transition-all hover:border-border hover:shadow-xl hover:shadow-black/[0.03] p-5"
                                 >
                                     {/* Group Header */}
-                                    <div className={cn(
-                                        "flex gap-6",
-                                        view === 'list' ? "flex-col lg:flex-row lg:items-center" : "flex-col"
-                                    )}>
-                                        <div className={cn(
-                                            "flex items-center gap-4 flex-1 min-w-0",
-                                            view === 'grid' && "flex-col text-center"
-                                        )}>
-                                            <div className={cn(
-                                                "rounded-2xl bg-muted/60 flex items-center justify-center shrink-0 border border-border/40",
-                                                view === 'list' ? "w-12 h-12" : "w-20 h-20 mb-2"
-                                            )}>
+                                    <div className="flex gap-6 flex-col lg:flex-row lg:items-center">
+                                        <div className="flex items-center gap-4 flex-1 min-w-0">
+                                            <div className="rounded-2xl bg-muted/60 flex items-center justify-center shrink-0 border border-border/40 w-12 h-12">
                                                 {getFileIcon(firstLink.file?.mimeType)}
                                             </div>
                                             <div className="min-w-0 flex-1">
@@ -490,10 +435,7 @@ function SharedLinksContent() {
                                                         {group.links.length} {t('links.title')}
                                                     </span>
                                                 </div>
-                                                <div className={cn(
-                                                    "flex flex-wrap items-center gap-x-4 gap-y-1",
-                                                    view === 'grid' && "justify-center"
-                                                )}>
+                                                <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
                                                     {firstLink.file && (
                                                         <span className="text-[10px] text-muted-foreground font-medium">{formatSize(firstLink.file.size)}</span>
                                                     )}
@@ -538,7 +480,9 @@ function SharedLinksContent() {
                                                     >
                                                         <div className="flex flex-col sm:flex-row sm:items-center gap-2 flex-1 min-w-0">
                                                             <div className="flex items-center gap-3 min-w-0">
-                                                                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">/{link.id}</span>
+                                                                <span className="text-[10px] font-bold text-primary bg-primary/10 border border-primary/20 px-2 py-0.5 rounded-full">
+                                                                    /{link.id}
+                                                                </span>
                                                                 <div className="flex items-center gap-2">
                                                                     {link.isPasswordProtected && (
                                                                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[10px] font-bold">
@@ -574,7 +518,7 @@ function SharedLinksContent() {
                                                         <div className="flex items-center gap-1">
                                                             <button
                                                                 onClick={() => handleCopy(link.id)}
-                                                                className="p-1.5 rounded hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+                                                                className="p-1.5 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
                                                                 title={t('common.copy')}
                                                             >
                                                                 <Copy className="w-3.5 h-3.5" />
@@ -582,7 +526,7 @@ function SharedLinksContent() {
                                                             {link.isEmbed && (
                                                                 <button
                                                                     onClick={() => handleCopyEmbed(link.id)}
-                                                                    className="p-1.5 rounded hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+                                                                className="p-1.5 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
                                                                     title="Copy embed URL"
                                                                 >
                                                                     <Code className="w-3.5 h-3.5" />
@@ -590,14 +534,14 @@ function SharedLinksContent() {
                                                             )}
                                                             <button
                                                                 onClick={() => window.open(`/s/${link.id}`, '_blank')}
-                                                                className="p-1.5 rounded hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+                                                                className="p-1.5 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
                                                                 title={t('gallery.view')}
                                                             >
                                                                 <ExternalLink className="w-3.5 h-3.5" />
                                                             </button>
                                                             <button
                                                                 onClick={() => confirmDelete(link.id)}
-                                                                className="p-1.5 rounded hover:bg-muted transition-colors text-muted-foreground hover:text-red-400"
+                                                                className="p-1.5 rounded-lg hover:bg-red-500/10 transition-colors text-muted-foreground hover:text-red-400"
                                                                 title={t('common.delete')}
                                                             >
                                                                 <Trash2 className="w-3.5 h-3.5" />
@@ -622,35 +566,24 @@ function SharedLinksContent() {
                             exit={{ opacity: 0, x: -20 }}
                             transition={{ delay: (folders.length + idx) * 0.05 }}
                             className={cn(
-                                "group bg-background border border-border/60 rounded-3xl transition-all hover:border-border hover:shadow-xl hover:shadow-black/[0.03] active:scale-[0.995]",
-                                link.isExpired && "opacity-60 saturate-50",
-                                view === 'list' ? "p-5" : "p-4"
+                                "group bg-background border border-border/60 rounded-3xl transition-all hover:border-border hover:shadow-xl hover:shadow-black/[0.03] active:scale-[0.995] p-5",
+                                link.isExpired && "opacity-60 saturate-50"
                             )}
                         >
-                            <div className={cn(
-                                "flex gap-6",
-                                view === 'list' ? "flex-col lg:flex-row lg:items-center" : "flex-col"
-                            )}>
+                            <div className="flex gap-6 flex-col lg:flex-row lg:items-center">
                                 {/* File info */}
-                                <div className={cn(
-                                    "flex items-center gap-4 flex-1 min-w-0",
-                                    view === 'grid' && "flex-col text-center"
-                                )}>
-                                    <div className={cn(
-                                        "rounded-2xl bg-muted/60 flex items-center justify-center shrink-0 border border-border/40",
-                                        view === 'list' ? "w-12 h-12" : "w-20 h-20 mb-2"
-                                    )}>
+                                <div className="flex items-center gap-4 flex-1 min-w-0">
+                                    <div className="rounded-2xl bg-muted/60 flex items-center justify-center shrink-0 border border-border/40 w-12 h-12">
                                         {getFileIcon(link.file?.mimeType)}
                                     </div>
                                     <div className="min-w-0 flex-1">
                                         <h3 className="text-sm font-bold text-foreground truncate mb-1">
                                             {link.file?.originalName || t('common.itemType.file')}
                                         </h3>
-                                        <div className={cn(
-                                            "flex flex-wrap items-center gap-x-4 gap-y-1",
-                                            view === 'grid' && "justify-center"
-                                        )}>
-                                            <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">/{link.id}</span>
+                                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                                            <span className="text-[10px] font-bold text-primary bg-primary/10 border border-primary/20 px-2 py-0.5 rounded-full">
+                                                /{link.id}
+                                            </span>
                                             {link.file && (
                                                 <span className="text-[10px] text-muted-foreground font-medium">{formatSize(link.file.size)}</span>
                                             )}
@@ -674,10 +607,7 @@ function SharedLinksContent() {
                                 </div>
 
                                 {/* Status badges / Controls */}
-                                <div className={cn(
-                                    "flex items-center gap-2 flex-wrap",
-                                    view === 'grid' && "justify-center"
-                                )}>
+                                <div className="flex items-center gap-2 flex-wrap">
                                     {/* Views */}
                                     <div className="flex items-center gap-2 px-2 py-1 rounded-xl bg-muted/60 text-muted-foreground border border-border/40">
                                         <Eye className="w-3 h-3" />
@@ -695,7 +625,7 @@ function SharedLinksContent() {
                                         )}
                                     >
                                         {link.isPasswordProtected ? <Lock className="w-3 h-3" /> : <Unlock className="w-3 h-3" />}
-                                        {view === 'list' && (link.isPasswordProtected ? t('talk.password') : "Public")}
+                                        {link.isPasswordProtected ? t('talk.password') : "Public"}
                                     </button>
 
                                     {/* Expiry */}
@@ -718,16 +648,13 @@ function SharedLinksContent() {
                                             className="flex items-center gap-1.5 px-2 py-1 rounded-xl border border-border/60 text-muted-foreground font-bold text-[10px] leading-none hover:bg-muted/60 transition-colors"
                                         >
                                             <Clock className="w-3 h-3" />
-                                            {view === 'list' && t('links.never')}
+                                            {t('links.never')}
                                         </button>
                                     )}
                                 </div>
 
                                 {/* Actions */}
-                                <div className={cn(
-                                    "flex items-center gap-1",
-                                    view === 'grid' ? "justify-center border-t border-border/40 pt-3 mt-1" : "justify-end lg:ml-auto"
-                                )}>
+                                <div className="flex items-center gap-1 justify-end lg:ml-auto">
                                     <button
                                         onClick={() => handleCopy(link.id)}
                                         className="p-2 rounded-xl bg-muted/50 hover:bg-muted text-muted-foreground hover:text-foreground transition-all"
@@ -814,20 +741,25 @@ function SharedLinksContent() {
                 title={t('common.copied')}
             >
                 <div className="space-y-4">
-                    <div className="flex items-center gap-2">
-                        <input
-                            readOnly
-                            value={copiedUrl}
-                            className="flex-1 bg-muted/60 border border-border/40 rounded-xl px-4 py-3 text-sm text-foreground font-mono select-all focus:outline-none focus:border-primary/40 focus:bg-background transition-all"
-                            onClick={(e) => (e.target as HTMLInputElement).select()}
-                        />
-                        <button
-                            onClick={() => copyToClipboard(copiedUrl)}
-                            className="p-3 rounded-xl bg-primary/10 text-primary hover:bg-primary/20 transition-all shrink-0 shadow-sm shadow-primary/5"
-                            title={t('common.copy')}
-                        >
-                            <Copy className="w-5 h-5" />
-                        </button>
+                    <div className="p-3 rounded-2xl border border-primary/20 bg-primary/5">
+                        <p className="text-[11px] font-bold uppercase tracking-widest text-primary mb-2">
+                            Share Link
+                        </p>
+                        <div className="flex items-center gap-2">
+                            <input
+                                readOnly
+                                value={copiedUrl}
+                                className="flex-1 bg-background border border-border/40 rounded-xl px-4 py-3 text-sm text-foreground font-mono select-all focus:outline-none focus:border-primary/40 transition-all"
+                                onClick={(e) => (e.target as HTMLInputElement).select()}
+                            />
+                            <button
+                                onClick={() => copyToClipboard(copiedUrl)}
+                                className="p-3 rounded-xl bg-primary text-white hover:brightness-110 transition-all shrink-0 shadow-sm shadow-primary/20"
+                                title={t('common.copy')}
+                            >
+                                <Copy className="w-5 h-5" />
+                            </button>
+                        </div>
                     </div>
                     <div className="flex justify-center">
                         <div className="w-12 h-12 rounded-full bg-green-500/10 flex items-center justify-center text-green-500">

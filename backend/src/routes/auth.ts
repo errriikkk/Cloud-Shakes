@@ -211,7 +211,7 @@ router.get('/me', protect, async (req: AuthRequest, res, next) => {
 
                 // New private avatar storage (MinIO object key)
                 if ((user as any).avatar.startsWith('avatars/')) {
-                    avatarUrl = `${apiBase}/api/profile/avatar`;
+                    avatarUrl = `${apiBase}/api/profile/avatar?v=${Date.now()}`;
                 } else {
                 const file = await prisma.file.findUnique({
                     where: { id: user.avatar },

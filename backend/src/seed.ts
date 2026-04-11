@@ -34,13 +34,26 @@ const PERMISSIONS = {
     
     // Notes - Viewer (Nivel 2)
     'view_notes': 'View notes',
+
+    // Documents - Viewer (Nivel 2)
+    'view_documents': 'View documents',
     
     // Notes - Editor (Nivel 3)
     'create_notes': 'Create notes',
     'edit_notes': 'Edit notes',
+
+    // Documents - Editor (Nivel 3)
+    'create_documents': 'Create documents',
+    'edit_documents': 'Edit documents',
+    'comment_documents': 'Comment on documents',
     
     // Notes - Admin (Nivel 4)
     'delete_notes': 'Delete notes',
+
+    // Documents - Admin (Nivel 4)
+    'delete_documents': 'Delete documents',
+    'share_documents': 'Share documents',
+    'review_documents': 'Review and approve document changes',
     
     // Calendar - Guest (Nivel 1)
     'view_calendar': 'View calendar events',
@@ -142,6 +155,7 @@ const DEFAULT_ROLES = [
             'view_files', 'view_workspace_files', 'upload_files', 'delete_files', 'download_files', 'share_files', 'preview_files',
             'view_folders', 'create_folders', 'delete_folders', 'organize_folders',
             'view_notes', 'create_notes', 'edit_notes', 'delete_notes',
+            'view_documents', 'create_documents', 'edit_documents', 'comment_documents', 'delete_documents', 'share_documents', 'review_documents',
             'view_calendar', 'create_events', 'edit_events', 'delete_events',
             'view_links', 'create_links', 'delete_links',
             'view_gallery', 'upload_images', 'delete_images',
@@ -165,6 +179,7 @@ const DEFAULT_ROLES = [
             'view_files', 'upload_files', 'download_files', 'preview_files',
             'view_folders', 'create_folders', 'organize_folders',
             'view_notes', 'create_notes', 'edit_notes',
+            'view_documents', 'create_documents', 'edit_documents', 'comment_documents',
             'view_calendar', 'create_events', 'edit_events',
             'view_links', 'create_links',
             'view_gallery', 'upload_images',
@@ -184,6 +199,7 @@ const DEFAULT_ROLES = [
             'view_files', 'download_files', 'preview_files',
             'view_folders',
             'view_notes',
+            'view_documents',
             'view_calendar',
             'view_links',
             'view_gallery',

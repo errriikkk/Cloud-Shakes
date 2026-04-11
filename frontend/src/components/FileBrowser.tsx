@@ -87,6 +87,8 @@ export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserPro
     const [previewFile, setPreviewFile] = useState<FileItem | null>(null);
     const [previews, setPreviews] = useState<Record<string, string>>({});
     const [loadingPreviews, setLoadingPreviews] = useState<Record<string, boolean>>({});
+    const [previewFailed, setPreviewFailed] = useState<Record<string, boolean>>({});
+    const previewFallbackTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
     // Navigation state
     const router = useRouter();
@@ -122,6 +124,14 @@ export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserPro
     const [mounted, setMounted] = useState(false);
     const [activities, setActivities] = useState<Record<string, ActivityItem[]>>({});
     const [hoverActivityId, setHoverActivityId] = useState<string | null>(null);
+    const interactionLocked =
+        !!previewFile ||
+        deleteModalOpen ||
+        renameModalOpen ||
+        createLinkModalOpen ||
+        successModalOpen ||
+        createFolderOpen ||
+        isUploadOpen;
 
     // Limpiar el estado de drag cuando se abre/cierra el modal de subida
     useEffect(() => {
@@ -192,26 +202,57 @@ export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserPro
     };
 
 
+    const clearPreviewTimer = useCallback((fileId: string) => {
+        const t = previewFallbackTimers.current[fileId];
+        if (t) {
+            clearTimeout(t);
+            delete previewFallbackTimers.current[fileId];
+        }
+    }, []);
+
+    const schedulePreviewFallback = useCallback(
+        (fileId: string) => {
+            clearPreviewTimer(fileId);
+            previewFallbackTimers.current[fileId] = setTimeout(() => {
+                delete previewFallbackTimers.current[fileId];
+                setLoadingPreviews((prev) => (prev[fileId] ? { ...prev, [fileId]: false } : prev));
+                setPreviewFailed((prev) => (prev[fileId] ? prev : { ...prev, [fileId]: true }));
+            }, 3000);
+        },
+        [clearPreviewTimer]
+    );
+
     useEffect(() => {
-        const loadPreviews = () => {
-            const previewable = files.filter(f =>
-                f.mimeType.startsWith('image/') || f.mimeType.startsWith('video/')
-            );
-            const newPreviews: Record<string, string> = {};
-            const newLoading: Record<string, boolean> = {};
-            previewable.forEach((file) => {
-                if (!previews[file.id]) {
-                    newPreviews[file.id] = `${API}/api/files/${file.id}/preview`;
-                    newLoading[file.id] = true;
-                }
-            });
-            if (Object.keys(newPreviews).length > 0) {
-                setPreviews(prev => ({ ...prev, ...newPreviews }));
-                setLoadingPreviews(prev => ({ ...prev, ...newLoading }));
-            }
+        return () => {
+            Object.values(previewFallbackTimers.current).forEach(clearTimeout);
+            previewFallbackTimers.current = {};
         };
-        if (files.length > 0) loadPreviews();
-    }, [files, previews]);
+    }, []);
+
+    useEffect(() => {
+        const previewable = files.filter(
+            (f) => f.mimeType.startsWith('image/') || f.mimeType.startsWith('video/')
+        );
+        const toSchedule: string[] = [];
+        setPreviews((prev) => {
+            const merged = { ...prev };
+            for (const file of previewable) {
+                if (!merged[file.id]) {
+                    merged[file.id] = `${API}/api/files/${file.id}/preview`;
+                    toSchedule.push(file.id);
+                }
+            }
+            return toSchedule.length > 0 ? merged : prev;
+        });
+        if (toSchedule.length > 0) {
+            setLoadingPreviews((lp) => {
+                const next = { ...lp };
+                for (const id of toSchedule) next[id] = true;
+                return next;
+            });
+            toSchedule.forEach((id) => schedulePreviewFallback(id));
+        }
+    }, [files, schedulePreviewFallback]);
 
     useEffect(() => {
         const syncPath = async () => {
@@ -281,6 +322,9 @@ export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserPro
     };
 
     const handleMouseDown = (e: MouseEvent) => {
+        // Disable marquee selection while any modal/preview is open.
+        if (interactionLocked) return;
+
         // Only start if left click and not on an interactive element
         if (e.button !== 0) return;
 
@@ -384,13 +428,15 @@ export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserPro
     };
 
     useEffect(() => {
+        if (interactionLocked) return;
+
         const onMouseDown = (e: MouseEvent) => {
             handleMouseDown(e);
         };
 
         window.addEventListener('mousedown', onMouseDown);
         return () => window.removeEventListener('mousedown', onMouseDown);
-    }, [handleMouseDown]);
+    }, [handleMouseDown, interactionLocked]);
 
     useEffect(() => {
         if (isSelecting) {
@@ -998,13 +1044,41 @@ export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserPro
                                             </div>
                                         </div>
                                         <div className="flex items-center gap-3 min-w-0">
-                                            {previews[file.id] && file.mimeType.startsWith('image/') ? (
+                                            {previews[file.id] && file.mimeType.startsWith('image/') && !previewFailed[file.id] ? (
                                                 <div className="w-8 h-8 rounded-lg overflow-hidden shadow-sm border border-border/40 shrink-0">
-                                                    <img src={previews[file.id]} alt="" className="w-full h-full object-cover" />
+                                                    <img
+                                                        src={previews[file.id]}
+                                                        alt=""
+                                                        crossOrigin="use-credentials"
+                                                        className="w-full h-full object-cover"
+                                                        onLoad={() => {
+                                                            clearPreviewTimer(file.id);
+                                                            setPreviewFailed((prev) => ({ ...prev, [file.id]: false }));
+                                                        }}
+                                                        onError={() => {
+                                                            clearPreviewTimer(file.id);
+                                                            setPreviewFailed((prev) => ({ ...prev, [file.id]: true }));
+                                                        }}
+                                                    />
                                                 </div>
-                                            ) : previews[file.id] && file.mimeType.startsWith('video/') ? (
+                                            ) : previews[file.id] && file.mimeType.startsWith('video/') && !previewFailed[file.id] ? (
                                                 <div className="w-8 h-8 rounded-lg overflow-hidden shadow-sm border border-border/40 flex items-center justify-center bg-black shrink-0">
-                                                    <video src={previews[file.id]} className="w-full h-full object-cover" muted playsInline preload="metadata" />
+                                                    <video
+                                                        src={previews[file.id]}
+                                                        crossOrigin="use-credentials"
+                                                        className="w-full h-full object-cover"
+                                                        muted
+                                                        playsInline
+                                                        preload="metadata"
+                                                        onLoadedData={() => {
+                                                            clearPreviewTimer(file.id);
+                                                            setPreviewFailed((prev) => ({ ...prev, [file.id]: false }));
+                                                        }}
+                                                        onError={() => {
+                                                            clearPreviewTimer(file.id);
+                                                            setPreviewFailed((prev) => ({ ...prev, [file.id]: true }));
+                                                        }}
+                                                    />
                                                 </div>
                                             ) : (
                                                 <div className="w-8 h-8 flex items-center justify-center shrink-0 bg-muted/60 rounded-lg">
@@ -1137,24 +1211,42 @@ export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserPro
                                         {/* Preview Area - Improved */}
                                         <div className="w-full aspect-[4/3] relative overflow-hidden bg-gradient-to-br from-muted/30 to-muted/10">
                                             {/* Media Elements (always in DOM to trigger load events) */}
-                                            {previews[file.id] && file.mimeType.startsWith('image/') && (
+                                            {previews[file.id] && file.mimeType.startsWith('image/') && !previewFailed[file.id] && (
                                                 <img 
                                                     src={previews[file.id]} 
                                                     alt={file.originalName || 'Preview'} 
+                                                    crossOrigin="use-credentials"
                                                     className={cn("w-full h-full object-cover transition-all duration-500 group-hover:scale-110", loadingPreviews[file.id] ? "opacity-0" : "opacity-100")}
-                                                    onLoad={() => setLoadingPreviews(prev => ({ ...prev, [file.id]: false }))}
-                                                    onError={() => setLoadingPreviews(prev => ({ ...prev, [file.id]: false }))}
+                                                    onLoad={() => {
+                                                        clearPreviewTimer(file.id);
+                                                        setPreviewFailed((prev) => ({ ...prev, [file.id]: false }));
+                                                        setLoadingPreviews((prev) => ({ ...prev, [file.id]: false }));
+                                                    }}
+                                                    onError={() => {
+                                                        clearPreviewTimer(file.id);
+                                                        setPreviewFailed((prev) => ({ ...prev, [file.id]: true }));
+                                                        setLoadingPreviews((prev) => ({ ...prev, [file.id]: false }));
+                                                    }}
                                                 />
                                             )}
-                                            {previews[file.id] && file.mimeType.startsWith('video/') && (
+                                            {previews[file.id] && file.mimeType.startsWith('video/') && !previewFailed[file.id] && (
                                                 <video 
                                                     src={previews[file.id]} 
+                                                    crossOrigin="use-credentials"
                                                     className={cn("w-full h-full object-cover transition-all duration-500 group-hover:scale-110 bg-black", loadingPreviews[file.id] ? "opacity-0" : "opacity-100")}
                                                     muted 
                                                     playsInline 
                                                     preload="metadata" 
-                                                    onLoadedData={() => setLoadingPreviews(prev => ({ ...prev, [file.id]: false }))}
-                                                    onError={() => setLoadingPreviews(prev => ({ ...prev, [file.id]: false }))}
+                                                    onLoadedData={() => {
+                                                        clearPreviewTimer(file.id);
+                                                        setPreviewFailed((prev) => ({ ...prev, [file.id]: false }));
+                                                        setLoadingPreviews((prev) => ({ ...prev, [file.id]: false }));
+                                                    }}
+                                                    onError={() => {
+                                                        clearPreviewTimer(file.id);
+                                                        setPreviewFailed((prev) => ({ ...prev, [file.id]: true }));
+                                                        setLoadingPreviews((prev) => ({ ...prev, [file.id]: false }));
+                                                    }}
                                                 />
                                             )}
                                             
@@ -1170,8 +1262,8 @@ export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserPro
                                                 </div>
                                             )}
 
-                                            {/* Fallback Icon for non-media files */}
-                                            {!loadingPreviews[file.id] && (!previews[file.id] || (!file.mimeType.startsWith('image/') && !file.mimeType.startsWith('video/'))) && (
+                                            {/* Fallback Icon for non-media files or failed preview */}
+                                            {!loadingPreviews[file.id] && (!previews[file.id] || previewFailed[file.id] || (!file.mimeType.startsWith('image/') && !file.mimeType.startsWith('video/'))) && (
                                                 <div className="absolute inset-0 flex items-center justify-center">
                                                     <div className="w-16 h-16 rounded-2xl bg-muted/50 flex items-center justify-center text-muted-foreground/60 group-hover:text-primary transition-colors">
                                                         {getFileIcon(file.mimeType || '', "w-10 h-10")}

@@ -1,11 +1,11 @@
 "use client";
 
-import { Suspense, useState, useEffect, useCallback } from "react";
+import { Suspense, useState, useEffect, useCallback, useRef } from "react";
 import { useAuth } from "@/context/AuthContext";
 import {
     Loader2, LogOut, HardDrive, Link as LinkIcon,
     Menu, X, Cloud, Database, Folder, ChevronDown, ChevronRight,
-    StickyNote, Calendar, MoreHorizontal, Search, Home, BarChart3, Settings, Image as ImageIcon, Video, MessageSquare, Activity, Zap
+    StickyNote, Calendar, MoreHorizontal, Search, Home, BarChart3, Settings, Image as ImageIcon, Video, MessageSquare, Activity, Zap, Puzzle
 } from "lucide-react";
 
 import Link from "next/link";
@@ -20,6 +20,7 @@ import { SearchModal } from "@/components/SearchModal";
 import { PwaInstallPrompt } from "@/components/PwaInstallPrompt";
 import { NotificationPanel } from "@/components/NotificationPanel";
 import { UploadProgress } from "@/components/UploadProgress";
+import { GlobalAccessDeniedModal } from "@/components/GlobalAccessDeniedModal";
 import { useTranslation } from "@/lib/i18n";
 import { usePermission } from "@/hooks/usePermission";
 import { useBranding } from "@/lib/branding";
@@ -106,6 +107,16 @@ interface SidebarContentProps {
     logout: () => void;
     networkSpeed: { download: number; upload: number; timestamp: number } | null;
     onRunSpeedTest: () => void;
+    pluginSidebarSections: { pluginName: string; title: string; href: string }[];
+    pluginSidebarWidgets: { pluginName: string; html: string; styles?: string }[];
+}
+
+function sanitizePluginMarkup(input: string): string {
+    return input
+        .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, "")
+        .replace(/\son\w+="[^"]*"/gi, "")
+        .replace(/\son\w+='[^']*'/gi, "")
+        .replace(/javascript:/gi, "");
 }
 
 function SidebarContent({
@@ -125,6 +136,8 @@ function SidebarContent({
     logout,
     networkSpeed,
     onRunSpeedTest,
+    pluginSidebarSections,
+    pluginSidebarWidgets,
 }: SidebarContentProps) {
     return (
         <div className="flex flex-col h-full">
@@ -169,6 +182,9 @@ function SidebarContent({
                 {(user.isAdmin || user.permissions?.includes('view_notes')) && (
                     <NavItem href="/dashboard/notes" icon={StickyNote} label={t("nav.notes")} onSelect={() => setMobileSidebarOpen(false)} />
                 )}
+                {(user.isAdmin || user.permissions?.includes('view_documents')) && (
+                    <NavItem href="/dashboard/documents" icon={Folder} label={t("nav.documents") || "Documents"} onSelect={() => setMobileSidebarOpen(false)} />
+                )}
                 {(user.isAdmin || user.permissions?.includes('view_calendar')) && (
                     <NavItem href="/dashboard/calendar" icon={Calendar} label={t("nav.calendar")} onSelect={() => setMobileSidebarOpen(false)} />
                 )}
@@ -191,14 +207,65 @@ function SidebarContent({
                     <NavItem href="/dashboard/activity" icon={Activity} label={t("nav.activity") || "Activity Log"} onSelect={() => setMobileSidebarOpen(false)} />
                 )}
                 {(user.isAdmin || user.permissions?.includes('view_plugins')) && (
-                    <div className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-muted-foreground/40 cursor-not-allowed select-none">
-                        <Zap className="w-5 h-5" />
-                        <span>Plugins</span>
-                        <span className="ml-auto text-[9px] font-bold uppercase tracking-widest bg-primary/10 text-primary/60 px-1.5 py-0.5 rounded-full">Soon</span>
+                    <NavItem href="/dashboard/plugins" icon={Zap} label="Plugins" onSelect={() => setMobileSidebarOpen(false)} />
+                )}
+                {pluginSidebarSections.length > 0 && (
+                    <div className="ml-7 mt-1 space-y-0.5">
+                        {pluginSidebarSections.map((section) => (
+                            <Link
+                                key={`${section.pluginName}:${section.href}`}
+                                href={section.href}
+                                onClick={() => setMobileSidebarOpen(false)}
+                                className="flex items-center gap-2 px-3 py-1.5 rounded-md text-xs text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+                            >
+                                <ChevronRight className="w-3 h-3" />
+                                <span className="truncate max-w-[150px]">{section.title}</span>
+                            </Link>
+                        ))}
                     </div>
                 )}
                 {(user.isAdmin || user.permissions?.includes('view_settings')) && (
                     <NavItem href="/dashboard/settings" icon={Settings} label={t("nav.settings")} onSelect={() => setMobileSidebarOpen(false)} />
+                )}
+
+                {pluginSidebarWidgets.length > 0 && (
+                    <div className="mt-2 space-y-2 px-2">
+                        {pluginSidebarWidgets.map((widget) => {
+                             const iframeSrcDoc = `
+                               <!DOCTYPE html>
+                               <html>
+                                 <head>
+                                   <meta charset="utf-8">
+                                   <style>
+                                     body { margin: 0; padding: 0; font-family: -apple-system, system-ui, sans-serif; color: #fff; }
+                                     ${widget.styles || ''}
+                                   </style>
+                                   <script>
+                                     // Provide a sandboxed API proxy via postMessage
+                                     window.cloudLocal = {
+                                        invoke: function(action, payload) {
+                                           window.parent.postMessage({ type: 'PLUGIN_ACTION', plugin: '${widget.pluginName}', action, payload }, '*');
+                                        }
+                                     };
+                                   </script>
+                                 </head>
+                                 <body>
+                                    ${widget.html}
+                                 </body>
+                               </html>
+                             `;
+                             return (
+                               <div key={widget.pluginName} className="rounded-lg border border-border/60 bg-muted/20 overflow-hidden h-40">
+                                   <iframe 
+                                       sandbox="allow-scripts allow-popups"
+                                       className="w-full h-full border-0 bg-transparent"
+                                       srcDoc={iframeSrcDoc}
+                                       title={`${widget.pluginName} widget`}
+                                   />
+                               </div>
+                             );
+                        })}
+                    </div>
                 )}
             </nav>
 
@@ -314,7 +381,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     const [storageLimit, setStorageLimit] = useState<number | null>(null);
     const [isSearchOpen, setIsSearchOpen] = useState(false);
     const [filesFolders, setFilesFolders] = useState<any[]>([]);
+    const [pluginSidebarSections, setPluginSidebarSections] = useState<{ pluginName: string; title: string; href: string }[]>([]);
+    const [pluginSidebarWidgets, setPluginSidebarWidgets] = useState<{ pluginName: string; html: string; styles?: string }[]>([]);
     const [networkSpeed, setNetworkSpeed] = useState<{ download: number; upload: number; timestamp: number } | null>(null);
+    // Generic plugin iframe modal — UI is 100% defined by the plugin, not the host
+    const [pluginIframeModal, setPluginIframeModal] = useState<{ pluginName: string; title: string; html: string; styles: string } | null>(null);
+    const pluginIframeRef = useRef<HTMLIFrameElement>(null);
 
     // Network speed test - use existing endpoints
     const runSpeedTest = useCallback(async () => {
@@ -394,9 +466,105 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         }
     }, [user]);
 
+    const fetchPluginSidebarSections = useCallback(async () => {
+        if (!user) return;
+        try {
+            const res = await axios.get(API_ENDPOINTS.PLUGINS.INSTALLED, { withCredentials: true });
+            const installed = res.data?.plugins || [];
+            const sections = installed
+                .filter((p: any) => p?.isActive && Array.isArray(p?.slots) && p.slots.some((s: any) => s?.name === 'sidebar'))
+                .map((p: any) => ({
+                    pluginName: p.name,
+                    title: p.displayName || p.name,
+                    href: `/dashboard/plugins/${p.name}`,
+                }));
+            setPluginSidebarSections(sections);
+        } catch {
+            setPluginSidebarSections([]);
+        }
+    }, [user]);
+
+    const fetchPluginSidebarWidgets = useCallback(async () => {
+        if (!user) return;
+        try {
+            const res = await axios.get(API_ENDPOINTS.PLUGINS.SIDEBAR, { withCredentials: true });
+            const widgets = Array.isArray(res.data?.widgets) ? res.data.widgets : [];
+            setPluginSidebarWidgets(
+                widgets
+                    .filter((w: any) => typeof w?.pluginName === "string" && typeof w?.html === "string")
+                    .map((w: any) => ({
+                        pluginName: w.pluginName,
+                        html: w.html,
+                        styles: typeof w.styles === "string" ? w.styles : undefined,
+                    }))
+            );
+        } catch {
+            setPluginSidebarWidgets([]);
+        }
+    }, [user]);
+
     useEffect(() => {
         fetchFolders();
-    }, [fetchFolders, pathname]);
+        fetchPluginSidebarSections();
+        fetchPluginSidebarWidgets();
+    }, [fetchFolders, fetchPluginSidebarSections, fetchPluginSidebarWidgets, pathname]);
+
+    // Escuchar mensajes postMessage desde los Iframes de los plugins
+    useEffect(() => {
+        const handlePluginMessage = async (event: MessageEvent) => {
+            if (event.data?.type === 'PLUGIN_ACTION') {
+                const { plugin, action, payload } = event.data;
+                console.log(`[Plugin Host] Accion recibida de ${plugin}:`, action, payload);
+                
+                const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+                const relayToPlugin = (msg: object) =>
+                    pluginIframeRef.current?.contentWindow?.postMessage(msg, '*');
+
+                if (action === 'open_chat') {
+                    // Fetch the plugin's modal slot HTML from the backend
+                    try {
+                        const res = await axios.get(`${API}/api/plugins/modal/${plugin}`, { withCredentials: true });
+                        setPluginIframeModal({
+                            pluginName: plugin,
+                            title: payload?.title || 'Plugin',
+                            html: res.data.html || '',
+                            styles: res.data.styles || '',
+                        });
+                    } catch {
+                        console.warn('[Plugin Host] Could not fetch modal slot for', plugin);
+                    }
+
+                } else if (action === 'call_backend') {
+                    // Generic relay to the plugin's self-registered backend routes
+                    const { path, method, data, requestId } = payload;
+                    try {
+                        const res = await axios({
+                            method: method || 'GET',
+                            url: `${API}/api/plugins/p/${plugin}${path}`,
+                            data,
+                            withCredentials: true
+                        });
+                        relayToPlugin({ 
+                            type: 'BACKEND_RESPONSE', 
+                            requestId, 
+                            data: res.data,
+                            success: true 
+                        });
+                    } catch (e: any) {
+                        const errorMsg = e.response?.data?.error || e.response?.data?.message || e.message || 'Error';
+                        relayToPlugin({ 
+                            type: 'BACKEND_RESPONSE', 
+                            requestId, 
+                            error: errorMsg,
+                            success: false 
+                        });
+                    }
+                }
+            }
+        };
+        window.addEventListener('message', handlePluginMessage);
+        return () => window.removeEventListener('message', handlePluginMessage);
+    }, []);
 
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
@@ -408,16 +576,23 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         const handleFolderUpdate = () => {
             fetchFolders();
         };
+        const handlePluginsChanged = () => {
+            fetchFolders();
+            fetchPluginSidebarSections();
+            fetchPluginSidebarWidgets();
+        };
         window.addEventListener('keydown', handleKeyDown);
         window.addEventListener('folderUpdate', handleFolderUpdate);
+        window.addEventListener('pluginsChanged', handlePluginsChanged);
         if ('serviceWorker' in navigator) {
             navigator.serviceWorker.register('/sw.js').catch(err => console.log('SW registration failed:', err));
         }
         return () => {
             window.removeEventListener('keydown', handleKeyDown);
             window.removeEventListener('folderUpdate', handleFolderUpdate);
+            window.removeEventListener('pluginsChanged', handlePluginsChanged);
         };
-    }, [fetchFolders]);
+    }, [fetchFolders, fetchPluginSidebarSections, fetchPluginSidebarWidgets]);
 
     if (loading) {
         return (
@@ -431,7 +606,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
     if (!user) return null;
 
-    const isFullBleedRoute = /^\/dashboard\/(chat|plugins)(\/|$)/.test(pathname);
+    const isFullBleedRoute = /^\/dashboard\/(chat)(\/|$)/.test(pathname);
 
     const isOfficeEditor = false;
 
@@ -457,12 +632,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <AnimatePresence>
                 {mobileSidebarOpen && (
                     <motion.aside initial={{ x: -280 }} animate={{ x: 0 }} exit={{ x: -280 }} transition={{ ease: "circOut", duration: 0.2 }} className="fixed inset-y-0 left-0 w-72 bg-sidebar border-r border-border z-50 md:hidden flex flex-col" data-marquee-ignore="true">
-                        <SidebarContent logoUrl={logoUrl} cloudName={cloudName} t={t} setIsSearchOpen={setIsSearchOpen} setMobileSidebarOpen={setMobileSidebarOpen} user={user} filesFolders={filesFolders} loading={loading} storagePercent={storagePercent} isCritical={isCritical} isWarning={isWarning} storageUsed={storageUsed} storageLimit={storageLimit} logout={logout} networkSpeed={networkSpeed} onRunSpeedTest={runSpeedTest} />
+                        <SidebarContent logoUrl={logoUrl} cloudName={cloudName} t={t} setIsSearchOpen={setIsSearchOpen} setMobileSidebarOpen={setMobileSidebarOpen} user={user} filesFolders={filesFolders} loading={loading} storagePercent={storagePercent} isCritical={isCritical} isWarning={isWarning} storageUsed={storageUsed} storageLimit={storageLimit} logout={logout} networkSpeed={networkSpeed} onRunSpeedTest={runSpeedTest} pluginSidebarSections={pluginSidebarSections} pluginSidebarWidgets={pluginSidebarWidgets} />
                     </motion.aside>
                 )}
             </AnimatePresence>
             <aside className="hidden md:flex w-64 bg-sidebar border-r border-border flex-col shrink-0 h-full" data-marquee-ignore="true">
-                <SidebarContent logoUrl={logoUrl} cloudName={cloudName} t={t} setIsSearchOpen={setIsSearchOpen} setMobileSidebarOpen={setMobileSidebarOpen} user={user} filesFolders={filesFolders} loading={loading} storagePercent={storagePercent} isCritical={isCritical} isWarning={isWarning} storageUsed={storageUsed} storageLimit={storageLimit} logout={logout} networkSpeed={networkSpeed} onRunSpeedTest={runSpeedTest} />
+                <SidebarContent logoUrl={logoUrl} cloudName={cloudName} t={t} setIsSearchOpen={setIsSearchOpen} setMobileSidebarOpen={setMobileSidebarOpen} user={user} filesFolders={filesFolders} loading={loading} storagePercent={storagePercent} isCritical={isCritical} isWarning={isWarning} storageUsed={storageUsed} storageLimit={storageLimit} logout={logout} networkSpeed={networkSpeed} onRunSpeedTest={runSpeedTest} pluginSidebarSections={pluginSidebarSections} pluginSidebarWidgets={pluginSidebarWidgets} />
             </aside>
             <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
                 <header className={cn("h-12 border-b border-border flex items-center px-4 md:hidden bg-background shrink-0", isFullBleedRoute && "hidden")} data-marquee-ignore="true">
@@ -493,6 +668,54 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </main>
             <SearchModal isOpen={isSearchOpen} onClose={() => setIsSearchOpen(false)} />
             <PwaInstallPrompt />
+
+            {/* Generic Plugin Modal — UI fully injected by the plugin via its modal slot */}
+            <AnimatePresence>
+                {pluginIframeModal && (
+                    <motion.div
+                        className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center sm:p-4 bg-black/70 backdrop-blur-md"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        onClick={(e) => { if (e.target === e.currentTarget) setPluginIframeModal(null); }}
+                    >
+                        <motion.div
+                            className="bg-background border border-border/60 rounded-t-2xl sm:rounded-2xl shadow-2xl w-full sm:max-w-lg flex flex-col overflow-hidden"
+                            style={{ height: '80vh', maxHeight: '680px' }}
+                            initial={{ y: 60, opacity: 0 }}
+                            animate={{ y: 0, opacity: 1 }}
+                            exit={{ y: 60, opacity: 0 }}
+                            transition={{ type: 'spring', damping: 22, stiffness: 280 }}
+                        >
+                            {/* Minimal host chrome — just plugin identity + close button */}
+                            <div className="flex items-center gap-2.5 px-4 py-3 border-b border-border/40 shrink-0 bg-muted/20">
+                                <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-primary to-indigo-500 flex items-center justify-center shrink-0">
+                                    <Puzzle className="w-3 h-3 text-white" />
+                                </div>
+                                <span className="text-xs font-semibold text-foreground flex-1 truncate">{pluginIframeModal.title}</span>
+                                <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded font-mono">{pluginIframeModal.pluginName}</span>
+                                <button
+                                    onClick={() => setPluginIframeModal(null)}
+                                    className="w-6 h-6 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors ml-1"
+                                >
+                                    <X className="w-3.5 h-3.5" />
+                                </button>
+                            </div>
+
+                            {/* Plugin-defined UI — fully sandboxed Iframe */}
+                            <div className="flex-1 relative">
+                                <iframe
+                                    ref={pluginIframeRef}
+                                    sandbox="allow-scripts allow-popups"
+                                    className="absolute inset-0 w-full h-full border-0 bg-transparent"
+                                    title={pluginIframeModal.title}
+                                    srcDoc={`<!DOCTYPE html><html><head><meta charset="utf-8"><style>*{box-sizing:border-box;margin:0;padding:0}${pluginIframeModal.styles}</style><script>window.cloudLocal={invoke:function(a,p){window.parent.postMessage({type:'PLUGIN_ACTION',plugin:'${pluginIframeModal.pluginName}',action:a,payload:p},'*')}};<\/script></head><body>${pluginIframeModal.html}</body></html>`}
+                                />
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </div>
     );
 }
@@ -532,6 +755,7 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
             {children}
             <NotificationPanel />
             <UploadProgress />
+            <GlobalAccessDeniedModal />
         </div>
     );
 }

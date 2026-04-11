@@ -184,6 +184,9 @@ export function CreateLinkModal({ isOpen, onClose, fileId, onSuccess }: CreateLi
                                         <p className="text-xs font-bold text-foreground truncate">
                                             /{l.id}
                                         </p>
+                                        <p className="text-[11px] text-muted-foreground truncate font-mono mt-1">
+                                            {l.isEmbed ? embedUrlFor(l.id) : shareUrlFor(l.id)}
+                                        </p>
                                         <div className="flex flex-wrap items-center gap-2 mt-1 text-[10px] font-bold text-muted-foreground">
                                             {l.isEmbed && <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600">{t("share.modal.embed")}</span>}
                                             {l.directDownload && <span className="px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-600">{t("share.modal.direct")}</span>}
