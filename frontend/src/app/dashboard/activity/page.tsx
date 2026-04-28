@@ -1,15 +1,16 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from '@/lib/i18n';
 import { useAuth } from '@/context/AuthContext';
 import { usePermission } from '@/hooks/usePermission';
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import axios from 'axios';
 import { API_ENDPOINTS } from '@/lib/api';
-import { 
-    Search, Filter, Calendar, ChevronLeft, ChevronRight, 
+import {
+    Search, ChevronLeft, ChevronRight,
     FileText, Folder, StickyNote, Link, MessageSquare, 
-    Upload, Download, Trash2, Edit, Plus, User, Clock,
+    User, Clock, ChevronDown,
     BarChart3, Activity
 } from 'lucide-react';
 
@@ -31,7 +32,7 @@ interface Activity {
 }
 
 export default function ActivityLogPage() {
-    const { t } = useTranslation();
+    const { t, locale } = useTranslation();
     const { user } = useAuth();
     const { canViewActivity } = usePermission();
     
@@ -39,6 +40,7 @@ export default function ActivityLogPage() {
     const [loading, setLoading] = useState(true);
     const [stats, setStats] = useState<any>(null);
     const [showStats, setShowStats] = useState(false);
+    const [expandedActivityId, setExpandedActivityId] = useState<string | null>(null);
     
     // Filters
     const [search, setSearch] = useState('');
@@ -58,6 +60,23 @@ export default function ActivityLogPage() {
     const [types, setTypes] = useState<string[]>([]);
     const [actions, setActions] = useState<string[]>([]);
     const [users, setUsers] = useState<any[]>([]);
+
+    // Dynamic document title
+    const activityTitle = useMemo(() => {
+        const lang = locale === 'es' ? 'es' : 'en';
+        const title = lang === 'es' ? 'Actividad' : 'Activity';
+        
+        if (loading) {
+            return (lang === 'es' ? 'Cargando...' : 'Loading...') + ` - ${title}`;
+        } else if (search.trim() || typeFilter || actionFilter || userFilter) {
+            return `(${total}) ${search || (lang === 'es' ? 'Filtros activos' : 'Active filters')} - ${lang === 'es' ? 'filtros' : 'filters'} - ${title}`;
+        } else {
+            const label = lang === 'es' ? 'actividades' : 'activities';
+            return `${title} (${total} ${label}) - ${title}`;
+        }
+    }, [loading, search, typeFilter, actionFilter, userFilter, total, locale]);
+    
+    useDocumentTitle(activityTitle);
 
     const fetchActivities = async () => {
         if (!canViewActivity()) return;
@@ -179,6 +198,15 @@ export default function ActivityLogPage() {
         if (days < 7) return `${days}d ${t('common.ago') || 'ago'}`;
         return formatDate(dateStr);
     };
+
+    const groupedActivities = useMemo(() => {
+        return activities.reduce((acc: Record<string, Activity[]>, entry) => {
+            const key = new Date(entry.createdAt).toLocaleDateString();
+            if (!acc[key]) acc[key] = [];
+            acc[key].push(entry);
+            return acc;
+        }, {});
+    }, [activities]);
 
     if (!user) return null;
 
@@ -368,51 +396,64 @@ export default function ActivityLogPage() {
                         <p className="text-muted-foreground">{t('activity.noActivity') || 'No activity found'}</p>
                     </div>
                 ) : (
-                    <div className="space-y-2">
-                        {activities.map((activity) => (
-                            <div
-                                key={activity.id}
-                                className="flex items-start gap-4 p-4 bg-card/50 rounded-xl border border-border/40 hover:bg-card transition-colors"
-                            >
-                                {/* Icon */}
-                                <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center shrink-0">
-                                    {getTypeIcon(activity.type)}
+                    <div className="space-y-6">
+                        {Object.entries(groupedActivities).map(([dateLabel, dayItems]) => (
+                            <section key={dateLabel} className="space-y-2">
+                                <div className="sticky top-[86px] z-[1] bg-background/90 backdrop-blur py-1">
+                                    <p className="text-[11px] uppercase tracking-widest text-muted-foreground font-bold">{dateLabel}</p>
                                 </div>
-
-                                {/* Content */}
-                                <div className="flex-1 min-w-0">
-                                    <div className="flex items-center gap-2 flex-wrap">
-                                        <span className="font-medium">{activity.owner.displayName || activity.owner.username}</span>
-                                        <span className={`text-sm capitalize ${getActionColor(activity.action)}`}>
-                                            {activity.action}
-                                        </span>
-                                        {activity.resourceName && (
-                                            <span className="text-muted-foreground truncate max-w-[200px]">
-                                                {activity.resourceName}
-                                            </span>
-                                        )}
-                                    </div>
-                                    <div className="flex items-center gap-3 mt-1 text-sm text-muted-foreground">
-                                        <span className="capitalize">{activity.type}</span>
-                                        {activity.resourceType && (
-                                            <>
-                                                <span>•</span>
-                                                <span className="capitalize">{activity.resourceType}</span>
-                                            </>
-                                        )}
-                                        <span>•</span>
-                                        <span className="flex items-center gap-1">
-                                            <Clock className="w-3 h-3" />
-                                            {formatRelativeTime(activity.createdAt)}
-                                        </span>
-                                    </div>
-                                </div>
-
-                                {/* Timestamp */}
-                                <div className="text-xs text-muted-foreground shrink-0">
-                                    {formatDate(activity.createdAt)}
-                                </div>
-                            </div>
+                                {dayItems.map((activity) => {
+                                    const isExpanded = expandedActivityId === activity.id;
+                                    return (
+                                        <div
+                                            key={activity.id}
+                                            className="rounded-xl border border-border/40 bg-card/50 hover:bg-card transition-colors"
+                                        >
+                                            <button
+                                                onClick={() => setExpandedActivityId(isExpanded ? null : activity.id)}
+                                                className="w-full flex items-start gap-4 p-4 text-left"
+                                            >
+                                                <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center shrink-0">
+                                                    {getTypeIcon(activity.type)}
+                                                </div>
+                                                <div className="flex-1 min-w-0">
+                                                    <div className="flex items-center gap-2 flex-wrap">
+                                                        <span className="font-medium">{activity.owner.displayName || activity.owner.username}</span>
+                                                        <span className={`text-sm capitalize ${getActionColor(activity.action)}`}>{activity.action}</span>
+                                                        {activity.resourceName ? (
+                                                            <span className="text-muted-foreground truncate max-w-[250px]">{activity.resourceName}</span>
+                                                        ) : null}
+                                                    </div>
+                                                    <div className="flex items-center gap-3 mt-1 text-sm text-muted-foreground">
+                                                        <span className="capitalize">{activity.type}</span>
+                                                        {activity.resourceType ? <><span>•</span><span className="capitalize">{activity.resourceType}</span></> : null}
+                                                        <span>•</span>
+                                                        <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{formatRelativeTime(activity.createdAt)}</span>
+                                                    </div>
+                                                </div>
+                                                <div className="flex flex-col items-end gap-1 shrink-0">
+                                                    <span className="text-xs text-muted-foreground">{formatDate(activity.createdAt)}</span>
+                                                    <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                                                </div>
+                                            </button>
+                                            {isExpanded && (
+                                                <div className="px-4 pb-4">
+                                                    <div className="ml-14 rounded-lg border border-border/50 bg-background p-3 text-xs space-y-1">
+                                                        <p><span className="font-semibold">Actor:</span> {activity.owner.displayName || activity.owner.username}</p>
+                                                        <p><span className="font-semibold">Action:</span> {activity.action}</p>
+                                                        <p><span className="font-semibold">Resource ID:</span> {activity.resourceId || 'N/A'}</p>
+                                                        <p><span className="font-semibold">Resource Type:</span> {activity.resourceType || 'N/A'}</p>
+                                                        <p><span className="font-semibold">Timestamp:</span> {formatDate(activity.createdAt)}</p>
+                                                        {activity.metadata ? (
+                                                            <pre className="mt-2 max-h-40 overflow-auto rounded bg-muted/60 p-2 text-[11px]">{JSON.stringify(activity.metadata, null, 2)}</pre>
+                                                        ) : null}
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                            </section>
                         ))}
                     </div>
                 )}

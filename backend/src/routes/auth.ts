@@ -1,6 +1,7 @@
 import express from 'express';
 import { z } from 'zod';
 import rateLimit from 'express-rate-limit';
+import crypto from 'crypto';
 import prisma from '../config/db';
 import {
     verifyPassword, generateAccessToken, generateRefreshToken,
@@ -8,6 +9,9 @@ import {
 } from '../utils/auth';
 import { protect, AuthRequest } from '../middleware/authMiddleware';
 import { createActivity } from './activity';
+import { authenticator } from 'otplib';
+import QRCode from 'qrcode';
+import { decryptTotpSecret, encryptTotpSecret } from '../utils/totpSecret';
 
 const router = express.Router();
 
@@ -24,9 +28,18 @@ const loginLimiter = rateLimit({
     validate: { xForwardedForHeader: false },
 });
 
+const deviceFlowLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 30,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { message: 'Too many device authorization requests. Please try again later.' },
+});
+
 const loginSchema = z.object({
     username: z.string().min(1),
     password: z.string().min(6),
+    otp: z.string().trim().regex(/^\d{6}$/, 'OTP inválido').optional(),
 });
 
 // @route   POST /api/auth/login
@@ -41,6 +54,18 @@ router.post('/login', loginLimiter, async (req, res, next) => {
         });
 
         if (user && (await verifyPassword(user.password, password))) {
+            // 2FA gate
+            if ((user as any).twoFactorEnabled) {
+                const otp = (req.body?.otp as string | undefined)?.trim();
+                if (!otp) {
+                    return res.status(401).json({ message: '2FA requerido', requiresTwoFactor: true });
+                }
+                const secret = decryptTotpSecret((user as any).twoFactorSecret);
+                if (!secret || !authenticator.check(otp, secret)) {
+                    return res.status(401).json({ message: 'Código 2FA inválido', requiresTwoFactor: true });
+                }
+            }
+
             const accessToken = generateAccessToken({ id: user.id });
             const refreshToken = generateRefreshToken({ id: user.id });
             const csrfToken = generateCsrfToken();
@@ -92,6 +117,7 @@ router.post('/login', loginLimiter, async (req, res, next) => {
                 username: user.username,
                 isAdmin: user.isAdmin,
                 csrfToken,
+                twoFactorEnabled: (user as any).twoFactorEnabled ?? false,
             });
         } else {
             // Generic error message - don't reveal whether user exists
@@ -102,6 +128,136 @@ router.post('/login', loginLimiter, async (req, res, next) => {
             return res.status(400).json({ errors: (error as any).errors });
         }
         next(error);
+    }
+});
+
+// ─────────────────────────────────────────────────────────────
+// 2FA (TOTP) — lightweight, OSS
+// ─────────────────────────────────────────────────────────────
+router.get('/2fa/status', protect, async (req: AuthRequest, res, next) => {
+    try {
+        const dbUser = await prisma.user.findUnique({
+            where: { id: req.user.id },
+            select: { twoFactorEnabled: true, twoFactorEnabledAt: true },
+        });
+        res.json({
+            enabled: dbUser?.twoFactorEnabled ?? false,
+            enabledAt: dbUser?.twoFactorEnabledAt ?? null,
+        });
+    } catch (e) {
+        next(e);
+    }
+});
+
+router.post('/2fa/setup', protect, async (req: AuthRequest, res, next) => {
+    try {
+        const dbUser = await prisma.user.findUnique({
+            where: { id: req.user.id },
+            select: { id: true, username: true, twoFactorEnabled: true },
+        });
+        if (!dbUser) return res.status(404).json({ message: 'User not found' });
+        if (dbUser.twoFactorEnabled) {
+            return res.status(400).json({ message: '2FA ya está activado' });
+        }
+
+        const secret = authenticator.generateSecret();
+        const appName = process.env.TOTP_ISSUER || 'Cloud Shakes';
+        const label = `${appName}:${dbUser.username}`;
+        const otpauth = authenticator.keyuri(dbUser.username, appName, secret);
+
+        const qrDataUrl = await QRCode.toDataURL(otpauth, { margin: 1, width: 220 });
+
+        await prisma.user.update({
+            where: { id: dbUser.id },
+            data: {
+                twoFactorPendingSecret: encryptTotpSecret(secret),
+            },
+        });
+
+        res.json({
+            otpauth,
+            qrDataUrl,
+            label,
+        });
+    } catch (e) {
+        next(e);
+    }
+});
+
+const otpConfirmSchema = z.object({
+    otp: z.string().trim().regex(/^\d{6}$/),
+});
+
+router.post('/2fa/confirm', protect, async (req: AuthRequest, res, next) => {
+    try {
+        const { otp } = otpConfirmSchema.parse(req.body);
+
+        const dbUser = await prisma.user.findUnique({
+            where: { id: req.user.id },
+            select: { id: true, twoFactorEnabled: true, twoFactorPendingSecret: true },
+        });
+        if (!dbUser) return res.status(404).json({ message: 'User not found' });
+        if (dbUser.twoFactorEnabled) return res.status(400).json({ message: '2FA ya está activado' });
+
+        const pendingSecret = decryptTotpSecret(dbUser.twoFactorPendingSecret);
+        if (!pendingSecret) {
+            return res.status(400).json({ message: 'No hay setup pendiente' });
+        }
+
+        if (!authenticator.check(otp, pendingSecret)) {
+            return res.status(400).json({ message: 'Código inválido' });
+        }
+
+        await prisma.user.update({
+            where: { id: dbUser.id },
+            data: {
+                twoFactorEnabled: true,
+                twoFactorSecret: dbUser.twoFactorPendingSecret,
+                twoFactorPendingSecret: null,
+                twoFactorEnabledAt: new Date(),
+            },
+        });
+
+        res.json({ ok: true, enabled: true });
+    } catch (e: any) {
+        if (e instanceof z.ZodError) {
+            return res.status(400).json({ errors: (e as any).errors });
+        }
+        next(e);
+    }
+});
+
+router.post('/2fa/disable', protect, async (req: AuthRequest, res, next) => {
+    try {
+        const { otp } = otpConfirmSchema.parse(req.body);
+        const dbUser = await prisma.user.findUnique({
+            where: { id: req.user.id },
+            select: { id: true, twoFactorEnabled: true, twoFactorSecret: true },
+        });
+        if (!dbUser) return res.status(404).json({ message: 'User not found' });
+        if (!dbUser.twoFactorEnabled) return res.status(400).json({ message: '2FA no está activado' });
+
+        const secret = decryptTotpSecret(dbUser.twoFactorSecret);
+        if (!secret || !authenticator.check(otp, secret)) {
+            return res.status(400).json({ message: 'Código inválido' });
+        }
+
+        await prisma.user.update({
+            where: { id: dbUser.id },
+            data: {
+                twoFactorEnabled: false,
+                twoFactorSecret: null,
+                twoFactorPendingSecret: null,
+                twoFactorEnabledAt: null,
+            },
+        });
+
+        res.json({ ok: true, enabled: false });
+    } catch (e: any) {
+        if (e instanceof z.ZodError) {
+            return res.status(400).json({ errors: (e as any).errors });
+        }
+        next(e);
     }
 });
 
@@ -272,6 +428,18 @@ router.post('/token-login', loginLimiter, async (req, res, next) => {
         });
 
         if (user && (await verifyPassword(user.password, password))) {
+            // 2FA gate for API clients
+            if ((user as any).twoFactorEnabled) {
+                const otp = (req.body?.otp as string | undefined)?.trim();
+                if (!otp) {
+                    return res.status(401).json({ message: '2FA requerido', requiresTwoFactor: true });
+                }
+                const secret = decryptTotpSecret((user as any).twoFactorSecret);
+                if (!secret || !authenticator.check(otp, secret)) {
+                    return res.status(401).json({ message: 'Código 2FA inválido', requiresTwoFactor: true });
+                }
+            }
+
             const accessToken = generateAccessToken({ id: user.id });
             const refreshToken = generateRefreshToken({ id: user.id });
 
@@ -281,6 +449,7 @@ router.post('/token-login', loginLimiter, async (req, res, next) => {
                 id: user.id,
                 username: user.username,
                 isAdmin: user.isAdmin,
+                twoFactorEnabled: (user as any).twoFactorEnabled ?? false,
             });
         } else {
             return res.status(401).json({ message: 'Credenciales inválidas' });
@@ -346,7 +515,7 @@ export const deviceCodes = new Map<string, {
 // @route   POST /api/auth/device/code
 // @desc    Request device authorization code
 // @access  Public
-router.post('/device/code', async (req, res, next) => {
+router.post('/device/code', deviceFlowLimiter, async (req, res, next) => {
     try {
         const { client_id } = req.body;
         
@@ -367,11 +536,12 @@ router.post('/device/code', async (req, res, next) => {
             interval: 5,
         });
 
+        const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:9090';
         res.json({
             device_code: deviceCode,
             user_code: userCode,
-            verification_uri: `${req.protocol}://${req.get('host')}/device/verify`,
-            verification_uri_complete: `${req.protocol}://${req.get('host')}/device/verify?code=${userCode}`,
+            verification_uri: `${frontendUrl}/dashboard/device-auth`,
+            verification_uri_complete: `${frontendUrl}/dashboard/device-auth?code=${userCode}`,
             expires_in: 900,
             interval: 5,
         });
@@ -383,7 +553,7 @@ router.post('/device/code', async (req, res, next) => {
 // @route   POST /api/auth/device/token
 // @desc    Poll for device authorization token
 // @access  Public
-router.post('/device/token', async (req, res, next) => {
+router.post('/device/token', deviceFlowLimiter, async (req, res, next) => {
     try {
         const { grant_type, device_code, client_id } = req.body;
 
@@ -431,89 +601,41 @@ router.post('/device/token', async (req, res, next) => {
 });
 
 // @route   GET /device/verify
-// @desc    Device verification page
+// @desc    Device verification redirect (legacy compatibility)
 // @access  Public
 router.get('/device/verify', (req, res) => {
     const userCode = req.query.code as string;
-    
-    // Find the code
-    let foundDeviceCode: string | null = null;
-    for (const [deviceCode, data] of deviceCodes) {
-        if (data.userCode === userCode && new Date() < data.expiresAt) {
-            foundDeviceCode = deviceCode;
-            break;
-        }
-    }
-
-    const html = `
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Cloud Shakes - Autorizar Dispositivo</title>
-    <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 500px; margin: 50px auto; padding: 20px; }
-        h1 { color: #333; }
-        .code { font-size: 32px; font-weight: bold; letter-spacing: 4px; background: #f5f5f5; padding: 15px; text-align: center; border-radius: 8px; margin: 20px 0; }
-        button { background: #4CAF50; color: white; border: none; padding: 15px 30px; font-size: 16px; border-radius: 5px; cursor: pointer; margin: 5px; }
-        button:hover { background: #45a049; }
-        button.deny { background: #f44336; }
-        button.deny:hover { background: #da190b; }
-    </style>
-</head>
-<body>
-    <h1>🔐 Cloud Shakes</h1>
-    <p>Un dispositivo quiere conectarse a tu cuenta.</p>
-    <div class="code">${userCode || '--------'}</div>
-    <p>¿Autorizas este dispositivo?</p>
-    <form method="POST" action="/api/auth/device/confirm">
-        <input type="hidden" name="userCode" value="${userCode || ''}">
-        <button type="submit" name="action" value="approve">✅ Autorizar</button>
-        <button type="submit" name="action" value="deny" class="deny">❌ Denegar</button>
-    </form>
-</body>
-</html>`;
-    
-    res.send(html);
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:9090';
+    const safeCode = userCode ? encodeURIComponent(userCode) : '';
+    res.redirect(`${frontendUrl}/dashboard/device-auth?code=${safeCode}`);
 });
 
 // @route   POST /api/auth/device/confirm
 // @desc    Confirm device authorization
-// @access  Public
-router.post('/device/confirm', async (req, res, next) => {
+// @access  Private
+router.post('/device/confirm', deviceFlowLimiter, protect, async (req: AuthRequest, res, next) => {
     try {
         const { userCode, action } = req.body;
         
         if (action === 'deny') {
-            return res.send(`
-                <html>
-                <body>
-                    <h1>❌ Autorización denegada</h1>
-                    <p>Puedes cerrar esta ventana.</p>
-                    <script>setTimeout(() => window.close(), 3000);</script>
-                </body>
-                </html>
-            `);
+            return res.json({ message: 'Authorization denied' });
         }
 
         // Find and update the device code
+        let found = false;
         for (const [deviceCode, data] of deviceCodes) {
             if (data.userCode === userCode) {
-                // For simplicity, we'll use a default user or require login
-                // In production, you'd have the user log in here
-                data.userId = 'demo-user-id';
+                data.userId = req.user.id;
+                found = true;
                 break;
             }
         }
 
-        res.send(`
-            <html>
-            <body>
-                <h1>✅ ¡Autorizado!</h1>
-                <p>Tu dispositivo ha sido conectado. Puedes cerrar esta ventana.</p>
-                <script>setTimeout(() => window.close(), 3000);</script>
-            </body>
-            </html>
-        `);
+        if (!found) {
+            return res.status(404).json({ error: 'invalid_code', message: 'Código expirado o inválido' });
+        }
+
+        res.json({ message: 'Authorization successful' });
     } catch (error) {
         next(error);
     }
@@ -522,9 +644,10 @@ router.post('/device/confirm', async (req, res, next) => {
 // Helper function to generate random string
 function generateRandomString(length: number): string {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    const randomBytes = crypto.randomBytes(length);
     let result = '';
     for (let i = 0; i < length; i++) {
-        result += chars.charAt(Math.floor(Math.random() * chars.length));
+        result += chars[randomBytes[i] % chars.length];
     }
     return result;
 }

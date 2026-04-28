@@ -28,6 +28,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { API_ENDPOINTS } from "@/lib/api";
 import { scanItems, ScannedFile } from "@/lib/fileScanner";
 import { UploadProgress } from "./UploadProgress";
+import { showPermissionDenied } from "@/lib/permissionFeedback";
 
 
 
@@ -39,6 +40,11 @@ interface FileItem {
     mimeType: string;
     createdAt: string;
     folderId?: string;
+    owner?: {
+        id: string;
+        username: string;
+        displayName?: string;
+    };
 }
 
 interface ActivityItem {
@@ -70,6 +76,9 @@ export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserPro
     const { user } = useAuth();
     const canRename = !!(user?.isAdmin || user?.permissions?.includes('rename_files'));
     const canDelete = !!(user?.isAdmin || user?.permissions?.includes('delete_files'));
+    const canCreateFolders = !!(user?.isAdmin || user?.permissions?.includes('create_folders'));
+    const canUploadFiles = !!(user?.isAdmin || user?.permissions?.includes('upload_files'));
+    const canShareFiles = !!(user?.isAdmin || user?.permissions?.includes('share_files'));
     const [files, setFiles] = useState<FileItem[]>([]);
     const [folders, setFolders] = useState<FolderItem[]>([]);
     const [loading, setLoading] = useState(true);
@@ -632,6 +641,10 @@ export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserPro
         }
     };
 
+    const notifyBlocked = (message: string, permission: string) => {
+        showPermissionDenied(message, permission);
+    };
+
     // Drag and Drop Handlers
     const handleDragStart = (e: React.DragEvent, id: string, type: 'file' | 'folder') => {
         e.dataTransfer.setData("itemId", id);
@@ -868,8 +881,17 @@ export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserPro
                             </div>
 
                             <button
-                                onClick={() => setCreateFolderOpen(true)}
-                                className="inline-flex h-10 items-center gap-2 rounded-2xl border border-border bg-background px-4 text-sm font-semibold text-foreground hover:bg-muted/40"
+                                onClick={() => {
+                                    if (!canCreateFolders) {
+                                        notifyBlocked("No tienes permiso para crear carpetas.", "create_folders");
+                                        return;
+                                    }
+                                    setCreateFolderOpen(true);
+                                }}
+                                className={cn(
+                                    "inline-flex h-10 items-center gap-2 rounded-2xl border border-border bg-background px-4 text-sm font-semibold text-foreground",
+                                    canCreateFolders ? "hover:bg-muted/40" : "opacity-50 cursor-not-allowed"
+                                )}
                                 title={t("files.newFolder")}
                             >
                                 <Plus className="h-4 w-4" />
@@ -877,8 +899,17 @@ export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserPro
                             </button>
 
                             <button
-                                onClick={() => setIsUploadOpen(true)}
-                                className="inline-flex h-10 items-center gap-2 rounded-2xl bg-foreground px-4 text-sm font-semibold text-background hover:opacity-95"
+                                onClick={() => {
+                                    if (!canUploadFiles) {
+                                        notifyBlocked("No tienes permiso para subir archivos.", "upload_files");
+                                        return;
+                                    }
+                                    setIsUploadOpen(true);
+                                }}
+                                className={cn(
+                                    "inline-flex h-10 items-center gap-2 rounded-2xl bg-foreground px-4 text-sm font-semibold text-background",
+                                    canUploadFiles ? "hover:opacity-95" : "opacity-50 cursor-not-allowed"
+                                )}
                             >
                                 <Upload className="h-4 w-4" />
                                 <span>{t("files.upload")}</span>
@@ -972,7 +1003,7 @@ export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserPro
                                     <div
                                         key={folder.id}
                                         draggable
-                                        onDragStart={(e) => handleDragStart(e, folder.id, 'folder')}
+                                        onDragStartCapture={(e) => handleDragStart(e, folder.id, 'folder')}
                                         onDragOver={handleDragOver}
                                         onDragEnter={() => setDragOverFolderId(folder.id)}
                                         onDragLeave={() => setDragOverFolderId(null)}
@@ -1007,16 +1038,28 @@ export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserPro
                                             <button onClick={(e) => { e.stopPropagation(); navigateToFolder(folder); }} className="p-1.5 rounded-lg text-primary hover:bg-primary/10 transition-colors" title={t("common.open")}>
                                                 <ChevronRight className="w-4 h-4" />
                                             </button>
-                                            {canRename && (
-                                                <button onClick={(e) => { e.stopPropagation(); confirmRename(folder.id, folder.name, 'folder'); }} className="p-1.5 text-muted-foreground hover:text-primary hover:bg-muted rounded-lg transition-colors" title={t("common.rename")}>
-                                                    <Edit2 className="w-3.5 h-3.5" />
-                                                </button>
-                                            )}
-                                            {canDelete && (
-                                                <button onClick={(e) => { e.stopPropagation(); confirmDelete(folder.id, folder.name, 'folder'); }} className="p-1.5 text-muted-foreground hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors" title={t("common.delete")}>
-                                                    <Trash2 className="w-3.5 h-3.5" />
-                                                </button>
-                                            )}
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    if (!canRename) return notifyBlocked("No tienes permiso para renombrar carpetas.", "rename_files");
+                                                    confirmRename(folder.id, folder.name, 'folder');
+                                                }}
+                                                className={cn("p-1.5 rounded-lg transition-colors", canRename ? "text-muted-foreground hover:text-primary hover:bg-muted" : "text-muted-foreground/50 cursor-not-allowed")}
+                                                title={t("common.rename")}
+                                            >
+                                                <Edit2 className="w-3.5 h-3.5" />
+                                            </button>
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    if (!canDelete) return notifyBlocked("No tienes permiso para eliminar carpetas.", "delete_files");
+                                                    confirmDelete(folder.id, folder.name, 'folder');
+                                                }}
+                                                className={cn("p-1.5 rounded-lg transition-colors", canDelete ? "text-muted-foreground hover:text-red-500 hover:bg-red-50" : "text-muted-foreground/50 cursor-not-allowed")}
+                                                title={t("common.delete")}
+                                            >
+                                                <Trash2 className="w-3.5 h-3.5" />
+                                            </button>
                                         </div>
                                     </div>
                                 ))}
@@ -1024,7 +1067,7 @@ export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserPro
                                     <div
                                         key={file.id}
                                         draggable
-                                        onDragStart={(e) => handleDragStart(e, file.id, 'file')}
+                                        onDragStartCapture={(e) => handleDragStart(e, file.id, 'file')}
                                         className={cn(
                                             "grid grid-cols-[40px_1fr_80px_80px] sm:grid-cols-[40px_1fr_100px_100px_100px] gap-2 sm:gap-4 px-4 sm:px-6 py-2.5 sm:py-3 items-center border-b border-border last:border-0 hover:bg-muted/30 transition-colors group cursor-pointer",
                                             selectedFile === file.id && "bg-accent/40",
@@ -1085,7 +1128,12 @@ export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserPro
                                                     {getFileIcon(file.mimeType, "w-4 h-4")}
                                                 </div>
                                             )}
-                                            <span className="text-sm text-foreground truncate font-medium">{file.originalName}</span>
+                                            <div className="min-w-0">
+                                                <span className="block text-sm text-foreground truncate font-medium">{file.originalName}</span>
+                                                <span className="block text-[10px] text-muted-foreground truncate">
+                                                    {`Subido por ${file.owner?.displayName || file.owner?.username || "unknown"} · ${new Date(file.createdAt).toLocaleString()}`}
+                                                </span>
+                                            </div>
                                         </div>
                                         <span className="hidden sm:block text-xs text-muted-foreground">{formatSize(file.size)}</span>
                                         <span className="hidden lg:block text-[11px] text-muted-foreground">{new Date(file.createdAt).toLocaleDateString()}</span>
@@ -1093,19 +1141,27 @@ export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserPro
                                             <button onClick={(e) => { e.stopPropagation(); handleDownload(file.id); }} className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors" title="Download">
                                                 <Download className="w-3.5 h-3.5" />
                                             </button>
-                                            <button onClick={(e) => { e.stopPropagation(); confirmCreateLink(file.id); }} className="p-1.5 rounded-lg text-muted-foreground hover:text-primary hover:bg-muted transition-colors" title="Share">
+                                            <button onClick={(e) => {
+                                                e.stopPropagation();
+                                                if (!canShareFiles) return notifyBlocked("No tienes permiso para compartir archivos.", "share_files");
+                                                confirmCreateLink(file.id);
+                                            }} className={cn("p-1.5 rounded-lg transition-colors", canShareFiles ? "text-muted-foreground hover:text-primary hover:bg-muted" : "text-muted-foreground/50 cursor-not-allowed")} title="Share">
                                                 <LinkIcon className="w-3.5 h-3.5" />
                                             </button>
-                                            {canRename && (
-                                                <button onClick={(e) => { e.stopPropagation(); confirmRename(file.id, file.originalName, 'file'); }} className="p-1.5 rounded-lg text-muted-foreground hover:text-primary hover:bg-muted transition-colors" title={t("common.rename")}>
-                                                    <Edit2 className="w-3.5 h-3.5" />
-                                                </button>
-                                            )}
-                                            {canDelete && (
-                                                <button onClick={(e) => { e.stopPropagation(); confirmDelete(file.id, file.originalName, 'file'); }} className="p-1.5 rounded-lg text-muted-foreground hover:text-red-500 hover:bg-red-50 transition-colors" title={t("common.delete")}>
-                                                    <Trash2 className="w-3.5 h-3.5" />
-                                                </button>
-                                            )}
+                                            <button onClick={(e) => {
+                                                e.stopPropagation();
+                                                if (!canRename) return notifyBlocked("No tienes permiso para renombrar archivos.", "rename_files");
+                                                confirmRename(file.id, file.originalName, 'file');
+                                            }} className={cn("p-1.5 rounded-lg transition-colors", canRename ? "text-muted-foreground hover:text-primary hover:bg-muted" : "text-muted-foreground/50 cursor-not-allowed")} title={t("common.rename")}>
+                                                <Edit2 className="w-3.5 h-3.5" />
+                                            </button>
+                                            <button onClick={(e) => {
+                                                e.stopPropagation();
+                                                if (!canDelete) return notifyBlocked("No tienes permiso para eliminar archivos.", "delete_files");
+                                                confirmDelete(file.id, file.originalName, 'file');
+                                            }} className={cn("p-1.5 rounded-lg transition-colors", canDelete ? "text-muted-foreground hover:text-red-500 hover:bg-red-50" : "text-muted-foreground/50 cursor-not-allowed")} title={t("common.delete")}>
+                                                <Trash2 className="w-3.5 h-3.5" />
+                                            </button>
                                         </div>
                                     </div>
                                 ))}
@@ -1117,7 +1173,7 @@ export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserPro
                                     <motion.div
                                         key={folder.id}
                                         draggable
-                                        onDragStart={(e) => handleDragStart(e, folder.id, 'folder')}
+                                        onDragStartCapture={(e) => handleDragStart(e, folder.id, 'folder')}
                                         onDragOver={handleDragOver}
                                         onDragEnter={() => setDragOverFolderId(folder.id)}
                                         onDragLeave={() => setDragOverFolderId(null)}
@@ -1159,16 +1215,20 @@ export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserPro
                                                     <button onClick={(e) => { e.stopPropagation(); navigateToFolder(folder); }} className="p-2.5 bg-white/90 dark:bg-background/90 rounded-xl shadow-lg hover:bg-white text-primary transition-colors touch-manipulation" title="Open">
                                                         <ChevronRight className="w-4 h-4" />
                                                     </button>
-                                                    {canRename && (
-                                                        <button onClick={(e) => { e.stopPropagation(); confirmRename(folder.id, folder.name, 'folder'); }} className="p-2.5 bg-white/90 dark:bg-background/90 rounded-xl shadow-lg hover:bg-white text-foreground transition-colors touch-manipulation" title={t("common.rename")}>
-                                                            <Edit2 className="w-4 h-4" />
-                                                        </button>
-                                                    )}
-                                                    {canDelete && (
-                                                        <button onClick={(e) => { e.stopPropagation(); confirmDelete(folder.id, folder.name, 'folder'); }} className="p-2.5 bg-white/90 dark:bg-background/90 rounded-xl shadow-lg hover:bg-red-50 text-red-500 transition-colors touch-manipulation" title="Delete">
-                                                            <Trash2 className="w-4 h-4" />
-                                                        </button>
-                                                    )}
+                                                    <button onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        if (!canRename) return notifyBlocked("No tienes permiso para renombrar carpetas.", "rename_files");
+                                                        confirmRename(folder.id, folder.name, 'folder');
+                                                    }} className={cn("p-2.5 bg-white/90 dark:bg-background/90 rounded-xl shadow-lg transition-colors touch-manipulation", canRename ? "hover:bg-white text-foreground" : "text-foreground/40 cursor-not-allowed")} title={t("common.rename")}>
+                                                        <Edit2 className="w-4 h-4" />
+                                                    </button>
+                                                    <button onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        if (!canDelete) return notifyBlocked("No tienes permiso para eliminar carpetas.", "delete_files");
+                                                        confirmDelete(folder.id, folder.name, 'folder');
+                                                    }} className={cn("p-2.5 bg-white/90 dark:bg-background/90 rounded-xl shadow-lg transition-colors touch-manipulation", canDelete ? "hover:bg-red-50 text-red-500" : "text-red-500/40 cursor-not-allowed")} title="Delete">
+                                                        <Trash2 className="w-4 h-4" />
+                                                    </button>
                                                 </div>
                                             </div>
                                         </div>
@@ -1184,7 +1244,7 @@ export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserPro
                                     <motion.div
                                         key={file.id}
                                         draggable
-                                        onDragStart={(e: any) => handleDragStart(e, file.id, 'file')}
+                                        onDragStartCapture={(e) => handleDragStart(e, file.id, 'file')}
                                         onDrop={(e: any) => handleDrop(e, null)}
                                         whileDrag={{ scale: 1.05, opacity: 0.8, rotate: -2 }}
                                         className={cn(
@@ -1282,19 +1342,27 @@ export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserPro
                                                     <button onClick={(e) => { e.stopPropagation(); handleDownload(file.id); }} className="p-2.5 bg-white/90 dark:bg-background/90 rounded-xl shadow-lg hover:bg-white text-foreground transition-colors touch-manipulation" title="Download">
                                                         <Download className="w-4 h-4" />
                                                     </button>
-                                                    <button onClick={(e) => { e.stopPropagation(); confirmCreateLink(file.id); }} className="p-2.5 bg-white/90 dark:bg-background/90 rounded-xl shadow-lg hover:bg-white text-primary transition-colors touch-manipulation" title="Share">
+                                                    <button onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        if (!canShareFiles) return notifyBlocked("No tienes permiso para compartir archivos.", "share_files");
+                                                        confirmCreateLink(file.id);
+                                                    }} className={cn("p-2.5 bg-white/90 dark:bg-background/90 rounded-xl shadow-lg transition-colors touch-manipulation", canShareFiles ? "hover:bg-white text-primary" : "text-primary/40 cursor-not-allowed")} title="Share">
                                                         <LinkIcon className="w-4 h-4" />
                                                     </button>
-                                                    {canRename && (
-                                                        <button onClick={(e) => { e.stopPropagation(); confirmRename(file.id, file.originalName, 'file'); }} className="p-2.5 bg-white/90 dark:bg-background/90 rounded-xl shadow-lg hover:bg-white text-foreground transition-colors touch-manipulation" title={t("common.rename")}>
-                                                            <Edit2 className="w-4 h-4" />
-                                                        </button>
-                                                    )}
-                                                    {canDelete && (
-                                                        <button onClick={(e) => { e.stopPropagation(); confirmDelete(file.id, file.originalName, 'file'); }} className="p-2.5 bg-white/90 dark:bg-background/90 rounded-xl shadow-lg hover:bg-red-50 text-red-500 transition-colors touch-manipulation" title="Delete">
-                                                            <Trash2 className="w-4 h-4" />
-                                                        </button>
-                                                    )}
+                                                    <button onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        if (!canRename) return notifyBlocked("No tienes permiso para renombrar archivos.", "rename_files");
+                                                        confirmRename(file.id, file.originalName, 'file');
+                                                    }} className={cn("p-2.5 bg-white/90 dark:bg-background/90 rounded-xl shadow-lg transition-colors touch-manipulation", canRename ? "hover:bg-white text-foreground" : "text-foreground/40 cursor-not-allowed")} title={t("common.rename")}>
+                                                        <Edit2 className="w-4 h-4" />
+                                                    </button>
+                                                    <button onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        if (!canDelete) return notifyBlocked("No tienes permiso para eliminar archivos.", "delete_files");
+                                                        confirmDelete(file.id, file.originalName, 'file');
+                                                    }} className={cn("p-2.5 bg-white/90 dark:bg-background/90 rounded-xl shadow-lg transition-colors touch-manipulation", canDelete ? "hover:bg-red-50 text-red-500" : "text-red-500/40 cursor-not-allowed")} title="Delete">
+                                                        <Trash2 className="w-4 h-4" />
+                                                    </button>
                                                 </div>
                                             </div>
                                         </div>
@@ -1302,6 +1370,9 @@ export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserPro
                                         {/* File Info */}
                                         <div className="w-full p-3 bg-background/80 backdrop-blur-sm">
                                             <h3 className="text-[12px] sm:text-[13px] font-semibold text-foreground truncate w-full mb-1">{file.originalName}</h3>
+                                            <p className="text-[10px] text-muted-foreground truncate mb-1">
+                                                {`Subido por ${file.owner?.displayName || file.owner?.username || "unknown"}`}
+                                            </p>
                                             <div className="flex items-center justify-between">
                                                 <p className="text-[10px] text-muted-foreground font-medium">{formatSize(file.size)}</p>
                                                 <p className="text-[9px] text-muted-foreground/60">{new Date(file.createdAt).toLocaleDateString()}</p>

@@ -8,7 +8,7 @@ import { pluginVerifier } from '../services/pluginVerifier.js';
 import { pluginUpdateService } from '../services/pluginUpdateService.js';
 import { pluginRuntimeService } from '../services/pluginRuntimeService.js';
 import { pluginLicenseService } from '../services/pluginLicenseService.js';
-import { protect, admin } from '../middleware/authMiddleware.js';
+import { protect, admin, requirePermission } from '../middleware/authMiddleware.js';
 import { pluginRouteRegistry } from '../plugins/runtime/routeRegistry.js';
 
 const router = Router();
@@ -129,7 +129,7 @@ router.post('/config', protect, admin, async (req: any, res) => {
   }
 });
 
-router.get('/status', async (req, res) => {
+router.get('/status', protect, async (req, res) => {
   try {
     const config = getPluginConfig();
     const licenseKey = await getEffectiveLicenseKey();
@@ -172,7 +172,7 @@ router.get('/status', async (req, res) => {
   }
 });
 
-router.post('/register', async (req, res) => {
+router.post('/register', protect, admin, async (req, res) => {
   try {
     const { cloudName, cloudUrl, adminEmail, adminName } = req.body;
 
@@ -201,7 +201,7 @@ router.post('/register', async (req, res) => {
   }
 });
 
-router.post('/activate', async (req, res) => {
+router.post('/activate', protect, admin, async (req, res) => {
   try {
     const { registrationToken, instanceId } = req.body;
 
@@ -236,7 +236,7 @@ router.post('/activate', async (req, res) => {
   }
 });
 
-router.get('/available', async (req, res) => {
+router.get('/available', protect, async (req, res) => {
   try {
     const licenseKey = await getEffectiveLicenseKey();
     if (!licenseKey) {
@@ -259,7 +259,7 @@ router.get('/available', async (req, res) => {
   }
 });
 
-router.get('/installed', async (req, res) => {
+router.get('/installed', protect, async (req, res) => {
   try {
     if (!existsSync(PLUGIN_CACHE_DIR)) {
       return res.json({ plugins: [] });
@@ -482,7 +482,7 @@ router.get('/page/:pluginName', protect, async (req: any, res) => {
   }
 });
 
-router.post('/install', async (req, res) => {
+router.post('/install', protect, requirePermission('manage_plugins'), async (req, res) => {
   try {
     const data = installSchema.parse(req.body);
     const licenseKey = await getEffectiveLicenseKey();
@@ -587,7 +587,7 @@ router.post('/install', async (req, res) => {
   }
 });
 
-router.post('/uninstall', async (req, res) => {
+router.post('/uninstall', protect, requirePermission('manage_plugins'), async (req, res) => {
   try {
     const { pluginName } = req.body;
 
@@ -606,7 +606,7 @@ router.post('/uninstall', async (req, res) => {
   }
 });
 
-router.post('/enable', async (req, res) => {
+router.post('/enable', protect, requirePermission('manage_plugins'), async (req, res) => {
   try {
     const { pluginName, version } = req.body;
 
@@ -633,7 +633,7 @@ router.post('/enable', async (req, res) => {
   }
 });
 
-router.post('/disable', async (req, res) => {
+router.post('/disable', protect, requirePermission('manage_plugins'), async (req, res) => {
   try {
     const { pluginName } = req.body;
 
@@ -651,7 +651,7 @@ router.post('/disable', async (req, res) => {
   }
 });
 
-router.post('/check-updates', async (req, res) => {
+router.post('/check-updates', protect, requirePermission('manage_plugins'), async (req, res) => {
   try {
     await pluginUpdateService.checkForUpdates();
     res.json({ success: true, lastCheck: pluginUpdateService.getLastCheckTime() });
@@ -686,7 +686,7 @@ router.post('/run', protect, async (req: any, res) => {
   }
 });
 
-router.get('/revocations', async (req, res) => {
+router.get('/revocations', protect, requirePermission('manage_plugins'), async (req, res) => {
   try {
     const revocations = pluginUpdateService.getRevocationList();
     res.json({ revocations });
@@ -799,7 +799,7 @@ const zipUpload = multer({
   }
 });
 
-router.post('/upload-zip', protect, zipUpload.single('plugin'), async (req: any, res) => {
+router.post('/upload-zip', protect, requirePermission('manage_plugins'), zipUpload.single('plugin'), async (req: any, res) => {
   if (!req.file) {
     return res.status(400).json({ error: 'No file uploaded. Please attach a .zip file with the field name "plugin".' });
   }

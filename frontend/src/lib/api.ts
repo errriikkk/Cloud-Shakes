@@ -7,6 +7,10 @@ export const API_ENDPOINTS = {
         LOGOUT: `${API_URL}/api/auth/logout`,
         ME: `${API_URL}/api/auth/me`,
         REFRESH: `${API_URL}/api/auth/refresh`,
+        TWO_FACTOR_STATUS: `${API_URL}/api/auth/2fa/status`,
+        TWO_FACTOR_SETUP: `${API_URL}/api/auth/2fa/setup`,
+        TWO_FACTOR_CONFIRM: `${API_URL}/api/auth/2fa/confirm`,
+        TWO_FACTOR_DISABLE: `${API_URL}/api/auth/2fa/disable`,
     },
     FILES: {
         BASE: `${API_URL}/api/files`,

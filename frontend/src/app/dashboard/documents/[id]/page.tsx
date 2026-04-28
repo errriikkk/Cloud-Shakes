@@ -10,6 +10,8 @@ import { TipTapEditor } from "@/components/editor/TipTapEditor";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { usePermission } from "@/hooks/usePermission";
+import { useTranslation } from "@/lib/i18n";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 
 type Version = { id: string; title: string; createdAt: string };
 type Doc = { id: string; title: string; content: any; updatedAt: string };
@@ -22,9 +24,20 @@ export default function DocumentDetailPage() {
   const params = useParams<{ id: string }>();
   const docId = params?.id as string;
   const { canEditDocuments, canCommentDocuments, canReviewDocuments } = usePermission();
+  const { t } = useTranslation();
 
   const [doc, setDoc] = useState<Doc | null>(null);
   const [title, setTitle] = useState("");
+
+  // Dynamic document title
+  const docTitle = useMemo(() => {
+    if (title) {
+      return `${title} - Documentos`;
+    }
+    return 'Cargando documento... - Documentos';
+  }, [title]);
+  
+  useDocumentTitle(docTitle);
   const [content, setContent] = useState<any>({});
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved">("idle");
   const [versions, setVersions] = useState<Version[]>([]);

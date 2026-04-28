@@ -2,7 +2,7 @@
  * Shakes SDK Host-Level Shim
  * 
  * Este archivo permite al backend (fuera del sandbox) cargar plugins que
- * dependen de '@shakes/sdk' sin necesidad de instalar el paquete real.
+ * dependen de '@cloud-shakes/sdk' (o el alias legado '@shakes/sdk') sin instalar el paquete real.
  * Es crucial para renderizar UI Slots (sidebar, pages) de forma rápida.
  */
 
@@ -43,7 +43,7 @@ export class ShakesPlugin {
 const originalRequire = Module.prototype.require;
 
 Module.prototype.require = function(this: any, id: string) {
-  if (id === '@shakes/sdk') {
+  if (id === '@cloud-shakes/sdk' || id === '@shakes/sdk') {
     return { ShakesPlugin };
   }
   return originalRequire.apply(this, [id]);

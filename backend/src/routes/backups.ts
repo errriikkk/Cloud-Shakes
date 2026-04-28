@@ -7,6 +7,15 @@ import { encryptCredential } from '../utils/encryption';
 const router = express.Router();
 const manager = new BackupManager();
 
+const parseBackupTimestamp = (filename?: string | null): Date | null => {
+    if (!filename) return null;
+    const match = filename.match(/backup-(.+)\.sql\.gz$/);
+    if (!match?.[1]) return null;
+    const normalized = match[1].replace(/-/g, ':').replace(/:(\d{3})$/, '.$1');
+    const date = new Date(normalized);
+    return Number.isNaN(date.getTime()) ? null : date;
+};
+
 // GET /api/backups
 router.get('/', protect, requirePermission('manage_backups'), async (req: AuthRequest, res) => {
     try {
@@ -107,6 +116,106 @@ router.post('/trigger', protect, requirePermission('manage_backups'), async (req
 
         res.json({ message: "Backup started in background" });
     } catch(e: any) {
+        res.status(500).json({ message: e.message });
+    }
+});
+
+// GET /api/backups/:id/compare
+router.get('/:id/compare', protect, requirePermission('manage_backups'), async (req: AuthRequest, res) => {
+    try {
+        const backupRecord = await prisma.backup.findUnique({
+            where: { id: req.params.id as string },
+            include: { config: true }
+        }) as any;
+
+        if (!backupRecord) {
+            return res.status(404).json({ message: "Backup not found" });
+        }
+
+        const latestSuccess = await prisma.backup.findFirst({
+            where: {
+                configId: backupRecord.configId,
+                status: 'success',
+                id: { not: backupRecord.id }
+            },
+            orderBy: { startedAt: 'desc' }
+        });
+
+        const [users, files, folders, documents, notes, events, activities] = await prisma.$transaction([
+            prisma.user.count(),
+            prisma.file.count(),
+            prisma.folder.count(),
+            prisma.document.count(),
+            prisma.note.count(),
+            prisma.calendarEvent.count(),
+            prisma.activity.count()
+        ]);
+
+        const now = Date.now();
+        const targetTimestamp = parseBackupTimestamp(backupRecord.filename) ?? backupRecord.startedAt ?? null;
+        const latestTimestamp = parseBackupTimestamp(latestSuccess?.filename) ?? latestSuccess?.startedAt ?? null;
+        const targetAgeHours = targetTimestamp ? Math.max(0, Math.round((now - targetTimestamp.getTime()) / 36e5)) : null;
+        const latestAgeHours = latestTimestamp ? Math.max(0, Math.round((now - latestTimestamp.getTime()) / 36e5)) : null;
+
+        const targetSize = Number(backupRecord.size || 0);
+        const latestSize = Number(latestSuccess?.size || 0);
+        const sizeDelta = targetSize - latestSize;
+        const sizeDeltaPct = latestSize > 0 ? Number(((sizeDelta / latestSize) * 100).toFixed(2)) : null;
+
+        let risk: 'low' | 'medium' | 'high' = 'low';
+        const warnings: string[] = [];
+        if (backupRecord.status !== 'success') {
+            risk = 'high';
+            warnings.push('Selected backup is not marked as success.');
+        }
+        if (targetAgeHours !== null && targetAgeHours > 24) {
+            risk = risk === 'high' ? 'high' : 'medium';
+            warnings.push(`Backup age is ${targetAgeHours}h. Newer data may be lost.`);
+        }
+        if (latestSuccess && latestTimestamp && targetTimestamp && targetTimestamp < latestTimestamp) {
+            risk = 'high';
+            warnings.push('Selected backup is older than the latest successful backup.');
+        }
+        if (sizeDeltaPct !== null && Math.abs(sizeDeltaPct) > 35) {
+            risk = risk === 'high' ? 'high' : 'medium';
+            warnings.push(`Backup size differs ${sizeDeltaPct}% from latest success.`);
+        }
+
+        res.json({
+            selectedBackup: {
+                id: backupRecord.id,
+                filename: backupRecord.filename,
+                status: backupRecord.status,
+                startedAt: backupRecord.startedAt,
+                completedAt: backupRecord.completedAt,
+                size: backupRecord.size,
+                ageHours: targetAgeHours
+            },
+            latestSuccess: latestSuccess ? {
+                id: latestSuccess.id,
+                filename: latestSuccess.filename,
+                startedAt: latestSuccess.startedAt,
+                completedAt: latestSuccess.completedAt,
+                size: latestSuccess.size,
+                ageHours: latestAgeHours
+            } : null,
+            comparison: {
+                sizeDeltaBytes: sizeDelta,
+                sizeDeltaPercent: sizeDeltaPct,
+                risk,
+                warnings
+            },
+            liveDatabaseSnapshot: {
+                users,
+                files,
+                folders,
+                documents,
+                notes,
+                events,
+                activities
+            }
+        });
+    } catch (e: any) {
         res.status(500).json({ message: e.message });
     }
 });

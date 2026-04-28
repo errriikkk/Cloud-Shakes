@@ -1,41 +1,37 @@
-FROM node:20-alpine
-
+FROM node:20-alpine AS deps
 WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci || npm install
 
-# Install netcat (wait for Postgres), wget (healthcheck), postgresql tools for backups, and ClamAV for antivirus
-RUN apk add --no-cache openssl netcat-openbsd wget postgresql-client gzip clamav clamav-db freshclam
+FROM node:20-alpine AS builder
+WORKDIR /app
+# Tools needed at runtime or during build steps
+RUN apk add --no-cache openssl wget postgresql-client gzip
+# Optional antivirus tooling (off by default to keep images light)
+ARG ENABLE_CLAMAV=false
+RUN if [ "$ENABLE_CLAMAV" = "true" ]; then apk add --no-cache clamav clamav-db freshclam; fi
 
-# Configure ClamAV to not start daemon automatically (we'll use clamscan directly)
-RUN freshclam || true && \
-    sed -i 's/^Foreground yes$/Foreground no/' /etc/clamav/clamd.conf || true && \
-    mkdir -p /var/run/clamav && \
-    chown -R clamav:clamav /var/run/clamav /var/lib/clamav
-
-# Copy package files and Prisma schema
-COPY package*.json ./
+COPY --from=deps /app/node_modules ./node_modules
 COPY prisma ./prisma/
-
-# Install dependencies (including web-push for push notifications)
-RUN npm install web-push --save
-RUN npm install --save-dev @types/web-push
-
-# Copy all backend files
 COPY . .
 
-# Ensure start.sh has execute permissions
-RUN chmod +x start.sh
-
-# Convert Windows CRLF to Unix LF inside the container
-RUN sed -i 's/\r$//' start.sh
-
-# Generate Prisma client
+RUN chmod +x start.sh && sed -i 's/\r$//' start.sh
 RUN npx prisma generate
-
-# Build the backend (if you have a build step)
 RUN npm run build
 
-# Expose backend port
-EXPOSE 5000
+FROM node:20-alpine AS runner
+WORKDIR /app
+ENV NODE_ENV=production
+RUN apk add --no-cache openssl wget postgresql-client gzip
+ARG ENABLE_CLAMAV=false
+RUN if [ "$ENABLE_CLAMAV" = "true" ]; then apk add --no-cache clamav clamav-db freshclam; fi
 
-# Start the backend
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/prisma ./prisma
+COPY --from=builder /app/package.json ./package.json
+COPY --from=builder /app/package-lock.json ./package-lock.json
+COPY --from=builder /app/start.sh ./start.sh
+
+EXPOSE 5000
 CMD ["./start.sh"]

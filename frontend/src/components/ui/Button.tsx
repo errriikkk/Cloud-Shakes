@@ -2,6 +2,7 @@ import { ButtonHTMLAttributes, forwardRef } from "react";
 import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { VariantProps, cva } from "class-variance-authority";
+import { showPermissionDenied } from "@/lib/permissionFeedback";
 
 const buttonVariants = cva(
     "inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50",
@@ -38,15 +39,36 @@ export interface ButtonProps
     extends ButtonHTMLAttributes<HTMLButtonElement>,
     VariantProps<typeof buttonVariants> {
     isLoading?: boolean;
+    blockedReason?: string;
+    blockedPermission?: string;
+    showBlockedFeedback?: boolean;
 }
 
 const Button = forwardRef<HTMLButtonElement, ButtonProps>(
-    ({ className, variant, size, isLoading, children, ...props }, ref) => {
+    ({ className, variant, size, isLoading, children, blockedReason, blockedPermission, showBlockedFeedback, onClick, ...props }, ref) => {
+        const isBlocked = !!props.disabled && !!showBlockedFeedback;
+        const hardDisabled = isLoading || (!!props.disabled && !isBlocked);
         return (
             <button
-                className={cn(buttonVariants({ variant, size, className }))}
+                className={cn(
+                    buttonVariants({ variant, size, className }),
+                    isBlocked && "opacity-50 cursor-not-allowed"
+                )}
                 ref={ref}
-                disabled={isLoading || props.disabled}
+                disabled={hardDisabled}
+                aria-disabled={isBlocked ? true : undefined}
+                onClick={(e) => {
+                    if (isBlocked) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        showPermissionDenied(
+                            blockedReason || "No tienes permisos para esta accion.",
+                            blockedPermission
+                        );
+                        return;
+                    }
+                    onClick?.(e);
+                }}
                 {...props}
             >
                 {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}

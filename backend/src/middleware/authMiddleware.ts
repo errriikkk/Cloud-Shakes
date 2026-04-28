@@ -17,7 +17,10 @@ const DEFAULT_PERMISSIONS = [
     'view_links',
     'view_gallery',
     'view_statistics',
-    'view_api_builder'
+    'view_api_builder',
+    // Settings should never disappear for a signed-in user.
+    // Fine-grained settings actions remain protected by specific permissions (manage_settings, manage_backups, etc.)
+    'view_settings'
 ];
 
 /**
@@ -139,7 +142,8 @@ export const protect = async (req: AuthRequest, res: Response, next: NextFunctio
             'view_links',
             'view_gallery',
             'view_statistics',
-            'view_api_builder'
+            'view_api_builder',
+            'view_settings'
         ];
 
         let permissionKeys: string[];

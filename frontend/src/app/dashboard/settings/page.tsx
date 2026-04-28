@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
 import { Settings, User, Lock, Camera, Save, X, Loader2, Globe, Shield, Users, Database, ServerCog, RotateCcw, Bell, BellOff, KeyRound, Upload } from "lucide-react";
@@ -13,6 +13,7 @@ import { API_ENDPOINTS } from "@/lib/api";
 import { useModal } from "@/hooks/useModal";
 import { cn } from "@/lib/utils";
 import { useTranslation, Locale } from "@/lib/i18n";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { BuiltWithBadge } from "@/components/BuiltWithBadge";
 import { AvatarCropModal } from "@/components/AvatarCropModal";
 import { Modal, ModalFooter } from "@/components/ui/Modal";
@@ -26,6 +27,14 @@ export default function SettingsPage() {
     const { t, locale, setLocale } = useTranslation();
     const { isSupported, permission, requestPermission, setPermission, isIOSDevice, isPWA } = useNotifications();
     const canManageSettings = !!(user?.isAdmin || user?.permissions?.includes('manage_settings'));
+    
+    // Dynamic document title
+    const settingsTitle = useMemo(() => {
+        return 'Ajustes - Ajustes';
+    }, []);
+    
+    useDocumentTitle(settingsTitle);
+    
     const [loading, setLoading] = useState(false);
     const [uploadingAvatar, setUploadingAvatar] = useState(false);
     const [pendingAvatarFile, setPendingAvatarFile] = useState<File | null>(null);
@@ -40,6 +49,13 @@ export default function SettingsPage() {
         new: "",
         confirm: "",
     });
+    const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
+    const [twoFactorEnabledAt, setTwoFactorEnabledAt] = useState<string | null>(null);
+    const [twoFactorLoading, setTwoFactorLoading] = useState(false);
+    const [twoFactorSetupOpen, setTwoFactorSetupOpen] = useState(false);
+    const [twoFactorQrDataUrl, setTwoFactorQrDataUrl] = useState("");
+    const [twoFactorOtp, setTwoFactorOtp] = useState("");
+    const [twoFactorDisableOtp, setTwoFactorDisableOtp] = useState("");
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     // Backup configuration
@@ -52,6 +68,11 @@ export default function SettingsPage() {
     const [restoringId, setRestoringId] = useState<string | null>(null);
     const [restoreLoading, setRestoreLoading] = useState(false);
     const [restoreConfirmText, setRestoreConfirmText] = useState("");
+    const [restorePreview, setRestorePreview] = useState<{
+        message?: string;
+        affected?: string;
+        warnings?: string[];
+    } | null>(null);
     const [backupForm, setBackupForm] = useState({
         name: 'Default Backup',
         localPath: '/backups',
@@ -134,6 +155,23 @@ export default function SettingsPage() {
         if (!confirm) {
             setRestoringId(backupId);
             setRestoreConfirmText("");
+            setRestorePreview(null);
+            setRestoreLoading(true);
+            try {
+                const res = await axios.post(`${API_BASE}/api/backups/${backupId}/restore`, { confirm: false }, { withCredentials: true });
+                setRestorePreview({
+                    message: res.data?.message,
+                    affected: res.data?.affected,
+                    warnings: Array.isArray(res.data?.warnings) ? res.data.warnings : []
+                });
+            } catch (err: any) {
+                setRestorePreview({
+                    message: err.response?.data?.message || "No se pudo obtener la previsualizacion de restauracion.",
+                    warnings: []
+                });
+            } finally {
+                setRestoreLoading(false);
+            }
             return;
         }
 
@@ -147,6 +185,8 @@ export default function SettingsPage() {
             const res = await axios.post(`${API_BASE}/api/backups/${backupId}/restore`, { confirm: true }, { withCredentials: true });
             alert('Success', 'System restored successfully. The server may restart.', { type: 'success' });
             setRestoringId(null);
+            setRestorePreview(null);
+            fetchBackupConfigs();
         } catch (err: any) {
             alert('Error', err.response?.data?.message || err.message, { type: 'danger' });
         } finally {
@@ -451,6 +491,72 @@ export default function SettingsPage() {
         }
     };
 
+    const fetchTwoFactorStatus = useCallback(async () => {
+        try {
+            const res = await axios.get(API_ENDPOINTS.AUTH.TWO_FACTOR_STATUS, { withCredentials: true });
+            setTwoFactorEnabled(!!res.data?.enabled);
+            setTwoFactorEnabledAt(res.data?.enabledAt || null);
+        } catch {
+            // ignore to avoid blocking settings page
+        }
+    }, []);
+
+    const beginTwoFactorSetup = async () => {
+        setTwoFactorLoading(true);
+        try {
+            const res = await axios.post(API_ENDPOINTS.AUTH.TWO_FACTOR_SETUP, {}, { withCredentials: true });
+            setTwoFactorQrDataUrl(res.data?.qrDataUrl || "");
+            setTwoFactorOtp("");
+            setTwoFactorSetupOpen(true);
+        } catch (err: any) {
+            alert(t("common.error"), err.response?.data?.message || "No se pudo iniciar la configuracion 2FA", { type: "danger" });
+        } finally {
+            setTwoFactorLoading(false);
+        }
+    };
+
+    const confirmTwoFactorSetup = async () => {
+        if (twoFactorOtp.trim().length !== 6) {
+            alert(t("common.error"), "Introduce un codigo valido de 6 digitos.", { type: "danger" });
+            return;
+        }
+        setTwoFactorLoading(true);
+        try {
+            await axios.post(API_ENDPOINTS.AUTH.TWO_FACTOR_CONFIRM, {
+                otp: twoFactorOtp.trim(),
+            }, { withCredentials: true });
+            setTwoFactorSetupOpen(false);
+            setTwoFactorQrDataUrl("");
+            setTwoFactorOtp("");
+            await fetchTwoFactorStatus();
+            alert(t("common.success"), "2FA activado correctamente.", { type: "success" });
+        } catch (err: any) {
+            alert(t("common.error"), err.response?.data?.message || "Codigo invalido.", { type: "danger" });
+        } finally {
+            setTwoFactorLoading(false);
+        }
+    };
+
+    const disableTwoFactor = async () => {
+        if (twoFactorDisableOtp.trim().length !== 6) {
+            alert(t("common.error"), "Introduce tu codigo 2FA actual para desactivarlo.", { type: "danger" });
+            return;
+        }
+        setTwoFactorLoading(true);
+        try {
+            await axios.post(API_ENDPOINTS.AUTH.TWO_FACTOR_DISABLE, {
+                otp: twoFactorDisableOtp.trim(),
+            }, { withCredentials: true });
+            setTwoFactorDisableOtp("");
+            await fetchTwoFactorStatus();
+            alert(t("common.success"), "2FA desactivado.", { type: "success" });
+        } catch (err: any) {
+            alert(t("common.error"), err.response?.data?.message || "No se pudo desactivar 2FA.", { type: "danger" });
+        } finally {
+            setTwoFactorLoading(false);
+        }
+    };
+
     useEffect(() => {
         fetchCloudLimits();
     }, [fetchCloudLimits]);
@@ -470,6 +576,10 @@ export default function SettingsPage() {
     useEffect(() => {
         fetchBackupConfigs();
     }, [fetchBackupConfigs]);
+
+    useEffect(() => {
+        fetchTwoFactorStatus();
+    }, [fetchTwoFactorStatus]);
 
 
     if (authLoading) {
@@ -500,7 +610,10 @@ export default function SettingsPage() {
             {/* Restore Confirmation Modal */}
             <Modal
                 isOpen={!!restoringId}
-                onClose={() => setRestoringId(null)}
+                onClose={() => {
+                    setRestoringId(null);
+                    setRestorePreview(null);
+                }}
                 title="Confirmar Restauración"
             >
                 <div className="space-y-6">
@@ -514,6 +627,32 @@ export default function SettingsPage() {
                                 Restaurar una copia de seguridad reemplazará toda la base de datos actual. Asegúrate de haber guardado cambios importantes antes de proceder.
                             </p>
                         </div>
+                    </div>
+
+                    <div className="p-4 rounded-2xl border border-border/60 bg-muted/20 space-y-2">
+                        <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Previsualizacion (dry-run)</p>
+                        {restoreLoading ? (
+                            <p className="text-sm text-muted-foreground">Analizando impacto de la restauracion...</p>
+                        ) : (
+                            <>
+                                {restorePreview?.message ? (
+                                    <p className="text-sm font-medium text-foreground">{restorePreview.message}</p>
+                                ) : null}
+                                {restorePreview?.affected ? (
+                                    <p className="text-xs text-muted-foreground">Afecta: {restorePreview.affected}</p>
+                                ) : null}
+                                {restorePreview?.warnings?.length ? (
+                                    <ul className="text-xs text-amber-700 dark:text-amber-400 space-y-1">
+                                        {restorePreview.warnings.map((w, i) => (
+                                            <li key={i}>• {w}</li>
+                                        ))}
+                                    </ul>
+                                ) : null}
+                                <p className="text-[11px] text-muted-foreground">
+                                    La restauracion reemplaza datos de PostgreSQL. El almacenamiento de archivos (MinIO/objetos) no se repara automaticamente aqui.
+                                </p>
+                            </>
+                        )}
                     </div>
 
                     <div className="space-y-2">
@@ -537,6 +676,60 @@ export default function SettingsPage() {
                             onClick={() => restoringId && restoreBackup(restoringId, true)}
                         >
                             Restaurar Ahora
+                        </Button>
+                    </ModalFooter>
+                </div>
+            </Modal>
+
+            <Modal
+                isOpen={twoFactorSetupOpen}
+                onClose={() => {
+                    if (!twoFactorLoading) {
+                        setTwoFactorSetupOpen(false);
+                        setTwoFactorOtp("");
+                    }
+                }}
+                title="Activar 2FA"
+            >
+                <div className="space-y-5">
+                    <p className="text-sm text-muted-foreground">
+                        Escanea este QR con Google Authenticator, Authy o similar y confirma con el codigo actual.
+                    </p>
+                    {twoFactorQrDataUrl ? (
+                        <div className="flex justify-center">
+                            <img src={twoFactorQrDataUrl} alt="2FA QR" className="w-52 h-52 rounded-2xl border border-border/60 bg-white p-3" />
+                        </div>
+                    ) : null}
+                    <div className="space-y-2">
+                        <label className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest px-1">
+                            Codigo de verificacion
+                        </label>
+                        <Input
+                            type="text"
+                            inputMode="numeric"
+                            pattern="[0-9]*"
+                            value={twoFactorOtp}
+                            onChange={(e) => setTwoFactorOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                            placeholder="123456"
+                            className="rounded-2xl h-12 text-center tracking-[0.35em]"
+                        />
+                    </div>
+                    <ModalFooter>
+                        <Button
+                            variant="ghost"
+                            className="rounded-xl h-12 px-6 font-bold"
+                            onClick={() => setTwoFactorSetupOpen(false)}
+                            disabled={twoFactorLoading}
+                        >
+                            Cancelar
+                        </Button>
+                        <Button
+                            className="rounded-xl px-10 h-12 font-bold"
+                            disabled={twoFactorOtp.trim().length !== 6 || twoFactorLoading}
+                            isLoading={twoFactorLoading}
+                            onClick={confirmTwoFactorSetup}
+                        >
+                            Confirmar 2FA
                         </Button>
                     </ModalFooter>
                 </div>
@@ -1016,9 +1209,10 @@ export default function SettingsPage() {
                     <motion.div
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
-                        className="bg-background border border-border/60 rounded-2xl p-6 shadow-sm"
+                        className="bg-white border border-border/60 rounded-2xl p-6 shadow-sm"
                     >
-                        <div className="flex items-center gap-3 mb-6">
+                        <div className="flex items-center justify-between gap-3 mb-6">
+                            <div className="flex items-center gap-3">
                             <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
                                 <Database className="w-5 h-5 text-primary" />
                             </div>
@@ -1026,6 +1220,10 @@ export default function SettingsPage() {
                                 <h2 className="text-xl font-bold text-foreground">Backup System</h2>
                                 <p className="text-xs text-muted-foreground">Configure automated backups. Credentials are encrypted at rest (AES-256-GCM).</p>
                             </div>
+                            </div>
+                            <Link href="/dashboard/settings/backups">
+                                <Button variant="outline" className="rounded-xl">Open Pro Panel</Button>
+                            </Link>
                         </div>
 
                         {/* Type selector */}
@@ -1047,6 +1245,32 @@ export default function SettingsPage() {
                         </div>
 
                         <div className="space-y-4">
+                            {backupConfigs?.[0]?.backups?.length > 0 && (
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                    <div className="rounded-xl border border-border/60 bg-muted/20 px-4 py-3">
+                                        <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">Last success</p>
+                                        <p className="text-sm font-semibold mt-1">
+                                            {backupConfigs[0].backups.find((b: any) => b.status === 'success')
+                                                ? new Date(backupConfigs[0].backups.find((b: any) => b.status === 'success').startedAt).toLocaleString()
+                                                : 'N/A'}
+                                        </p>
+                                    </div>
+                                    <div className="rounded-xl border border-border/60 bg-muted/20 px-4 py-3">
+                                        <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">Last failed</p>
+                                        <p className="text-sm font-semibold mt-1">
+                                            {backupConfigs[0].backups.find((b: any) => b.status === 'failed')
+                                                ? new Date(backupConfigs[0].backups.find((b: any) => b.status === 'failed').startedAt).toLocaleString()
+                                                : 'N/A'}
+                                        </p>
+                                    </div>
+                                    <div className="rounded-xl border border-border/60 bg-muted/20 px-4 py-3">
+                                        <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">Running</p>
+                                        <p className="text-sm font-semibold mt-1">
+                                            {backupConfigs[0].backups.filter((b: any) => b.status === 'in_progress').length}
+                                        </p>
+                                    </div>
+                                </div>
+                            )}
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div className="space-y-2">
                                     <label className="text-sm font-bold text-foreground">Config Name</label>
@@ -1121,6 +1345,9 @@ export default function SettingsPage() {
                             <div className="space-y-2">
                                 <label className="text-sm font-bold text-foreground">Schedule (cron, optional)</label>
                                 <Input placeholder="0 3 * * * (every day at 3am)" value={backupForm.schedule} onChange={e => setBackupForm(f => ({...f, schedule: e.target.value}))} className="rounded-xl font-mono" />
+                                <p className="text-xs text-muted-foreground">
+                                    Si se deja vacio, el backup sera manual. Formato cron estandar Linux.
+                                </p>
                             </div>
 
                             <div className="flex items-center gap-3 pt-2">
@@ -1150,9 +1377,15 @@ export default function SettingsPage() {
                                                 <div className="flex flex-col">
                                                     <span className="font-medium">{b.filename || 'Unnamed'}</span>
                                                     <span className="text-[10px] text-muted-foreground uppercase tracking-tight">{new Date(b.startedAt).toLocaleString()}</span>
+                                                    {b.log ? (
+                                                        <span className="text-[10px] text-muted-foreground line-clamp-1">{b.log}</span>
+                                                    ) : null}
                                                 </div>
                                             </div>
                                             <div className="flex items-center gap-2">
+                                                {typeof b.size === 'number' ? (
+                                                    <span className="text-[10px] text-muted-foreground">{Math.round(b.size / 1024 / 1024)} MB</span>
+                                                ) : null}
                                                 <Button 
                                                     size="sm" 
                                                     variant="ghost" 
@@ -1273,6 +1506,82 @@ export default function SettingsPage() {
                                 <><Lock className="w-4 h-4 mr-2" />{t("settings.changePassword")}</>
                             )}
                         </Button>
+                    </div>
+                </motion.div>
+
+                <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.12 }}
+                    className="bg-background border border-border/60 rounded-2xl p-6 shadow-sm"
+                >
+                    <div className="flex items-center gap-3 mb-6">
+                        <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+                            <Shield className="w-5 h-5 text-primary" />
+                        </div>
+                        <div>
+                            <h2 className="text-xl font-bold text-foreground">2FA</h2>
+                            <p className="text-xs text-muted-foreground">
+                                Seguridad personal de la cuenta. Visible para cualquier usuario autenticado.
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="space-y-4 max-w-xl">
+                        <div className={cn(
+                            "rounded-2xl border px-4 py-3 text-sm",
+                            twoFactorEnabled
+                                ? "bg-green-500/10 border-green-500/30 text-green-700 dark:text-green-300"
+                                : "bg-amber-500/10 border-amber-500/30 text-amber-700 dark:text-amber-300"
+                        )}>
+                            {twoFactorEnabled
+                                ? `2FA activado${twoFactorEnabledAt ? ` (${new Date(twoFactorEnabledAt).toLocaleString()})` : ""}`
+                                : "2FA desactivado"}
+                        </div>
+
+                        {!twoFactorEnabled ? (
+                            <div className="space-y-3">
+                                <p className="text-sm text-muted-foreground">
+                                    Activa un segundo factor con app autenticadora. No depende de permisos globales como `manage_settings`.
+                                </p>
+                                <Button
+                                    onClick={beginTwoFactorSetup}
+                                    className="rounded-xl"
+                                    disabled={twoFactorLoading}
+                                    isLoading={twoFactorLoading}
+                                >
+                                    <Shield className="w-4 h-4 mr-2" />
+                                    Activar 2FA
+                                </Button>
+                            </div>
+                        ) : (
+                            <div className="space-y-3">
+                                <p className="text-sm text-muted-foreground">
+                                    Para desactivar 2FA confirma con tu codigo actual.
+                                </p>
+                                <div className="max-w-xs">
+                                    <Input
+                                        type="text"
+                                        inputMode="numeric"
+                                        pattern="[0-9]*"
+                                        value={twoFactorDisableOtp}
+                                        onChange={(e) => setTwoFactorDisableOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                                        placeholder="123456"
+                                        className="rounded-2xl h-12 text-center tracking-[0.35em]"
+                                    />
+                                </div>
+                                <Button
+                                    variant="outline"
+                                    onClick={disableTwoFactor}
+                                    className="rounded-xl"
+                                    disabled={twoFactorLoading || twoFactorDisableOtp.trim().length !== 6}
+                                    isLoading={twoFactorLoading}
+                                >
+                                    <Shield className="w-4 h-4 mr-2" />
+                                    Desactivar 2FA
+                                </Button>
+                            </div>
+                        )}
                     </div>
                 </motion.div>
 

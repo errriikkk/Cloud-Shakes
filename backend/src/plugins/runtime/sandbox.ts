@@ -276,6 +276,7 @@ export class PluginSandbox {
         ShakesPlugin.isShakesPlugin = true;
 
         const __sandboxModules = {
+          '@cloud-shakes/sdk': { ShakesPlugin },
           '@shakes/sdk': { ShakesPlugin },
           stream: {
             Readable: __SandboxReadable,

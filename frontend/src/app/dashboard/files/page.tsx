@@ -1,14 +1,28 @@
 ﻿"use client";
 
-import { useState, Suspense } from "react";
+import { useState, Suspense, useMemo } from "react";
 import { useTranslation } from "@/lib/i18n";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { FileBrowser } from "@/components/FileBrowser";
 import { Search, HardDrive } from "lucide-react";
 
 function DashboardContent() {
-    const { t } = useTranslation();
+    const { t, locale } = useTranslation();
     const [refreshTrigger, setRefreshTrigger] = useState(0);
     const [searchQuery, setSearchQuery] = useState("");
+    
+    // Dynamic document title
+    const filesTitle = useMemo(() => {
+        const lang = locale === 'es' ? 'es' : 'en';
+        const title = lang === 'es' ? 'Archivos' : 'Files';
+        const subtitle = lang === 'es' ? 'Gestión de archivos' : 'File management';
+        if (searchQuery.trim()) {
+            return `${searchQuery} - ${lang === 'es' ? 'búsqueda' : 'search'} - ${title}`;
+        }
+        return `${title} - ${subtitle} - ${title}`;
+    }, [searchQuery, locale]);
+    
+    useDocumentTitle(filesTitle);
     
     return (
         <div className="space-y-6">

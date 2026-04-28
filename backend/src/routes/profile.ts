@@ -5,7 +5,7 @@ import { protect, AuthRequest } from '../middleware/authMiddleware';
 import { hashPassword } from '../utils/auth';
 import busboy from 'busboy';
 import { minioClient, BUCKET_NAME } from '../utils/storage';
-import { v4 as uuidv4 } from 'uuid';
+import { safeUuid } from '../utils/id';
 
 const router = express.Router();
 
@@ -226,7 +226,7 @@ router.post('/avatar', protect, async (req: AuthRequest, res, next) => {
 
         try {
             // Private avatar object (NOT a cloud "File")
-            const storedName = `avatars/${req.user.id}/${uuidv4()}.jpg`;
+            const storedName = `avatars/${req.user.id}/${safeUuid()}.jpg`;
 
             await minioClient.putObject(BUCKET_NAME, storedName, file, undefined as any, {
                 'Content-Type': mimeType,

@@ -1,15 +1,18 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { useTranslation } from "@/lib/i18n";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import axios from "axios";
 import { API_ENDPOINTS } from "@/lib/api";
 import { PreviewModal } from "@/components/PreviewModal";
+import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
 import { PermissionGuard } from "@/components/PermissionGuard";
 import { usePermission } from "@/hooks/usePermission";
 import { motion, AnimatePresence } from "framer-motion";
+import { showPermissionDenied } from "@/lib/permissionFeedback";
 import {
     Check,
     ChevronLeft,
@@ -89,7 +92,7 @@ const STATUS_LABELS: Record<string, string> = {
 
 export default function ChatPage() {
     const { user } = useAuth();
-    const { t } = useTranslation();
+    const { t, locale } = useTranslation();
     const { canViewChat, canSendMessages, canCreateChats, canDeleteMessages, canEditMessages, canCreateGroupChats, canSendAttachments, canDeleteConversations } = usePermission();
     const [conversations, setConversations] = useState<Conversation[]>([]);
     const [users, setUsers] = useState<User[]>([]);
@@ -109,6 +112,25 @@ export default function ChatPage() {
     const [messageMenuOpen, setMessageMenuOpen] = useState<string | null>(null);
     const [pollErrorCount, setPollErrorCount] = useState(0);
     const [isPollingPaused, setIsPollingPaused] = useState(false);
+
+    // Dynamic document title
+    const chatTitle = useMemo(() => {
+        const lang = locale === 'es' ? 'es' : 'en';
+        
+        if (loading) {
+            return (lang === 'es' ? 'Cargando...' : 'Loading...') + ' - Chat';
+        } else if (activeConversation) {
+            const label = lang === 'es' ? 'mensajes' : 'messages';
+            return `${activeConversation.name || 'Chat'} (${messages.length} ${label}) - Chat`;
+        } else if (searchQuery.trim()) {
+            return `(${conversations.length}) ${searchQuery} - ${lang === 'es' ? 'búsqueda' : 'search'} - Chat`;
+        } else {
+            const label = lang === 'es' ? 'conversaciones' : 'conversations';
+            return `Chat (${conversations.length} ${label}) - Chat`;
+        }
+    }, [loading, activeConversation, searchQuery, messages.length, conversations.length, locale]);
+    
+    useDocumentTitle(chatTitle);
     
     // @mentions state
     const [mentionQuery, setMentionQuery] = useState("");
@@ -588,14 +610,25 @@ export default function ChatPage() {
                                             </div>
                                         </div>
                                     </div>
-                                    <button
-                                        onClick={() => canCreateChats() && setShowNewChat(true)}
+                                    <Button
+                                        onClick={() => {
+                                            if (!canCreateChats()) {
+                                                showPermissionDenied("No tienes permiso para crear chats.", "create_chats");
+                                                return;
+                                            }
+                                            setShowNewChat(true);
+                                        }}
                                         disabled={!canCreateChats()}
+                                        showBlockedFeedback={!canCreateChats()}
+                                        blockedPermission="create_chats"
+                                        blockedReason="No tienes permiso para crear chats."
                                         title={canCreateChats() ? t("chat.newChat") : t("chat.noPermission")}
-                                        className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-border bg-background text-foreground hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed"
+                                        variant="outline"
+                                        size="icon"
+                                        className="h-9 w-9 rounded-xl"
                                     >
                                         <Plus className="h-4 w-4" />
-                                    </button>
+                                    </Button>
                                 </div>
 
                                 <div className="mt-3 flex items-center gap-2">
@@ -747,7 +780,13 @@ export default function ChatPage() {
                                             <div className="absolute right-0 top-full mt-2 w-52 overflow-hidden rounded-xl border border-border bg-background shadow-lg">
                                                 {canDeleteConversations() && (
                                                     <button
-                                                        onClick={() => deleteConversation(activeConversation.id)}
+                                                        onClick={() => {
+                                                            if (!canDeleteConversations()) {
+                                                                showPermissionDenied("No tienes permiso para eliminar conversaciones.", "delete_conversations");
+                                                                return;
+                                                            }
+                                                            deleteConversation(activeConversation.id);
+                                                        }}
                                                         className="w-full px-4 py-3 text-left text-sm hover:bg-muted flex items-center gap-2 text-red-600"
                                                     >
                                                         <Trash2 className="h-4 w-4" />
@@ -817,7 +856,13 @@ export default function ChatPage() {
                                                         >
                                                             {(isOwn || canDeleteMessages()) && (
                                                                 <button
-                                                                    onClick={() => deleteMessage(msg.id)}
+                                                                    onClick={() => {
+                                                                        if (!(isOwn || canDeleteMessages())) {
+                                                                            showPermissionDenied("No tienes permiso para eliminar mensajes.", "delete_messages");
+                                                                            return;
+                                                                        }
+                                                                        deleteMessage(msg.id);
+                                                                    }}
                                                                     className="w-full px-3 py-3 text-left text-sm hover:bg-muted flex items-center gap-2 text-red-600 transition-colors"
                                                                 >
                                                                     <Trash2 className="w-4 h-4" />
@@ -893,14 +938,24 @@ export default function ChatPage() {
                                         ))}
                                     </div>
                                 )}
-                                <button
-                                    onClick={sendMessage}
+                                <Button
+                                    onClick={() => {
+                                        if (!canSendMessages()) {
+                                            showPermissionDenied("No tienes permiso para enviar mensajes.", "send_messages");
+                                            return;
+                                        }
+                                        sendMessage();
+                                    }}
                                     disabled={!newMessage.trim() || !canSendMessages()}
+                                    showBlockedFeedback={!canSendMessages()}
+                                    blockedPermission="send_messages"
+                                    blockedReason="No tienes permiso para enviar mensajes."
                                     title={canSendMessages() ? t('chat.input.send') : t('chat.noPermission')}
-                                    className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-foreground text-background shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
+                                    size="icon"
+                                    className="h-11 w-11 rounded-2xl bg-foreground text-background shadow-sm hover:bg-foreground/90"
                                 >
                                     <Send className="w-5 h-5" />
-                                </button>
+                                </Button>
                             </div>
                             </div>
                         </div>

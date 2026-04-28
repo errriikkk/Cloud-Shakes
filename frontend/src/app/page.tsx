@@ -3,7 +3,7 @@
 import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { Cloud, ArrowRight, Lock, Fingerprint, Info } from "lucide-react";
+import { Cloud, ArrowRight, Lock, Fingerprint, Info, ArrowLeft } from "lucide-react";
 import axios from "axios";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -15,6 +15,9 @@ import { BuiltWithBadge } from "@/components/BuiltWithBadge";
 function LoginContent() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [otp, setOtp] = useState("");
+  const [requiresTwoFactor, setRequiresTwoFactor] = useState(false);
+  const [twoFactorMessage, setTwoFactorMessage] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const router = useRouter();
@@ -27,16 +30,24 @@ function LoginContent() {
     e.preventDefault();
     setLoading(true);
     setError("");
+    setTwoFactorMessage("");
 
     try {
       await axios.post(API_ENDPOINTS.AUTH.LOGIN, {
         username,
         password,
+        otp: requiresTwoFactor ? otp.trim() : undefined,
       }, {
         withCredentials: true
       });
       router.push(redirectTo || "/dashboard");
     } catch (err: any) {
+      if (err.response?.status === 401 && err.response?.data?.requiresTwoFactor) {
+        setRequiresTwoFactor(true);
+        setOtp("");
+        setTwoFactorMessage("Verificacion en dos pasos activada. Introduce tu codigo OTP para continuar.");
+        return;
+      }
       if (err.response?.status === 429) {
         const retryAfter = err.response.headers['retry-after'];
         const resetTime = err.response.headers['ratelimit-reset'];
@@ -92,29 +103,88 @@ function LoginContent() {
         {/* Form Card */}
         <div className="bg-background border border-border/60 rounded-[2.5rem] shadow-2xl shadow-black/[0.03] p-10">
           <form onSubmit={handleLogin} className="space-y-6">
-            <div className="space-y-2">
-              <label className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest px-1">{t("auth.username")}</label>
-              <Input
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder={t("auth.userPlaceholder")}
-                className="bg-muted/40 border-border/60 rounded-2xl h-12 px-5 focus:bg-background transition-all"
-                autoComplete="username"
-              />
-            </div>
+            {!requiresTwoFactor && (
+              <div className="space-y-2">
+                <label className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest px-1">{t("auth.username")}</label>
+                <Input
+                  type="text"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  placeholder={t("auth.userPlaceholder")}
+                  className="bg-muted/40 border-border/60 rounded-2xl h-12 px-5 focus:bg-background transition-all"
+                  autoComplete="username"
+                />
+              </div>
+            )}
 
-            <div className="space-y-2">
-              <label className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest px-1">{t("auth.password")}</label>
-              <Input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder={t("auth.passwordPlaceholder")}
-                className="bg-muted/40 border-border/60 rounded-2xl h-12 px-5 focus:bg-background transition-all"
-                autoComplete="current-password"
-              />
-            </div>
+            {!requiresTwoFactor && (
+              <div className="space-y-2">
+                <label className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest px-1">{t("auth.password")}</label>
+                <Input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder={t("auth.passwordPlaceholder")}
+                  className="bg-muted/40 border-border/60 rounded-2xl h-12 px-5 focus:bg-background transition-all"
+                  autoComplete="current-password"
+                />
+              </div>
+            )}
+
+            <AnimatePresence>
+              {requiresTwoFactor && (
+                <motion.div
+                  initial={{ opacity: 0, y: -4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -4 }}
+                  className="space-y-2"
+                >
+                  <label className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest px-1">
+                    2FA / OTP
+                  </label>
+                  <Input
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    value={otp}
+                    onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                    placeholder="123456"
+                    className="bg-muted/40 border-border/60 rounded-2xl h-12 px-5 focus:bg-background transition-all tracking-[0.35em] text-center"
+                    autoComplete="one-time-code"
+                  />
+                  <p className="text-[11px] text-muted-foreground px-1">
+                    Introduce el codigo de 6 digitos de tu app autenticadora.
+                  </p>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="h-9 rounded-xl px-3 text-xs"
+                    onClick={() => {
+                      setRequiresTwoFactor(false);
+                      setOtp("");
+                      setError("");
+                      setTwoFactorMessage("");
+                    }}
+                  >
+                    <ArrowLeft className="w-4 h-4 mr-2" />
+                    Volver
+                  </Button>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            <AnimatePresence>
+              {twoFactorMessage && requiresTwoFactor && !error && (
+                <motion.div
+                  initial={{ opacity: 0, y: -4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="text-amber-700 text-[13px] bg-amber-50 border border-amber-100 p-4 rounded-2xl flex items-center gap-3 font-medium"
+                >
+                  <Info className="w-4 h-4 flex-shrink-0" />
+                  {twoFactorMessage}
+                </motion.div>
+              )}
+            </AnimatePresence>
 
             <AnimatePresence>
               {error && (
@@ -132,10 +202,10 @@ function LoginContent() {
             <Button
               type="submit"
               className="w-full h-12 rounded-2xl bg-primary text-white hover:opacity-90 font-bold shadow-xl shadow-primary/10 transition-all active:scale-[0.98]"
-              disabled={loading || !username || !password}
+              disabled={loading || !username || !password || (requiresTwoFactor && otp.trim().length !== 6)}
               isLoading={loading}
             >
-              {loading ? t("auth.loggingIn") : t("auth.loginNow")}
+              {loading ? t("auth.loggingIn") : (requiresTwoFactor ? "Verificar codigo" : t("auth.loginNow"))}
               <ArrowRight className="w-4 h-4 ml-2" />
             </Button>
           </form>

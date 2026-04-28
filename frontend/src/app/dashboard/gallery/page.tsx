@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { Image as ImageIcon, Grid, List, Loader2, Download, Share2, Eye, X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 import { useRouter } from "next/navigation";
 import { createPortal } from "react-dom";
 import { useTranslation } from "@/lib/i18n";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 
 interface ImageFile {
     id: string;
@@ -25,7 +26,7 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 
 export default function GalleryPage() {
     const { user } = useAuth();
-    const { t } = useTranslation();
+    const { t, locale } = useTranslation();
     const router = useRouter();
     const [images, setImages] = useState<ImageFile[]>([]);
     const [loading, setLoading] = useState(true);
@@ -37,6 +38,16 @@ export default function GalleryPage() {
     useEffect(() => {
         setMounted(true);
     }, []);
+
+    // Dynamic document title
+    const galleryTitle = useMemo(() => {
+        const lang = locale === 'es' ? 'es' : 'en';
+        const label = lang === 'es' ? 'imágenes' : 'images';
+        const title = lang === 'es' ? 'Galería' : 'Gallery';
+        return `${title} (${images.length} ${label}) - ${title}`;
+    }, [images.length, locale]);
+    
+    useDocumentTitle(galleryTitle);
 
     useEffect(() => {
         if (user) {

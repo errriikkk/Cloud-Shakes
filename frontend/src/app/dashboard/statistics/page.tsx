@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useAuth } from "@/context/AuthContext";
 import axios from "axios";
 import { API_ENDPOINTS } from "@/lib/api";
@@ -14,6 +14,7 @@ import { es } from "date-fns/locale";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { useTranslation } from "@/lib/i18n";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 
 function formatBytes(bytes: number): string {
     if (bytes === 0) return "0 B";
@@ -25,7 +26,7 @@ function formatBytes(bytes: number): string {
 
 export default function StatisticsPage() {
     const { user } = useAuth();
-    const { t } = useTranslation();
+    const { t, locale } = useTranslation();
     const [stats, setStats] = useState({
         storage: { used: 0, limit: null as number | null },
         files: { total: 0, byType: {} as Record<string, number> },
@@ -36,6 +37,14 @@ export default function StatisticsPage() {
     });
     const [linkStats, setLinkStats] = useState<any>(null);
     const [loading, setLoading] = useState(true);
+
+    // Dynamic document title
+    const statsTitle = useMemo(() => {
+        const lang = locale === 'es' ? 'es' : 'en';
+        return lang === 'es' ? 'Estadísticas - Estadísticas' : 'Statistics - Statistics';
+    }, [locale]);
+    
+    useDocumentTitle(statsTitle);
 
     // Helper to extract data from API response (handles both old array and new {data, pagination} format)
 const extractData = (res: any) => {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useAuth } from "@/context/AuthContext";
 import axios from "axios";
 import { API_ENDPOINTS } from "@/lib/api";
@@ -15,6 +15,7 @@ import {
 } from "date-fns";
 import { es, enUS } from "date-fns/locale";
 import { useTranslation } from "@/lib/i18n";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
 import { motion } from "framer-motion";
@@ -43,6 +44,14 @@ export default function HomePage() {
     const { user } = useAuth();
     const { t, locale } = useTranslation();
     const dateLocale = locale === "es" ? es : enUS;
+
+    // Dynamic document title
+    const homeTitle = useMemo(() => {
+        const lang = locale === 'es' ? 'es' : 'en';
+        return lang === 'es' ? 'Inicio - Dashboard' : 'Home - Dashboard';
+    }, [locale]);
+    
+    useDocumentTitle(homeTitle);
 
     const [upcomingEvents, setUpcomingEvents] = useState<CalendarEvent[]>([]);
     const [recentFiles, setRecentFiles]       = useState<any[]>([]);

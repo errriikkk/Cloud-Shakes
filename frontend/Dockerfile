@@ -3,7 +3,7 @@ FROM --platform=linux/amd64 node:20
 WORKDIR /app
 
 COPY package.json package-lock.json* ./
-RUN rm -rf node_modules package-lock.json && npm install
+RUN npm ci || npm install
 
 COPY . .
 

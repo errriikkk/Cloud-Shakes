@@ -9,6 +9,9 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { FileText, Plus, Search, Trash2 } from "lucide-react";
 import { usePermission } from "@/hooks/usePermission";
+import { useTranslation } from "@/lib/i18n";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
+import { showPermissionDenied } from "@/lib/permissionFeedback";
 
 type DocItem = {
   id: string;
@@ -20,10 +23,24 @@ type DocItem = {
 
 export default function DocumentsPage() {
   const { canCreateDocuments, canDeleteDocuments } = usePermission();
+  const { t, locale } = useTranslation();
   const [documents, setDocuments] = useState<DocItem[]>([]);
   const [q, setQ] = useState("");
   const [loading, setLoading] = useState(false);
   const [creating, setCreating] = useState(false);
+
+  // Dynamic document title
+  const docsTitle = useMemo(() => {
+    const lang = locale === 'es' ? 'es' : 'en';
+    const title = lang === 'es' ? 'Documentos' : 'Documents';
+    if (q.trim()) {
+      return `(${documents.length}) ${q} - ${lang === 'es' ? 'búsqueda' : 'search'} - ${title}`;
+    }
+    const label = lang === 'es' ? 'documentos' : 'documents';
+    return `${title} (${documents.length} ${label}) - ${title}`;
+  }, [documents.length, q, locale]);
+  
+  useDocumentTitle(docsTitle);
 
   const fetchDocuments = useCallback(async () => {
     setLoading(true);
@@ -70,12 +87,16 @@ export default function DocumentsPage() {
             <h1 className="text-2xl font-bold">Documents</h1>
             <p className="text-sm text-muted-foreground">Editor avanzado con permisos, versiones y colaboración.</p>
           </div>
-          {canCreateDocuments() && (
-            <Button onClick={createDocument} disabled={creating}>
-              <Plus className="w-4 h-4 mr-2" />
-              {creating ? "Creating..." : "New document"}
-            </Button>
-          )}
+          <Button
+            onClick={createDocument}
+            disabled={creating || !canCreateDocuments()}
+            showBlockedFeedback={!canCreateDocuments()}
+            blockedPermission="create_documents"
+            blockedReason="No tienes permiso para crear documentos."
+          >
+            <Plus className="w-4 h-4 mr-2" />
+            {creating ? "Creating..." : "New document"}
+          </Button>
         </div>
 
         <div className="relative">
@@ -102,14 +123,27 @@ export default function DocumentsPage() {
                   </div>
                 </div>
               </Link>
-              {canDeleteDocuments() && (
-                <div className="mt-3 flex justify-end">
-                  <Button size="sm" variant="ghost" className="text-rose-500" onClick={() => removeDocument(doc.id)}>
-                    <Trash2 className="w-4 h-4 mr-1" />
-                    Delete
-                  </Button>
-                </div>
-              )}
+              <div className="mt-3 flex justify-end">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="text-rose-500"
+                  onClick={() => {
+                    if (!canDeleteDocuments()) {
+                      showPermissionDenied("No tienes permiso para eliminar documentos.", "delete_documents");
+                      return;
+                    }
+                    removeDocument(doc.id);
+                  }}
+                  disabled={!canDeleteDocuments()}
+                  showBlockedFeedback={!canDeleteDocuments()}
+                  blockedPermission="delete_documents"
+                  blockedReason="No tienes permiso para eliminar documentos."
+                >
+                  <Trash2 className="w-4 h-4 mr-1" />
+                  Delete
+                </Button>
+              </div>
             </div>
           ))}
         </div>

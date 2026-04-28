@@ -186,7 +186,10 @@ const DEFAULT_ROLES = [
             'view_chat', 'send_messages', 'edit_messages', 'create_chats', 'mention_users', 'send_attachments',
             'view_api_builder', 'create_apis', 'edit_apis',
             'view_calls', 'create_calls', 'join_calls',
-            'view_statistics', 'rename_files'
+            'view_statistics',
+            // Settings should always be visible; actions remain gated by other permissions.
+            'view_settings',
+            'rename_files'
         ]
     },
     {
@@ -204,7 +207,8 @@ const DEFAULT_ROLES = [
             'view_links',
             'view_gallery',
             'view_chat',
-            'view_statistics'
+            'view_statistics',
+            'view_settings'
         ]
     },
     {
@@ -216,7 +220,8 @@ const DEFAULT_ROLES = [
         permissions: [
             'view_shared_files', 'preview_files',
             'view_calendar',
-            'view_chat'
+            'view_chat',
+            'view_settings'
         ]
     }
 ];

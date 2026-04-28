@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, Suspense, useMemo } from "react";
 import axios from "axios";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -15,6 +15,9 @@ import { Modal, ModalFooter } from "@/components/ui/Modal";
 import { useRouter, useSearchParams } from "next/navigation";
 import { API_ENDPOINTS } from "@/lib/api";
 import { useTranslation } from "@/lib/i18n";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
+import { usePermission } from "@/hooks/usePermission";
+import { showPermissionDenied } from "@/lib/permissionFeedback";
 
 interface FolderItem {
     id: string;
@@ -53,9 +56,18 @@ interface GroupedLinks {
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
 
 function SharedLinksContent() {
-    const { t } = useTranslation();
+    const { t, locale } = useTranslation();
+    const { canDeleteLinks } = usePermission();
     const searchParams = useSearchParams();
     const folderParam = searchParams.get("folder");
+
+    // Dynamic document title
+    const linksTitle = useMemo(() => {
+        const lang = locale === 'es' ? 'es' : 'en';
+        return lang === 'es' ? 'Enlaces - Enlaces' : 'Links - Links';
+    }, [locale]);
+    
+    useDocumentTitle(linksTitle);
 
     const [links, setLinks] = useState<LinkItem[]>([]);
     const [folders, setFolders] = useState<FolderItem[]>([]);
@@ -200,6 +212,10 @@ function SharedLinksContent() {
     };
 
     const handleDelete = async () => {
+        if (!canDeleteLinks()) {
+            showPermissionDenied("No tienes permiso para eliminar enlaces.", "delete_links");
+            return;
+        }
         if (!linkToDelete) return;
         try {
             await axios.delete(`${API}/api/links/${linkToDelete}`, { withCredentials: true });
@@ -213,6 +229,10 @@ function SharedLinksContent() {
     };
 
     const openPasswordModal = (link: LinkItem) => {
+        if (!canDeleteLinks()) {
+            showPermissionDenied("No tienes permiso para gestionar seguridad de enlaces.", "delete_links");
+            return;
+        }
         if (link.isPasswordProtected) {
             // Direct remove
             handleTogglePassword(link, true);
@@ -241,6 +261,10 @@ function SharedLinksContent() {
     };
 
     const handleToggleDirectDownload = async (link: LinkItem) => {
+        if (!canDeleteLinks()) {
+            showPermissionDenied("No tienes permiso para modificar enlaces.", "delete_links");
+            return;
+        }
         try {
             await axios.put(`${API}/api/links/${link.id}`, {
                 directDownload: !link.directDownload,
@@ -253,6 +277,10 @@ function SharedLinksContent() {
     };
 
     const handleToggleEmbed = async (link: LinkItem) => {
+        if (!canDeleteLinks()) {
+            showPermissionDenied("No tienes permiso para modificar enlaces.", "delete_links");
+            return;
+        }
         try {
             await axios.put(`${API}/api/links/${link.id}`, {
                 isEmbed: !link.isEmbed,
@@ -267,12 +295,20 @@ function SharedLinksContent() {
     };
 
     const openExpiryModal = (link: LinkItem) => {
+        if (!canDeleteLinks()) {
+            showPermissionDenied("No tienes permiso para gestionar expiracion de enlaces.", "delete_links");
+            return;
+        }
         setLinkToExpire(link);
         setExpiryMinutes("");
         setExpiryModalOpen(true);
     };
 
     const handleSetExpiry = async () => {
+        if (!canDeleteLinks()) {
+            showPermissionDenied("No tienes permiso para gestionar expiracion de enlaces.", "delete_links");
+            return;
+        }
         if (!linkToExpire) return;
         const minutes = parseInt(expiryMinutes);
         if (isNaN(minutes) || minutes <= 0) return;
@@ -288,6 +324,10 @@ function SharedLinksContent() {
     };
 
     const handleRemoveExpiry = async (id: string) => {
+        if (!canDeleteLinks()) {
+            showPermissionDenied("No tienes permiso para gestionar expiracion de enlaces.", "delete_links");
+            return;
+        }
         try {
             await axios.put(`${API}/api/links/${id}`, { expiresInMinutes: null }, { withCredentials: true });
             setLinks(prev => prev.map(l => l.id === id ? { ...l, expiresAt: null, isExpired: false } : l));
@@ -541,6 +581,7 @@ function SharedLinksContent() {
                                                             </button>
                                                             <button
                                                                 onClick={() => confirmDelete(link.id)}
+                                                                disabled={!canDeleteLinks()}
                                                                 className="p-1.5 rounded-lg hover:bg-red-500/10 transition-colors text-muted-foreground hover:text-red-400"
                                                                 title={t('common.delete')}
                                                             >
@@ -617,11 +658,13 @@ function SharedLinksContent() {
                                     {/* Password status */}
                                     <button
                                         onClick={() => openPasswordModal(link)}
+                                        disabled={!canDeleteLinks()}
                                         className={cn(
                                             "flex items-center gap-1.5 px-2 py-1 rounded-xl border transition-all font-bold text-[10px] leading-none",
                                             link.isPasswordProtected
                                                 ? "bg-primary text-white border-primary shadow-sm"
-                                                : "bg-transparent border-border/60 text-muted-foreground hover:bg-muted/60"
+                                                : "bg-transparent border-border/60 text-muted-foreground hover:bg-muted/60",
+                                            !canDeleteLinks() && "opacity-50 cursor-not-allowed"
                                         )}
                                     >
                                         {link.isPasswordProtected ? <Lock className="w-3 h-3" /> : <Unlock className="w-3 h-3" />}
@@ -637,6 +680,7 @@ function SharedLinksContent() {
                                     ) : link.expiresAt ? (
                                         <button
                                             onClick={() => openExpiryModal(link)}
+                                            disabled={!canDeleteLinks()}
                                             className="flex items-center gap-1.5 px-2 py-1 rounded-xl bg-blue-50 border border-blue-100 text-blue-600 font-bold text-[10px] leading-none hover:bg-blue-100 transition-colors"
                                         >
                                             <Clock className="w-3 h-3" />
@@ -645,6 +689,7 @@ function SharedLinksContent() {
                                     ) : (
                                         <button
                                             onClick={() => openExpiryModal(link)}
+                                            disabled={!canDeleteLinks()}
                                             className="flex items-center gap-1.5 px-2 py-1 rounded-xl border border-border/60 text-muted-foreground font-bold text-[10px] leading-none hover:bg-muted/60 transition-colors"
                                         >
                                             <Clock className="w-3 h-3" />
@@ -671,6 +716,7 @@ function SharedLinksContent() {
                                     </button>
                                     <button
                                         onClick={() => confirmDelete(link.id)}
+                                        disabled={!canDeleteLinks()}
                                         className="p-2 rounded-xl bg-red-50 hover:bg-red-100 text-red-500 transition-all"
                                         title={t('common.delete')}
                                     >

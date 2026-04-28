@@ -1,246 +1,163 @@
-<div align="center">
-  <img src="assets/install_gif.gif" alt="Cloud Shakes Logo" width="140" style="border-radius: 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.2);"/>
-  <h1 align="center">☁️ Cloud Shakes</h1>
-  <p align="center"><strong>The Ultra-Premium, API-First Self-Hosted Cloud Storage Architecture</strong></p>
+# Cloud Shakes
 
-  <p align="center">
-    <a href="https://demo.shakes.es"><img src="https://img.shields.io/badge/Live_Demo-demo.shakes.es-FF004D?style=for-the-badge&logo=vercel" alt="Live Demo" /></a>
-    <a href="https://shakes.es"><img src="https://img.shields.io/badge/Website-shakes.es-0F0F0F?style=for-the-badge&logo=safari" alt="Website" /></a>
-    <a href="https://docs.shakes.es"><img src="https://img.shields.io/badge/Docs-docs.shakes.es-0F0F0F?style=for-the-badge&logo=gitbook" alt="Docs" /></a>
-  </p>
+Cloud Shakes is a modern self-hosted cloud platform for teams that need ownership, performance, and control: files, folders, secure sharing, notes, documents, calendar, activity tracking, IAM roles/permissions, and advanced backup operations.
 
-  <p align="center">
-    <a href="https://github.com/errriikkk/Cloud-Shakes/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square" alt="License" /></a>
-    <a href="https://www.docker.com/"><img src="https://img.shields.io/badge/Docker-Ready-2496ED.svg?style=flat-square&logo=docker" alt="Docker Ready" /></a>
-    <a href="https://nextjs.org/"><img src="https://img.shields.io/badge/Next.js-15-black.svg?style=flat-square&logo=next.js" alt="Next.js" /></a>
-    <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.0-3178C6.svg?style=flat-square&logo=typescript" alt="TypeScript" /></a>
-    <a href="https://tailwindcss.com/"><img src="https://img.shields.io/badge/TailwindCSS-v4-38B2AC.svg?style=flat-square&logo=tailwind-css" alt="Tailwind CSS" /></a>
-  </p>
-</div>
+## Why Cloud Shakes
 
----
+- **Self-hosted by default**: your data, your infrastructure, your compliance boundaries.
+- **Modern stack**: Next.js + React frontend, Node.js + Express + Prisma backend.
+- **S3-first storage model**: MinIO-native, adaptable to S3-compatible providers.
+- **Enterprise controls**: RBAC, section-level permissions, 2FA, activity logs, backup workflows.
+- **Operational UX**: focused on fast day-to-day work, not legacy admin panels.
 
-**Cloud Shakes** is not just another file manager. It is a completely re-engineered, enterprise-grade, **S3-native API-first self-hosted cloud storage solution** designed for the modern web. Built specifically to replace sluggish, legacy PHP applications like Nextcloud or expensive walled gardens like Google Drive and Dropbox, Cloud Shakes offers **2025-level UX/UI**, uncompromising security, and an object-storage-first backend.
+## Feature Highlights
 
-By decoupling the storage layer from the filesystem and adopting a strictly-typed Node.js architecture, we ensure sub-millisecond metadata operations and horizontal scalability that legacy LAMP stacks simply cannot match.
+- **Cloud Drive**: folders, drag-and-drop uploads, previews, sharing, metadata per file.
+- **Advanced Activity**: filterable timeline, actor/resource context, actionable audit trail.
+- **Backups (Control Center)**:
+  - local/S3/SSH backup strategies
+  - on-demand trigger + scheduled execution
+  - dry-run restore
+  - restore comparison (selected backup vs latest successful snapshot + live DB indicators)
+- **Security**:
+  - JWT auth with secure cookies
+  - optional 2FA (TOTP)
+  - role-based access control
+  - rate limiting + CSRF protection + security headers
+- **Workspace modules**: documents, notes, links, calendar, chat, plugin runtime, low-code API flows.
 
----
+## Plugin & SDK Value (Shakes SDK)
 
-## ✨ Experience The Live Demo
+Cloud Shakes is not just "plugins enabled"; it is designed as a plugin economy:
 
-Before deploying your own instance, feel free to try our live interactive demo. The demo environment is isolated, blazingly fast, and showcases the full scope of our glassmorphism UI.
+- **Builder experience**: `@cloud-shakes/sdk` for rapid plugin authoring, local testing, packaging, and publishing.
+- **Distribution model**: marketplace + local ZIP sideload for private/internal extensions.
+- **Runtime model**: isolated execution with capability-gated behavior (safer than ad-hoc scripts).
+- **Product integration**: plugins can extend workspace behavior (UI slots, actions, and backend execution hooks).
+- **Enterprise governance**: role-based control over who can install/enable/update plugins.
 
-👉 **[Launch Live Demo (demo.shakes.es)](https://demo.shakes.es)**
+Compared to Discord-style ecosystems, the goal is similar (extensible core + ecosystem effects) but focused on cloud/workspace operations rather than chat-first bots.
 
-*(Note: Certain administrative features, system settings, and destructive actions are hard-disabled in the public demo environment for security reasons).*
+## Cloud Shakes vs Other Self-Hosted Options
 
----
+| Capability | Cloud Shakes | Nextcloud/ownCloud | Bare S3 + custom scripts |
+| --- | --- | --- | --- |
+| Modern UX/UI | Strong focus | Varies by app/theme | None by default |
+| S3-native architecture | Yes | Usually via external setup/plugins | Yes |
+| Fine-grained RBAC | Yes | Partial/depends on edition | Custom build |
+| Built-in operational panel for backups | Yes | Usually external tooling | Custom build |
+| Integrated multi-module workspace | Yes | Yes | No |
+| Time-to-first-deploy | Fast with installer/compose | Medium | Slow |
 
-## 🚀 The "1-Minute" Installation (Recommended)
+> Practical note: "best" depends on your priorities. Cloud Shakes is built for teams that want both product experience and infrastructure control without assembling many separate tools.
 
-Self-hosting complex software historically involved manually setting up databases, reverse proxies, and object storage containers. We fixed that. Cloud Shakes comes with an **interactive, bulletproof installer** that orchestrates an entire production-grade environment on your Linux server in exactly one line of code.
+## Quick Start
+
+### Option A: Installer
 
 ```bash
 curl -fsSL https://shakes.es/install | sudo bash
 ```
 
-<p align="center">
-  <img src="assets/install_gif.gif" alt="Cloud Shakes Installer Flow" width="800" style="border-radius: 12px; border: 1px solid #333;"/>
-</p>
+### Option B: Docker Compose
 
-### What happens under the hood?
-1. **Dependency Engine**: The script validates that your server runs compatible versions of Docker, Docker Compose, and Git. If not, it safely installs them.
-2. **Cryptographic Generation**: It generates robust, cryptographically secure random strings for your `JWT_SECRET`, PostgreSQL password, and MinIO root credentials.
-3. **Environment Injection**: It asks you a few simple questions (e.g., your domain name, desired HTTP ports) and dynamically populates robust `.env` files preventing CORS and Cookie domain errors.
-4. **Volume Provisioning**: It scaffolds local mapped volumes to ensure your data persists across restarts.
-5. **Auto-Deployment**: It pulls the latest pre-built images or builds them locally, launching the complete stack.
-
----
-
-## ⚔️ The Philosophy: Cloud Shakes vs. The Industry
-
-Why build another cloud system? Because the self-hosted community deserves a tier-one product.
-
-### The Problem with Incumbents
-- **Nextcloud / ownCloud**: Powerful, but incredibly heavy. Built on legacy LAMP stacks (PHP/Apache), they often feel sluggish, require constant tuning, and their UI can feel dated. Searching large directories usually causes bottlenecks.
-- **Dropbox / Google Drive**: Excellent speed and UX, but you pay with your privacy. Your data is mined, subjected to corporate scanning, and monthly usage fees scale poorly for large media files.
-
-### The Cloud Shakes Advantage
-
-| Core Metric | ☁️ Cloud Shakes | Nextcloud | S3 / Bare Metal | Dropbox / Drive |
-| :--- | :--- | :--- | :--- | :--- |
-| **Data Privacy** | 🟢 **100% On-Premise** | 🟢 100% On-Premise | 🟢 High | 🔴 Corporate owned |
-| **Backend Arch** | 🟢 **Node.js + Prisma** | 🔴 Legacy PHP | 🟡 Low-level API | 🟢 Proprietary |
-| **Storage Layer** | 🟢 **Native S3 (MinIO)** | 🟡 Plugin required | 🟢 Native S3 | 🟢 Proprietary |
-| **UI Aesthetics** | 🟢 **Premium glassmorphism** | 🟡 Functional | 🔴 CLI/Basic | 🟢 Premium |
-| **State Mgt** | 🟢 **React 19 / Next.js 15** | 🟡 jQuery / Vue mix | N/A | 🟢 React / Custom |
-| **Setup Time** | 🟢 **< 2 minutes (Automated)** | 🟡 15-30 mins | 🔴 Expert required | 🟢 Instant |
-| **Dark Mode** | 🟢 **Native, Dynamic** | 🟡 Basic | N/A | 🟡 Basic |
-
----
-
-## 💎 Deep Dive: Core Features
-
-<p align="center">
-  <img src="assets/home_gif.gif" alt="Cloud Shakes Interface" width="800" style="border-radius: 12px; border: 1px solid #333;"/>
-</p>
-
-### 1. 📁 Advanced Storage & File Management
-- **S3-Native Backend Architecture**: Instead of storing files flatly on an ext4 disk which severely limits scalability, Cloud Shakes stores objects using standard S3 APIs. By default, it bundles **MinIO**, but it can effortlessly pipe to AWS S3, DigitalOcean Spaces, or Cloudflare R2 by simply changing your `.env`.
-- **Intelligent Media Previews**: Native support for viewing images, reading PDFs, and editing Markdown documents inline.
-- **High-Performance Media Streaming**: Support for large media files via HTTP `Range` headers, enabling instant seeking and buffered playback of 4K video without full downloads.
-- **Resilient Uploads**: Ultra-fast, chunked drag-and-drop system designed for reliability over unstable connections.
-
-### 2. 🔗 Secure Reverse-Sharing
-- **Advanced Share Links**: Generate public access points with unique, non-guessable identifiers.
-- **Granular Perimeter Security**: Add custom password protection and set automatic expiration dates (e.g., "expires in 48 hours") for temporary access.
-- **Secure Proxying**: Files are proxied through the API; external users never see your internal S3 bucket URLs or private database IDs.
-
-### 3. 🛡️ Enterprise-Grade Security (IAM)
-- **Discord-Inspired RBAC**: A visual Role-Based Access Control system. Create custom roles (e.g., "Editors", "Viewers") with specific atomic permissions (Upload, Delete, Share, Manage Users).
-- **Stateless Asymmetric Authentication**: Uses high-entropy JWT session tokens with a silent HTTP-Only cookie refresh flow, providing immunity to XSS-based token theft.
-- **Zod-Backed Runtime Validation**: Every request hitting the API is strictly validated against Zod schemas. Malformed payloads or path-traversal attempts are neutralized at the entry point.
-- **DDoS Mitigation**: Integrated IP-based Rate Limiting on critical gateways (login, registration, public shares).
-
-### 4. 📝 Integrated Modules
-- **Collaborative Documents**: Rich-text document editing with JSON-based content persistence.
-- **Markdown Notes**: Fast, pinned, and color-coded note-taking for quick thoughts.
-- **Event Calendar**: Integrated scheduling and deadline tracking.
-- **Gallery Mode**: A visual-first grid view optimized for photographic albums.
-
----
-
-## ⚡ Advanced Architectural Engines
-
-Cloud Shakes goes beyond simple storage by providing powerful automation and extensibility engines:
-
-### 🔄 API Flows (Low-Code Automation)
-The **API Flow Engine** allows you to create custom API endpoints via a visual block-based builder. Chain together logic blocks (file-reads, data-transforms, HTTP requests, and conditional checks) to automate workflows without writing backend code.
-- **Custom JS Execution**: Inject logic directly via sandboxed JavaScript blocks.
-- **Visual Builder**: Design complex data pipelines that interact with your stored files.
-
-### 🧩 Plugin Framework
-A modular system designed for infinite extensibility. Developers can build and distribute plugins that hook into the core Cloud Shakes architecture, with support for versioning, containerized execution, and granular plugin permissions.
-
----
-
-## 🏗️ Architecture Stack Explained
-
-Cloud Shakes uses a modern, strictly-typed enterprise stack:
-
-- **Frontend Application**
-  - **Framework**: `Next.js 15` (App Router)
-  - **State & UI**: `React 19`, `Framer Motion` (for 60fps micro-animations).
-  - **Styling**: `Tailwind CSS v4` mapped to custom CSS variables for effortless theming.
-- **Backend API Gateway**
-  - **Core**: `Node.js` + `Express` (Fully written in strict TypeScript).
-  - **ORM**: `Prisma ORM` for zero-bug database interaction and schema migrations.
-- **Infrastructure Layer**
-  - **Relational Data**: `PostgreSQL` (handles users, permissions, link metadata, file hierarchies).
-  - **Object Storage**: `MinIO` (handles the actual binary blobs of the files).
-  - **Containerization**: Composed via `Docker`.
-
----
-
-## 🛠️ Advanced Development Setup (Manual)
-
-If you are a contributor, want to run things natively without Docker, or want to audit the source code, here is the manual setup flow.
-
-### Prerequisites
-- Node.js >= 18
-- PostgreSQL Database running locally or remotely.
-- An S3 Provider (or MinIO server running locally).
-
-### Step 1: Clone the Repository
 ```bash
 git clone https://github.com/errriikkk/Cloud-Shakes.git
 cd Cloud-Shakes
+docker compose up -d --build
 ```
 
-### Step 2: Configure the Backend API
+## Local Development
+
+### Backend
+
 ```bash
 cd backend
-# Duplicate the example environment file
-cp .env.example .env
-
-# Edit .env with your local PostgreSQL and MinIO credentials:
-# DATABASE_URL="postgresql://user:password@localhost:5432/cloudshakes"
-# JWT_SECRET="your_very_long_random_string_here"
-# MINIO_ENDPOINT="localhost"
-# MINIO_PORT="9000"
-# MINIO_ROOT_USER="..."
-```
-
-Install packages and push the DB schema:
-```bash
 npm install
-npm run db:generate   # Generates the Prisma client
-npm run db:migrate    # Pushes tables to PostgreSQL
-npm run dev           # Starts the Express server on port 5000
+npm run db:generate
+npm run db:migrate
+npm run dev
 ```
 
-### Step 3: Configure the Frontend Web App
-Open a new terminal session.
+### Frontend
 
 ```bash
-cd ../frontend
-cp .env.example .env.local
-
-# Edit .env.local:
-# NEXT_PUBLIC_API_URL="http://localhost:5000"
-
+cd frontend
 npm install
-npm run dev           # Starts the Next.js server on port 3000
+npm run dev
 ```
-Navigate to `http://localhost:3000` to interact with your local development build.
 
----
+## Security Posture
 
-## 🐳 Docker Compose (Manual Deployment)
+- Security middleware with `helmet`, CORS controls, rate-limiting, CSRF protection.
+- Encrypted credentials for sensitive config fields (for example backup credentials).
+- 2FA support (TOTP) for account-level hardening.
+- Activity logging to improve incident response and operational traceability.
+- Dependency auditing via `npm audit` workflows in backend and frontend.
 
-If you prefer not to use our `curl` installer, you can spin up the stack manually:
+## Security & Threat Model
 
-1. Clone the repo.
-2. Verify all `.env` files in both `frontend/` and `backend/`.
-3. In the root directory (where `docker-compose.yml` is located), run:
+### Threat model assumptions
 
-```bash
-docker-compose up -d --build
-```
-This will containerize the Node apps, pull PostgreSQL, pull MinIO, and link them across a shared internal Docker bridge network.
+- Multi-tenant workspace with authenticated users and role-based permissions.
+- Public internet exposure through reverse proxy (TLS termination outside app).
+- Critical assets: credentials/tokens, file objects, backups, plugin runtime integrity.
+- Primary abuse scenarios: account takeover, permission bypass, unsafe restore, malicious plugin upload, API abuse.
 
----
+### Security controls in place
 
-## 📈 Roadmap & Future Visions
-We are continuously iterating. Next major milestones include:
-- [ ] **E2E Encryption**: Zero-knowledge encryption (client-side encryption before S3 upload).
-- [ ] **Desktop Client**: Native Rust/Tauri-based desktop syncing client.
-- [ ] **Mobile App**: React Native iOS/Android app for auto-camera uploads.
-- [ ] **OIDC / SSO**: Enterprise login integrations (Google Workspace, Active Directory, Authelia).
-- [ ] **Webhooks**: Dispatch events to Discord/Slack on file uploads.
+- **Auth/session**: JWT + refresh cookies, optional TOTP 2FA, login throttling.
+- **Request protection**: CSRF middleware on mutating routes, CORS allowlist, Helmet headers.
+- **Authorization**: route-level RBAC via permissions (`manage_*`, `view_*`, etc.).
+- **Auditability**: activity logs for key user actions.
+- **Backup guardrails**: dry-run + restore comparison with risk indicators before destructive restore.
 
----
+### OWASP quick checklist (critical routes)
 
-## 🤝 Community & Contributing
+| Area | Route group | OWASP focus | Current status |
+| --- | --- | --- | --- |
+| Auth | `/api/auth/*` | A07 Identification/Auth failures, A05 Security misconfiguration | Login/device flows rate-limited, random code generation hardened, 2FA available |
+| Files | `/api/files/*` | A01 Broken access control, A04 Insecure design | Owner/role checks + permission guards + CSRF on mutating endpoints |
+| Plugins | `/api/plugins/*` | A08 Software/data integrity failures, A01 Broken access control | Sensitive install/activate/update endpoints restricted to `manage_plugins` |
+| Device auth | `/api/auth/device/*`, `/device/verify` | A03 Injection, A04 Insecure design | Code handling sanitized/encoded, rate limit added |
 
-Cloud Shakes is fundamentally built *by* developers, *for* the open-source community. 
+### Residual risk and next hardening steps
 
-**Want to help out?**
-1. **Fork** the repository.
-2. **Branch out** (`git checkout -b feature/AmazingFeature`).
-3. **Commit** your changes (`git commit -m 'Add some AmazingFeature'`).
-4. **Push** (`git push origin feature/AmazingFeature`).
-5. **Open a PR**!
+- Enforce stricter plugin provenance policy (mandatory signatures for all non-local plugins).
+- Add structured security event sink (SIEM/webhook) for auth and permission-denied anomalies.
+- Add periodic dependency patch window with automated CI fail gates for high/critical advisories.
+- Consider optional WAF/rate policy profiles for internet-facing deployments.
 
-*Note: For major architectural overhauls, database changes, or massive UI redesigns, please open an **Issue** to discuss your vision with the core maintainers first!*
+## Operations and Backups
 
----
+Cloud Shakes includes a dedicated backup section integrated in Settings:
 
-<div align="center">
-  <p><strong>Driven by transparency. Built with ❤️. Maintained by the open-source community.</strong></p>
-  <p>
-    <a href="https://shakes.es"><strong>Website</strong></a> &nbsp;&bull;&nbsp; 
-    <a href="https://docs.shakes.es"><strong>Documentation</strong></a> &nbsp;&bull;&nbsp; 
-    <a href="https://github.com/errriikkk/Cloud-Shakes/issues"><strong>Report an Issue</strong></a>
-  </p>
-</div>
+- configure destinations (local, S3, SSH)
+- trigger and monitor backups
+- inspect logs and status
+- run restore dry-run
+- compare restore candidate before execution
+
+This is designed to reduce recovery mistakes and make restore decisions explicit.
+
+## Roadmap Direction
+
+- stronger backup verification and artifact integrity workflows
+- more advanced analytics/audit insights
+- expanded plugin ecosystem
+- more enterprise identity and policy integrations
+
+## Contributing
+
+1. Fork the repository
+2. Create your branch: `git checkout -b feature/my-feature`
+3. Commit your changes
+4. Push branch and open a PR
+
+For major architectural changes, open an issue first to align on scope.
+
+## Links
+
+- Website: [https://shakes.es](https://shakes.es)
+- Documentation: [https://docs.shakes.es](https://docs.shakes.es)
+- Demo: [https://demo.shakes.es](https://demo.shakes.es)

@@ -10,9 +10,11 @@ import { API_ENDPOINTS } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { useModal } from "@/hooks/useModal";
 import { useTranslation } from "@/lib/i18n";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { ActivityAvatar } from "@/components/ActivityAvatar";
 import { usePermission } from "@/hooks/usePermission";
 import { PermissionGuard } from "@/components/PermissionGuard";
+import { showPermissionDenied } from "@/lib/permissionFeedback";
 
 interface Note {
     id: string;
@@ -43,7 +45,7 @@ const scopeBadge = (scope?: string) => {
 
 export default function NotesPage() {
     const { user } = useAuth();
-    const { t } = useTranslation();
+    const { t, locale } = useTranslation();
     const { confirm, alert, ModalComponents } = useModal();
     const { canViewNotes, canCreateNotes, canEditNotes, canDeleteNotes } = usePermission();
     const [notes, setNotes] = useState<Note[]>([]);
@@ -53,6 +55,23 @@ export default function NotesPage() {
     const [scope, setScope] = useState<"all" | "private" | "workspace">("all");
     const [author, setAuthor] = useState<"all" | "me">("all");
     const [showPinnedOnly, setShowPinnedOnly] = useState(false);
+
+    // Dynamic document title
+    const notesTitle = useMemo(() => {
+        const lang = locale === 'es' ? 'es' : 'en';
+        const title = lang === 'es' ? 'Notas' : 'Notes';
+        
+        if (loading) {
+            return (lang === 'es' ? 'Cargando...' : 'Loading...') + ` - ${title}`;
+        } else if (q.trim()) {
+            return `(${notes.length}) ${q} - ${lang === 'es' ? 'búsqueda' : 'search'} - ${title}`;
+        } else {
+            const label = lang === 'es' ? 'notas' : 'notes';
+            return `${title} (${notes.length} ${label}) - ${title}`;
+        }
+    }, [loading, q, notes.length, locale]);
+    
+    useDocumentTitle(notesTitle);
 
     const fetchNotes = useCallback(async () => {
         if (!user || !(user.isAdmin || user.permissions?.includes('view_notes'))) return;
@@ -161,6 +180,9 @@ export default function NotesPage() {
                                 <Button
                                     onClick={handleCreate}
                                     disabled={isCreating || !canCreateNotes()}
+                                    showBlockedFeedback={!canCreateNotes()}
+                                    blockedPermission="create_notes"
+                                    blockedReason="No tienes permiso para crear notas."
                                     title={canCreateNotes() ? t('notes.newNote') : t('chat.noPermission')}
                                 >
                                     <Plus className="w-4 h-4 mr-2" />
@@ -437,26 +459,48 @@ function NoteRow({
                         </div>
 
                         <div className="flex items-center gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
-                            <button
-                                onClick={() => onUpdate(note.id, { pinned: !note.pinned })}
-                                disabled={!canEdit}
+                            <Button
+                                type="button"
+                                size="icon"
+                                variant="ghost"
+                                onClick={() => {
+                                    if (!canEdit) {
+                                        showPermissionDenied("No tienes permiso para editar notas.", "edit_notes");
+                                        return;
+                                    }
+                                    onUpdate(note.id, { pinned: !note.pinned });
+                                }}
+                                showBlockedFeedback={!canEdit}
+                                blockedPermission="edit_notes"
+                                blockedReason="No tienes permiso para editar notas."
                                 className={cn(
-                                    "rounded-lg p-2 text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed",
+                                    "rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground",
                                     note.pinned && "text-primary"
                                 )}
                                 aria-label="Pin"
                             >
                                 <Pin className="h-4 w-4" />
-                            </button>
-                            <button
-                                onClick={() => (canDelete ? onDelete(note.id) : null)}
-                                disabled={!canDelete}
-                                title={canDelete ? t('common.delete') : t('chat.noPermission')}
-                                className="rounded-lg p-2 text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed"
+                            </Button>
+                            <Button
+                                type="button"
+                                size="icon"
+                                variant="ghost"
+                                onClick={() => {
+                                    if (!canDelete) {
+                                        showPermissionDenied("No tienes permiso para eliminar notas.", "delete_notes");
+                                        return;
+                                    }
+                                    onDelete(note.id);
+                                }}
+                                title={canDelete ? t("common.delete") : t("chat.noPermission")}
+                                showBlockedFeedback={!canDelete}
+                                blockedPermission="delete_notes"
+                                blockedReason="No tienes permiso para eliminar notas."
+                                className="rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
                                 aria-label="Delete"
                             >
                                 <Trash2 className="h-4 w-4" />
-                            </button>
+                            </Button>
                         </div>
                     </div>
 
@@ -483,8 +527,13 @@ function NoteRow({
                                 {COLORS.slice(1).map(c => (
                                     <button
                                         key={c.name}
-                                        onClick={() => onUpdate(note.id, { color: c.name as any })}
-                                        disabled={!canEdit}
+                                        onClick={() => {
+                                            if (!canEdit) {
+                                                showPermissionDenied("No tienes permiso para editar notas.", "edit_notes");
+                                                return;
+                                            }
+                                            onUpdate(note.id, { color: c.name as any });
+                                        }}
                                         className={cn(
                                             "h-5 w-5 rounded-full ring-2 ring-transparent transition-transform active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed",
                                             c.dot,
@@ -501,8 +550,13 @@ function NoteRow({
                                 "inline-flex items-center gap-2 rounded-xl border px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:bg-muted/30",
                                 "border-border/60"
                             )}
-                            disabled={!canEdit}
-                            onClick={() => onUpdate(note.id, { scope: note.scope === "workspace" ? "private" : "workspace" })}
+                            onClick={() => {
+                                if (!canEdit) {
+                                    showPermissionDenied("No tienes permiso para editar notas.", "edit_notes");
+                                    return;
+                                }
+                                onUpdate(note.id, { scope: note.scope === "workspace" ? "private" : "workspace" });
+                            }}
                             title={!canEdit ? t("chat.noPermission") : "Toggle visibility"}
                         >
                             {note.scope === "workspace" ? <Globe className="h-4 w-4" /> : <Lock className="h-4 w-4" />}

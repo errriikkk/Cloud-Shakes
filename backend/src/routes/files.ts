@@ -3,7 +3,7 @@ import busboy from 'busboy';
 import prisma from '../config/db';
 import { minioClient, BUCKET_NAME, getPresignedUrl } from '../utils/storage';
 import { protect, requirePermission, AuthRequest } from '../middleware/authMiddleware';
-import { v4 as uuidv4 } from 'uuid';
+import { safeUuid } from '../utils/id';
 import { ThrottledStream } from '../utils/throttle';
 import { LIMITS } from '../config/limits';
 import { createActivity } from './activity';
@@ -128,7 +128,7 @@ router.post('/upload', protect, requirePermission('upload_files'), async (req: A
                 return res.status(413).json({ message: 'Storage limit exceeded.' });
             }
 
-            const storedName = `${uuidv4()}-${filename}`;
+            const storedName = `${safeUuid()}-${filename}`;
             const tempDir = '/tmp/shakes-uploads';
             const tempPath = path.join(tempDir, storedName);
             

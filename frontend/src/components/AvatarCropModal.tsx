@@ -28,10 +28,14 @@ export function AvatarCropModal({ isOpen, imageFile, onClose, onCropped }: Props
         setPos({ x: 0, y: 0 });
         const url = URL.createObjectURL(imageFile);
         setObjectUrl(url);
-        const img = new Image();
-        img.src = url;
-        img.onload = () => setImgEl(img);
-        img.onerror = () => setImgEl(null);
+        
+        // Use window.Image for SSR safety
+        const img = typeof window !== 'undefined' ? new window.Image() : null;
+        if (img) {
+            img.src = url;
+            img.onload = () => setImgEl(img);
+            img.onerror = () => setImgEl(null);
+        }
 
         return () => {
             URL.revokeObjectURL(url);

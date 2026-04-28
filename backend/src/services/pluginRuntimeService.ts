@@ -13,6 +13,7 @@ import { join, basename } from 'path';
 import path from 'path';
 import { pluginRouteRegistry } from '../plugins/runtime/routeRegistry.js';
 import { writeFileSync, existsSync, readFileSync, mkdirSync } from 'fs';
+import { getDockerClientSafe } from '../utils/dockerRuntime.js';
 
 const PLUGIN_CACHE_DIR = process.env.PLUGIN_CACHE_DIR || join(process.cwd(), 'data', 'plugins');
 
@@ -36,6 +37,10 @@ export class PluginRuntimeService {
    */
   async initialize(): Promise<void> {
     console.log('[PluginRuntimeService] Initializing...');
+    const dockerRuntime = await getDockerClientSafe();
+    if (!dockerRuntime.available) {
+      console.warn('[PluginRuntimeService] Docker runtime unavailable, falling back to JS/Node plugin execution.');
+    }
 
     // Cargar plugins instalados desde el sistema legacy
     const installed = this.getInstalledPluginsLegacy();

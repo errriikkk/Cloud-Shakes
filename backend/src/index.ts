@@ -52,6 +52,7 @@ import cloudSettingsRoutes from './routes/cloudSettings';
 import backupsRoutes from './routes/backups';
 import notificationRoutes from './routes/notifications';
 import pluginRoutes from './routes/plugins';
+import syncRoutes from './routes/sync';
 import { pluginRuntimeService } from './services/pluginRuntimeService.js';
 import { initStorage } from './utils/storage';
 import prisma from './config/db';
@@ -108,6 +109,11 @@ const publicEndpoints = ['/api/talks/active-rooms', '/api/links/', '/api/links/p
 
 const isOriginAllowed = (origin: string | undefined): boolean => {
     if (!origin) return true; // Permitir same-origin y requests sin origin (mobile apps)
+    
+    // Allow local development and self-hosted backend forms
+    if (origin.startsWith('http://localhost') || origin.startsWith('http://127.0.0.1')) {
+        return true;
+    }
     
     // Verificar orígenes exactos
     if (allowedOrigins.origins && allowedOrigins.origins.includes(origin)) {
@@ -236,6 +242,14 @@ const securityLog = (event: string, data: any) => {
     }
 };
 
+const escapeHtml = (value: string) =>
+    value
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+
 // Log authentication events
 app.use((req, res, next) => {
     const originalSend = res.send;
@@ -326,6 +340,7 @@ app.use('/api/users', adminIpMiddleware, usersRoutes);
 app.use('/api/team/invitations', teamInvitationsRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/plugins', pluginRoutes);
+app.use('/api/sync', syncRoutes);
 // Custom API routes must be last to catch all /api/custom/* paths
 app.use('/api/custom', customRoutes);
 
@@ -346,6 +361,7 @@ import { deviceCodes } from './routes/auth';
 
 app.get('/device/verify', (req, res) => {
     const userCode = req.query.code as string;
+    const safeUserCode = userCode ? escapeHtml(userCode) : '--------';
     
     const html = `
 <!DOCTYPE html>
@@ -365,10 +381,10 @@ app.get('/device/verify', (req, res) => {
 <body>
     <h1>🔐 Cloud Shakes</h1>
     <p>Un dispositivo quiere conectarse a tu cuenta.</p>
-    <div class="code">${userCode || '--------'}</div>
+    <div class="code">${safeUserCode}</div>
     <p>¿Autorizas este dispositivo?</p>
     <form method="POST" action="/device/confirm">
-        <input type="hidden" name="userCode" value="${userCode || ''}">
+        <input type="hidden" name="userCode" value="${safeUserCode === '--------' ? '' : safeUserCode}">
         <button type="submit" name="action" value="approve">✅ Autorizar</button>
         <button type="submit" name="action" value="deny" class="deny">❌ Denegar</button>
     </form>

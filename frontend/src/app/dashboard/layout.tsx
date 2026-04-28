@@ -21,6 +21,7 @@ import { PwaInstallPrompt } from "@/components/PwaInstallPrompt";
 import { NotificationPanel } from "@/components/NotificationPanel";
 import { UploadProgress } from "@/components/UploadProgress";
 import { GlobalAccessDeniedModal } from "@/components/GlobalAccessDeniedModal";
+import { SectionAccessPanel } from "@/components/SectionAccessPanel";
 import { useTranslation } from "@/lib/i18n";
 import { usePermission } from "@/hooks/usePermission";
 import { useBranding } from "@/lib/branding";
@@ -224,9 +225,9 @@ function SidebarContent({
                         ))}
                     </div>
                 )}
-                {(user.isAdmin || user.permissions?.includes('view_settings')) && (
-                    <NavItem href="/dashboard/settings" icon={Settings} label={t("nav.settings")} onSelect={() => setMobileSidebarOpen(false)} />
-                )}
+                {/* Settings should never disappear for a signed-in user.
+                   Fine-grained settings blocks are still gated inside the Settings page. */}
+                <NavItem href="/dashboard/settings" icon={Settings} label={t("nav.settings")} onSelect={() => setMobileSidebarOpen(false)} />
 
                 {pluginSidebarWidgets.length > 0 && (
                     <div className="mt-2 space-y-2 px-2">
@@ -752,6 +753,9 @@ function ContentWrapper({ children, pathname }: { children: React.ReactNode; pat
 function DashboardContent({ children }: { children: React.ReactNode }) {
     return (
         <div className="relative">
+            <div className="mb-3">
+                <SectionAccessPanel embedded />
+            </div>
             {children}
             <NotificationPanel />
             <UploadProgress />
