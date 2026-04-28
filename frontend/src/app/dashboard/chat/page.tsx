@@ -16,6 +16,7 @@ import { showPermissionDenied } from "@/lib/permissionFeedback";
 import {
     Check,
     ChevronLeft,
+    ChevronDown,
     FileText,
     Folder,
     MessageSquare,
@@ -26,6 +27,9 @@ import {
     Trash2,
     X,
     Menu,
+    AtSign,
+    Paperclip,
+    Users as UsersIcon,
 } from "lucide-react";
 import { format, formatDistanceToNow, isToday, isYesterday } from "date-fns";
 import { es } from "date-fns/locale";
@@ -93,7 +97,7 @@ const STATUS_LABELS: Record<string, string> = {
 export default function ChatPage() {
     const { user } = useAuth();
     const { t, locale } = useTranslation();
-    const { canViewChat, canSendMessages, canCreateChats, canDeleteMessages, canEditMessages, canCreateGroupChats, canSendAttachments, canDeleteConversations } = usePermission();
+    const { canViewChat, canSendMessages, canCreateChats, canDeleteMessages, canEditMessages, canCreateGroupChats, canSendAttachments, canDeleteConversations, canMentionUsers } = usePermission();
     const [conversations, setConversations] = useState<Conversation[]>([]);
     const [users, setUsers] = useState<User[]>([]);
     const [activeConversation, setActiveConversation] = useState<Conversation | null>(null);
@@ -112,6 +116,13 @@ export default function ChatPage() {
     const [messageMenuOpen, setMessageMenuOpen] = useState<string | null>(null);
     const [pollErrorCount, setPollErrorCount] = useState(0);
     const [isPollingPaused, setIsPollingPaused] = useState(false);
+
+    useEffect(() => {
+        const status = (user as any)?.status as string | undefined;
+        if (status) {
+            setUserStatus(status);
+        }
+    }, [user]);
 
     // Dynamic document title
     const chatTitle = useMemo(() => {
@@ -569,6 +580,30 @@ export default function ChatPage() {
         u.username.toLowerCase().includes(searchQuery.toLowerCase())
     );
 
+    const directConversations = filteredConversations.filter(c => !c.isGroup);
+    const groupConversations = filteredConversations.filter(c => c.isGroup);
+    const unreadConversations = filteredConversations.filter(c => (c.unreadCount || 0) > 0);
+
+    const groupedMessages = useMemo(() => {
+        const groups: { key: string; label: string; items: Message[] }[] = [];
+        for (const msg of messages) {
+            const date = new Date(msg.createdAt);
+            const key = format(date, "yyyy-MM-dd");
+            const existing = groups.find(g => g.key === key);
+            const label = isToday(date)
+                ? "Hoy"
+                : isYesterday(date)
+                    ? "Ayer"
+                    : format(date, "d MMM yyyy", { locale: es });
+            if (existing) {
+                existing.items.push(msg);
+            } else {
+                groups.push({ key, label, items: [msg] });
+            }
+        }
+        return groups;
+    }, [messages]);
+
     if (!canViewChat()) {
         return (
             <PermissionGuard permission="view_chat" redirectUrl="/dashboard/home">
@@ -584,12 +619,12 @@ export default function ChatPage() {
     }
 
     return (
-        <div className="h-dvh min-h-0">
-            <div className="grid h-dvh min-h-0 grid-cols-1 md:grid-cols-[360px_1fr]">
+        <div className="h-full min-h-0 bg-background">
+            <div className="grid h-full min-h-0 grid-cols-1 md:grid-cols-[340px_1fr] lg:grid-cols-[360px_1fr]">
                 {/* Left: Conversations */}
-                <aside className={cn("min-h-0 border-r border-border bg-sidebar/70 backdrop-blur", panel === "chat" ? "hidden md:block" : "block")}>
+                <aside className={cn("min-h-0 border-r border-border bg-sidebar/70 backdrop-blur-xl", panel === "chat" ? "hidden md:block" : "block")}>
                     <div className="flex h-full min-h-0 flex-col">
-                        <div className="sticky top-0 z-10 border-b border-border bg-sidebar/95 backdrop-blur">
+                        <div className="sticky top-0 z-10 border-b border-border bg-sidebar/95 backdrop-blur-xl">
                             <div className="p-4">
                                 <div className="flex items-center justify-between gap-3">
                                     <div className="min-w-0 flex items-center gap-2">
@@ -668,8 +703,20 @@ export default function ChatPage() {
                                     <div className="mt-1 text-xs">{t("chat.startConversation")}</div>
                                 </div>
                             ) : (
-                                <div className="divide-y divide-border/60">
-                                    {filteredConversations.map((conv) => {
+                                <div className="px-2 py-2 space-y-3">
+                                    {[
+                                        { key: "unread", title: "No leídos", data: unreadConversations },
+                                        { key: "dm", title: "Mensajes directos", data: directConversations },
+                                        { key: "groups", title: "Grupos", data: groupConversations },
+                                    ].map((section) => (
+                                        <div key={section.key} className="space-y-1">
+                                            <p className="px-2 text-[10px] uppercase tracking-wider font-bold text-muted-foreground">
+                                                {section.title} {section.data.length > 0 ? `(${section.data.length})` : ""}
+                                            </p>
+                                            <div className="divide-y divide-border/40 rounded-xl border border-border/40 overflow-hidden bg-background/60">
+                                                {section.data.length === 0 ? (
+                                                    <div className="px-3 py-2 text-xs text-muted-foreground">Sin elementos</div>
+                                                ) : section.data.map((conv) => {
                                         const isActive = activeConversation?.id === conv.id;
                                         const avatar = getConversationAvatar(conv);
                                         return (
@@ -720,6 +767,9 @@ export default function ChatPage() {
                                             </button>
                                         );
                                     })}
+                                            </div>
+                                        </div>
+                                    ))}
                                 </div>
                             )}
                         </div>
@@ -727,7 +777,7 @@ export default function ChatPage() {
                 </aside>
 
                 {/* Right: Messages */}
-                <section className={cn("min-h-0 bg-background", panel === "list" ? "hidden md:block" : "block")}>
+                <section className={cn("h-full min-h-0 bg-background", panel === "list" ? "hidden md:block" : "block")}>
                     {!activeConversation ? (
                         <div className="flex h-full min-h-0 items-center justify-center p-8">
                             <div className="text-center text-muted-foreground">
@@ -740,8 +790,9 @@ export default function ChatPage() {
                         </div>
                     ) : (
                         <div className="flex h-full min-h-0 flex-col">
+                            <div className="h-full min-h-0 flex flex-col">
                             {/* Header */}
-                            <div className="sticky top-0 z-10 border-b border-border bg-background/95 backdrop-blur">
+                            <div className="sticky top-0 z-10 border-b border-border bg-background/95 backdrop-blur-xl">
                                 <div className="flex items-center justify-between gap-3 px-4 py-3">
                                     <div className="flex items-center gap-3 min-w-0">
                                         <button
@@ -800,10 +851,18 @@ export default function ChatPage() {
                             </div>
 
                             {/* Messages */}
-                            <div className="min-h-0 flex-1 overflow-auto px-4 py-4 bg-gradient-to-b from-muted/10 to-background">
-                            {messages.map((msg, idx) => {
+                            <div className="min-h-0 flex-1 overflow-auto px-4 py-4 pb-6 bg-gradient-to-b from-muted/10 to-background">
+                            {groupedMessages.map((group) => (
+                                <div key={group.key} className="mb-4">
+                                    <div className="sticky top-2 z-[1] flex justify-center mb-3">
+                                        <span className="text-[11px] px-2.5 py-1 rounded-full bg-background/90 border border-border/60 text-muted-foreground shadow-sm">
+                                            {group.label}
+                                        </span>
+                                    </div>
+                                    {group.items.map((msg, idx) => {
                                 const isOwn = msg.senderId === user?.id;
-                                const showAvatar = idx === 0 || messages[idx - 1].senderId !== msg.senderId;
+                                const prev = group.items[idx - 1];
+                                const showAvatar = idx === 0 || prev?.senderId !== msg.senderId;
                                 
                                 return (
                                     <div
@@ -880,12 +939,23 @@ export default function ChatPage() {
                                     </div>
                                 );
                             })}
+                                </div>
+                            ))}
                             <div ref={messagesEndRef} />
                             </div>
 
                             {/* Composer */}
-                            <div className="border-t border-border bg-background p-4">
+                            <div className="border-t border-border bg-background/95 backdrop-blur-xl p-3 md:p-4">
                                 <div className="relative flex items-center gap-3">
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="icon"
+                                    className="h-11 w-11 rounded-2xl"
+                                    onClick={() => showPermissionDenied("Carga de adjuntos en composer en progreso.", "send_attachments")}
+                                >
+                                    <Paperclip className="w-4 h-4" />
+                                </Button>
                                 <input
                                     ref={inputRef}
                                     type="text"
@@ -902,6 +972,26 @@ export default function ChatPage() {
                                     disabled={!canSendMessages()}
                                     className="flex-1 h-11 rounded-2xl border border-border bg-muted/20 px-4 text-sm outline-none focus:ring-4 focus:ring-primary/10 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
                                 />
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="icon"
+                                    className="h-11 w-11 rounded-2xl"
+                                    onClick={() => {
+                                        if (!canMentionUsers()) {
+                                            showPermissionDenied("No tienes permiso para menciones.", "mention_users");
+                                            return;
+                                        }
+                                        inputRef.current?.focus();
+                                        setNewMessage((prev) => `${prev}${prev.endsWith(" ") || prev.length === 0 ? "" : " "}@`);
+                                    }}
+                                    disabled={!canMentionUsers()}
+                                    showBlockedFeedback={!canMentionUsers()}
+                                    blockedPermission="mention_users"
+                                    blockedReason="No tienes permiso para mencionar usuarios."
+                                >
+                                    <AtSign className="w-4 h-4" />
+                                </Button>
                                 
                                 {/* @mentions dropdown */}
                                 {showMentionDropdown && mentionResults.length > 0 && (
@@ -956,6 +1046,7 @@ export default function ChatPage() {
                                 >
                                     <Send className="w-5 h-5" />
                                 </Button>
+                            </div>
                             </div>
                             </div>
                         </div>

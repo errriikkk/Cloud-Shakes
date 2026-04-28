@@ -64,6 +64,10 @@ interface FolderItem {
     createdAt: string;
 }
 
+type ContextTarget =
+    | { id: string; type: 'file'; name: string }
+    | { id: string; type: 'folder'; name: string };
+
 interface FileBrowserProps {
     refreshTrigger: number;
     searchQuery?: string;
@@ -131,8 +135,14 @@ export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserPro
     const [globalDragActive, setGlobalDragActive] = useState(false);
     const [selectedItems, setSelectedItems] = useState<{ id: string, type: 'file' | 'folder' }[]>([]);
     const [mounted, setMounted] = useState(false);
+    const [contextMenu, setContextMenu] = useState<{ x: number; y: number; target: ContextTarget } | null>(null);
+    const [draggingItem, setDraggingItem] = useState<{ id: string; type: 'file' | 'folder'; name?: string } | null>(null);
+    const [movingItemIds, setMovingItemIds] = useState<string[]>([]);
     const [activities, setActivities] = useState<Record<string, ActivityItem[]>>({});
     const [hoverActivityId, setHoverActivityId] = useState<string | null>(null);
+    const dragDepthRef = useRef(0);
+    const internalDragRef = useRef(false);
+    const dragBundleRef = useRef<{ id: string; type: 'file' | 'folder' }[]>([]);
     const interactionLocked =
         !!previewFile ||
         deleteModalOpen ||
@@ -154,6 +164,24 @@ export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserPro
         setMounted(true);
         return () => setMounted(false);
     }, []);
+
+    useEffect(() => {
+        if (!contextMenu) return;
+        const closeMenu = () => setContextMenu(null);
+        const onKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') setContextMenu(null);
+        };
+        window.addEventListener('click', closeMenu);
+        window.addEventListener('resize', closeMenu);
+        window.addEventListener('scroll', closeMenu, true);
+        window.addEventListener('keydown', onKeyDown);
+        return () => {
+            window.removeEventListener('click', closeMenu);
+            window.removeEventListener('resize', closeMenu);
+            window.removeEventListener('scroll', closeMenu, true);
+            window.removeEventListener('keydown', onKeyDown);
+        };
+    }, [contextMenu]);
 
     // Selection Marquee state
     const [selectionBox, setSelectionBox] = useState<{ startX: number, startY: number, endX: number, endY: number } | null>(null);
@@ -647,8 +675,28 @@ export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserPro
 
     // Drag and Drop Handlers
     const handleDragStart = (e: React.DragEvent, id: string, type: 'file' | 'folder') => {
+        internalDragRef.current = true;
         e.dataTransfer.setData("itemId", id);
         e.dataTransfer.setData("itemType", type);
+        const name =
+            type === "file"
+                ? files.find((f) => f.id === id)?.originalName
+                : folders.find((f) => f.id === id)?.name;
+        setDraggingItem({ id, type, name });
+        const bundle =
+            selectedItems.some((it) => it.id === id)
+                ? selectedItems
+                : [{ id, type }];
+        dragBundleRef.current = bundle;
+    };
+
+    const handleDragEnd = () => {
+        internalDragRef.current = false;
+        dragDepthRef.current = 0;
+        setGlobalDragActive(false);
+        setDragOverFolderId(null);
+        setDraggingItem(null);
+        dragBundleRef.current = [];
     };
 
     const handleDragOver = (e: React.DragEvent) => {
@@ -692,28 +740,57 @@ export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserPro
             }
         }
 
-        if (!id || id === targetFolderId || targetFolderId === folderParam) return;
+        const rawBundle = dragBundleRef.current.length > 0
+            ? dragBundleRef.current
+            : (id ? [{ id, type }] : []);
+        const bundle = rawBundle.filter((item) => {
+            if (!item.id) return false;
+            if (item.id === targetFolderId) return false;
+            // Moving to the same parent/root should do nothing.
+            if (targetFolderId === folderParam) return false;
+            return true;
+        });
+        if (bundle.length === 0) return;
 
-        // Optimistic UI Update: remove the item immediately from the local state
-        if (type === 'file') {
-            setFiles(prev => prev.filter(f => f.id !== id));
-        } else {
-            setFolders(prev => prev.filter(f => f.id !== id));
+        const movingIds = bundle.map((b) => b.id);
+        setMovingItemIds(movingIds);
+        // Quick coordinated animation before items disappear from current folder.
+        await new Promise((resolve) => setTimeout(resolve, 130));
+        const movingFileIds = new Set(bundle.filter((b) => b.type === "file").map((b) => b.id));
+        const movingFolderIds = new Set(bundle.filter((b) => b.type === "folder").map((b) => b.id));
+        if (movingFileIds.size > 0) {
+            setFiles(prev => prev.filter(f => !movingFileIds.has(f.id)));
+        }
+        if (movingFolderIds.size > 0) {
+            setFolders(prev => prev.filter(f => !movingFolderIds.has(f.id)));
         }
 
         try {
-            const endpoint = type === 'file' ? 'files' : 'folders';
-            await axios.patch(`${API}/api/${endpoint}/${id}/move`, { targetFolderId }, { withCredentials: true });
+            await Promise.all(
+                bundle.map((item) => {
+                    const endpoint = item.type === 'file' ? 'files' : 'folders';
+                    return axios.patch(
+                        `${API}/api/${endpoint}/${item.id}/move`,
+                        { targetFolderId },
+                        { withCredentials: true }
+                    );
+                })
+            );
 
             // Background refresh to ensure consistency without flickering
             fetchItems(true);
-            if (type === 'folder') {
+            if (bundle.some((b) => b.type === 'folder')) {
                 window.dispatchEvent(new CustomEvent('folderUpdate'));
             }
         } catch (err) {
             console.error("Failed to move item:", err);
             // Revert state on error by doing a full refresh
             fetchItems();
+        } finally {
+            setDraggingItem(null);
+            internalDragRef.current = false;
+            setMovingItemIds([]);
+            dragBundleRef.current = [];
         }
     };
 
@@ -721,22 +798,33 @@ export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserPro
     const handleGlobalDrag = (e: React.DragEvent) => {
         e.preventDefault();
         e.stopPropagation();
-        
-        if (e.type === "dragenter" || e.type === "dragover") {
-            // Check if dragging files from outside
-            if (e.dataTransfer.types.includes("Files")) {
+
+        // Never show "drop files" overlay while moving internal items
+        if (internalDragRef.current) return;
+
+        const hasExternalFiles =
+            Array.from(e.dataTransfer.items || []).some((i) => i.kind === "file") ||
+            e.dataTransfer.types.includes("Files");
+
+        if (!hasExternalFiles) return;
+
+        if (e.type === "dragenter") {
+            dragDepthRef.current += 1;
+            setGlobalDragActive(true);
+            return;
+        }
+
+        if (e.type === "dragover") {
+            if (!globalDragActive) {
                 setGlobalDragActive(true);
             }
-        } else if (e.type === "dragleave") {
-            // Solo desactivar si el drag sale completamente del contenedor
-            const rect = containerRef.current?.getBoundingClientRect();
-            if (rect) {
-                const x = e.clientX;
-                const y = e.clientY;
-                const isOutside = x < rect.left || x > rect.right || y < rect.top || y > rect.bottom;
-                if (isOutside) {
-                    setGlobalDragActive(false);
-                }
+            return;
+        }
+
+        if (e.type === "dragleave") {
+            dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+            if (dragDepthRef.current === 0) {
+                setGlobalDragActive(false);
             }
         }
     };
@@ -745,6 +833,7 @@ export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserPro
         e.preventDefault();
         e.stopPropagation();
         setGlobalDragActive(false);
+        dragDepthRef.current = 0;
 
         if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
             const items = await scanItems(e.dataTransfer.items);
@@ -784,6 +873,22 @@ export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserPro
     const filteredFiles = files.filter(f =>
         f.originalName.toLowerCase().includes(searchQuery.toLowerCase())
     );
+    const parentFolderId = path.length > 1 ? path[path.length - 2].id : null;
+    const backTargetIndex = path.length > 1 ? path.length - 2 : 0;
+    const showBackFolderItem = !!folderParam;
+
+    const openContextMenu = (
+        e: React.MouseEvent,
+        target: ContextTarget
+    ) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setContextMenu({
+            x: e.clientX,
+            y: e.clientY,
+            target,
+        });
+    };
 
     return (
         <div
@@ -830,16 +935,33 @@ export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserPro
                 <div className="flex flex-col gap-3 px-4 py-4 sm:px-6">
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                         <div className="flex items-center gap-2 overflow-x-auto no-scrollbar max-w-full">
+                    <button
+                        onClick={() => {
+                            if (path.length <= 1) return;
+                            navigateBack(path.length - 2);
+                        }}
+                        disabled={path.length <= 1}
+                        className={cn(
+                            "inline-flex h-8 w-8 items-center justify-center rounded-lg border border-border/60 transition-colors shrink-0",
+                            path.length > 1
+                                ? "bg-background text-foreground hover:bg-muted/40"
+                                : "bg-muted/30 text-muted-foreground/50 cursor-not-allowed"
+                        )}
+                        title={t("common.back")}
+                    >
+                        <ChevronLeft className="w-4 h-4" />
+                    </button>
                     {path.map((p, i) => (
                         <div
                             key={p.id || 'root'}
                             className={cn(
-                                "flex items-center shrink-0 rounded-lg transition-all",
-                                dragOverFolderId === p.id && "bg-primary/10 px-1"
+                                "flex items-center shrink-0 rounded-lg transition-all border border-transparent",
+                                dragOverFolderId === p.id && "bg-primary/10 px-1 border-primary/30 scale-[1.02]",
+                                draggingItem && p.id === null && "bg-muted/40 border-border/60"
                             )}
                             onDragOver={handleDragOver}
+                            onDragOverCapture={() => setDragOverFolderId(p.id)}
                             onDragEnter={() => setDragOverFolderId(p.id)}
-                            onDragLeave={() => setDragOverFolderId(null)}
                             onDrop={(e) => handleDrop(e, p.id)}
                         >
                             {i > 0 && <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/50 mx-0.5" />}
@@ -999,22 +1121,58 @@ export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserPro
                                     <span className="hidden lg:block">{t("files.modified")}</span>
                                     <span className="text-right pr-4 sm:pr-0">{t("files.options")}</span>
                                 </div>
+                                {showBackFolderItem && (
+                                    <div
+                                        key="__folder_back__"
+                                        onDragOver={handleDragOver}
+                                        onDragOverCapture={() => setDragOverFolderId(parentFolderId)}
+                                        onDragEnter={() => setDragOverFolderId(parentFolderId)}
+                                        onDrop={(e) => handleDrop(e, parentFolderId)}
+                                        className={cn(
+                                            "grid grid-cols-[40px_1fr_80px_80px] sm:grid-cols-[40px_1fr_100px_100px_100px] gap-2 sm:gap-4 px-4 sm:px-6 py-2.5 sm:py-3 items-center border-b border-border hover:bg-muted/30 transition-all duration-150 group cursor-pointer",
+                                            dragOverFolderId === parentFolderId && "bg-primary/10 ring-2 ring-primary/40 scale-[1.005]"
+                                        )}
+                                        onClick={() => navigateBack(backTargetIndex)}
+                                    >
+                                        <div />
+                                        <div className="flex items-center gap-3 min-w-0">
+                                            <div className="w-8 h-8 flex items-center justify-center shrink-0 bg-primary/10 rounded-lg text-primary">
+                                                <FolderIcon className="w-4 h-4 fill-current/10" />
+                                            </div>
+                                            <span className="text-sm text-foreground truncate font-semibold">...</span>
+                                        </div>
+                                        <span className="hidden sm:block text-xs text-muted-foreground">Back</span>
+                                        <span className="hidden lg:block text-[11px] text-muted-foreground">Parent folder</span>
+                                        <div className="flex items-center justify-end gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                                            <button
+                                                onClick={(e) => { e.stopPropagation(); navigateBack(backTargetIndex); }}
+                                                className="p-1.5 rounded-lg text-primary hover:bg-primary/10 transition-colors"
+                                                title={t("common.back")}
+                                            >
+                                                <ChevronLeft className="w-4 h-4" />
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
                                 {filteredFolders.map(folder => (
                                     <div
                                         key={folder.id}
                                         draggable
                                         onDragStartCapture={(e) => handleDragStart(e, folder.id, 'folder')}
+                                        onDragEnd={handleDragEnd}
                                         onDragOver={handleDragOver}
+                                        onDragOverCapture={() => setDragOverFolderId(folder.id)}
                                         onDragEnter={() => setDragOverFolderId(folder.id)}
-                                        onDragLeave={() => setDragOverFolderId(null)}
                                         onDrop={(e) => handleDrop(e, folder.id)}
                                         className={cn(
-                                            "grid grid-cols-[40px_1fr_80px_80px] sm:grid-cols-[40px_1fr_100px_100px_100px] gap-2 sm:gap-4 px-4 sm:px-6 py-2.5 sm:py-3 items-center border-b border-border last:border-0 hover:bg-muted/30 transition-colors group cursor-default",
-                                            dragOverFolderId === folder.id && "bg-primary/5",
-                                            selectedItems.find(i => i.id === folder.id) && "bg-primary/5"
+                                            "grid grid-cols-[40px_1fr_80px_80px] sm:grid-cols-[40px_1fr_100px_100px_100px] gap-2 sm:gap-4 px-4 sm:px-6 py-2.5 sm:py-3 items-center border-b border-border last:border-0 hover:bg-muted/30 transition-all duration-150 group cursor-grab active:cursor-grabbing",
+                                            dragOverFolderId === folder.id && "bg-primary/10 ring-2 ring-primary/40 scale-[1.005]",
+                                            selectedItems.find(i => i.id === folder.id) && "bg-primary/5",
+                                            movingItemIds.includes(folder.id) && "opacity-40 scale-95 translate-x-3"
                                         )}
                                         ref={(el) => { if (el) itemRefs.current.set(folder.id, el); else itemRefs.current.delete(folder.id); }}
                                         onDoubleClick={() => navigateToFolder(folder)}
+                                        onContextMenu={(e) => openContextMenu(e, { id: folder.id, type: 'folder', name: folder.name })}
                                     >
                                         <div className="flex items-center justify-center" onClick={(e) => toggleItemSelection(folder.id, 'folder', e)}>
                                             <div className={cn(
@@ -1068,13 +1226,16 @@ export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserPro
                                         key={file.id}
                                         draggable
                                         onDragStartCapture={(e) => handleDragStart(e, file.id, 'file')}
+                                        onDragEnd={handleDragEnd}
                                         className={cn(
-                                            "grid grid-cols-[40px_1fr_80px_80px] sm:grid-cols-[40px_1fr_100px_100px_100px] gap-2 sm:gap-4 px-4 sm:px-6 py-2.5 sm:py-3 items-center border-b border-border last:border-0 hover:bg-muted/30 transition-colors group cursor-pointer",
+                                            "grid grid-cols-[40px_1fr_80px_80px] sm:grid-cols-[40px_1fr_100px_100px_100px] gap-2 sm:gap-4 px-4 sm:px-6 py-2.5 sm:py-3 items-center border-b border-border last:border-0 hover:bg-muted/30 transition-all duration-150 group cursor-grab active:cursor-grabbing",
                                             selectedFile === file.id && "bg-accent/40",
-                                            selectedItems.find(i => i.id === file.id) && "bg-primary/5"
+                                            selectedItems.find(i => i.id === file.id) && "bg-primary/5",
+                                            movingItemIds.includes(file.id) && "opacity-40 scale-95 translate-x-3"
                                         )}
                                         ref={(el) => { if (el) itemRefs.current.set(file.id, el); else itemRefs.current.delete(file.id); }}
                                         onClick={() => setPreviewFile(file)}
+                                        onContextMenu={(e) => openContextMenu(e, { id: file.id, type: 'file', name: file.originalName })}
                                     >
                                         <div className="flex items-center justify-center" onClick={(e) => toggleItemSelection(file.id, 'file', e)}>
                                             <div className={cn(
@@ -1093,6 +1254,7 @@ export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserPro
                                                         src={previews[file.id]}
                                                         alt=""
                                                         crossOrigin="use-credentials"
+                                                        draggable={false}
                                                         className="w-full h-full object-cover"
                                                         onLoad={() => {
                                                             clearPreviewTimer(file.id);
@@ -1109,6 +1271,7 @@ export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserPro
                                                     <video
                                                         src={previews[file.id]}
                                                         crossOrigin="use-credentials"
+                                                        draggable={false}
                                                         className="w-full h-full object-cover"
                                                         muted
                                                         playsInline
@@ -1169,23 +1332,59 @@ export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserPro
                         ) : (
                             // Grid View
                             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 md:gap-6 selection-zone">
+                                {showBackFolderItem && (
+                                    <motion.div
+                                        key="__folder_back_grid__"
+                                        onDragOver={handleDragOver}
+                                        onDragOverCapture={() => setDragOverFolderId(parentFolderId)}
+                                        onDragEnter={() => setDragOverFolderId(parentFolderId)}
+                                        onDrop={(e) => handleDrop(e, parentFolderId)}
+                                        className={cn(
+                                            "group cursor-pointer notion-card flex flex-col items-center p-0 relative overflow-hidden transition-all duration-150",
+                                            dragOverFolderId === parentFolderId && "ring-4 ring-primary/60 bg-primary/10 scale-[1.04] shadow-xl"
+                                        )}
+                                        onClick={() => navigateBack(backTargetIndex)}
+                                    >
+                                        <div className="w-full aspect-[4/3] relative overflow-hidden bg-gradient-to-br from-primary/5 to-primary/15 flex items-center justify-center">
+                                            <FolderIcon className="w-20 h-20 text-primary/40 fill-primary/10" />
+                                            {dragOverFolderId === parentFolderId && (
+                                                <motion.div
+                                                    initial={{ opacity: 0 }}
+                                                    animate={{ opacity: 1 }}
+                                                    className="absolute inset-0 bg-primary/20 backdrop-blur-[1px] flex items-center justify-center"
+                                                >
+                                                    <div className="px-3 py-1.5 rounded-xl bg-background/90 border border-primary/30 text-xs font-bold text-primary">
+                                                        Soltar para mover aquí
+                                                    </div>
+                                                </motion.div>
+                                            )}
+                                        </div>
+                                        <div className="w-full p-3 bg-background/80 backdrop-blur-sm">
+                                            <h3 className="text-[12px] sm:text-[13px] font-semibold text-foreground truncate w-full mb-1">...</h3>
+                                            <p className="text-[9px] text-muted-foreground/60">Carpeta anterior</p>
+                                        </div>
+                                    </motion.div>
+                                )}
                                 {filteredFolders.map(folder => (
                                     <motion.div
                                         key={folder.id}
                                         draggable
                                         onDragStartCapture={(e) => handleDragStart(e, folder.id, 'folder')}
+                                        onDragEnd={handleDragEnd}
                                         onDragOver={handleDragOver}
+                                        onDragOverCapture={() => setDragOverFolderId(folder.id)}
                                         onDragEnter={() => setDragOverFolderId(folder.id)}
-                                        onDragLeave={() => setDragOverFolderId(null)}
                                         onDrop={(e) => handleDrop(e, folder.id)}
                                         whileDrag={{ scale: 1.05, opacity: 0.8, rotate: -2 }}
                                         className={cn(
-                                            "group cursor-default notion-card flex flex-col items-center p-0 relative overflow-hidden",
-                                            dragOverFolderId === folder.id && "ring-2 ring-primary bg-primary/5 scale-105",
-                                            selectedItems.find(i => i.id === folder.id) && "ring-2 ring-primary/40 bg-primary/5"
+                                            "group cursor-grab active:cursor-grabbing notion-card flex flex-col items-center p-0 relative overflow-hidden transition-all duration-150",
+                                            dragOverFolderId === folder.id && "ring-4 ring-primary/60 bg-primary/10 scale-[1.04] shadow-xl",
+                                            selectedItems.find(i => i.id === folder.id) && "ring-2 ring-primary/40 bg-primary/5",
+                                            movingItemIds.includes(folder.id) && "opacity-40 scale-95 translate-x-3"
                                         )}
                                         ref={(el) => { if (el) itemRefs.current.set(folder.id, el); else itemRefs.current.delete(folder.id); }}
                                         onClick={() => navigateToFolder(folder)}
+                                        onContextMenu={(e) => openContextMenu(e, { id: folder.id, type: 'folder', name: folder.name })}
                                     >
                                         {/* Grid Checkbox: visible on mobile, hover on desktop */}
                                         <div
@@ -1203,6 +1402,17 @@ export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserPro
                                         {/* Folder Preview Area */}
                                         <div className="w-full aspect-[4/3] relative overflow-hidden bg-gradient-to-br from-primary/5 to-primary/10 flex items-center justify-center group-hover:from-primary/10 group-hover:to-primary/15 transition-colors">
                                             <FolderIcon className="w-20 h-20 text-primary/40 fill-primary/10 transition-transform duration-500 group-hover:scale-110" />
+                                                {dragOverFolderId === folder.id && (
+                                                    <motion.div
+                                                        initial={{ opacity: 0 }}
+                                                        animate={{ opacity: 1 }}
+                                                        className="absolute inset-0 bg-primary/20 backdrop-blur-[1px] flex items-center justify-center"
+                                                    >
+                                                        <div className="px-3 py-1.5 rounded-xl bg-background/90 border border-primary/30 text-xs font-bold text-primary">
+                                                            Soltar para mover aquí
+                                                        </div>
+                                                    </motion.div>
+                                                )}
 
                                             {/* Folder Badge */}
                                             <div className="absolute top-3 right-3 px-2 py-1 rounded-md bg-primary/80 backdrop-blur-sm text-white text-[10px] font-semibold uppercase tracking-wider">
@@ -1245,15 +1455,18 @@ export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserPro
                                         key={file.id}
                                         draggable
                                         onDragStartCapture={(e) => handleDragStart(e, file.id, 'file')}
+                                        onDragEnd={handleDragEnd}
                                         onDrop={(e: any) => handleDrop(e, null)}
                                         whileDrag={{ scale: 1.05, opacity: 0.8, rotate: -2 }}
                                         className={cn(
-                                            "group cursor-default notion-card flex flex-col items-center p-0 relative overflow-hidden",
+                                            "group cursor-grab active:cursor-grabbing notion-card flex flex-col items-center p-0 relative overflow-hidden transition-all duration-150",
                                             selectedFile === file.id && "ring-4 ring-primary/5 border-primary/40 shadow-xl",
-                                            selectedItems.find(i => i.id === file.id) && "ring-2 ring-primary/40 bg-primary/5"
+                                            selectedItems.find(i => i.id === file.id) && "ring-2 ring-primary/40 bg-primary/5",
+                                            movingItemIds.includes(file.id) && "opacity-40 scale-95 translate-x-3"
                                         )}
                                         ref={(el) => { if (el) itemRefs.current.set(file.id, el); else itemRefs.current.delete(file.id); }}
                                         onClick={() => setPreviewFile(file)}
+                                        onContextMenu={(e) => openContextMenu(e, { id: file.id, type: 'file', name: file.originalName })}
                                     >
                                         {/* Grid Checkbox Overlay */}
                                         <div
@@ -1276,6 +1489,7 @@ export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserPro
                                                     src={previews[file.id]} 
                                                     alt={file.originalName || 'Preview'} 
                                                     crossOrigin="use-credentials"
+                                                    draggable={false}
                                                     className={cn("w-full h-full object-cover transition-all duration-500 group-hover:scale-110", loadingPreviews[file.id] ? "opacity-0" : "opacity-100")}
                                                     onLoad={() => {
                                                         clearPreviewTimer(file.id);
@@ -1293,6 +1507,7 @@ export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserPro
                                                 <video 
                                                     src={previews[file.id]} 
                                                     crossOrigin="use-credentials"
+                                                    draggable={false}
                                                     className={cn("w-full h-full object-cover transition-all duration-500 group-hover:scale-110 bg-black", loadingPreviews[file.id] ? "opacity-0" : "opacity-100")}
                                                     muted 
                                                     playsInline 
@@ -1575,6 +1790,112 @@ export function FileBrowser({ refreshTrigger, searchQuery = "" }: FileBrowserPro
                     />
                 )
             }
+
+            {mounted && contextMenu && createPortal(
+                <div
+                    className="fixed z-[11000] min-w-[220px] rounded-xl border border-border bg-background/95 backdrop-blur shadow-2xl p-1.5"
+                    style={{
+                        left: Math.min(contextMenu.x, window.innerWidth - 240),
+                        top: Math.min(contextMenu.y, window.innerHeight - 280),
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    <div className="px-2.5 py-2 border-b border-border/60">
+                        <p className="text-[11px] font-bold text-foreground truncate">{contextMenu.target.name}</p>
+                        <p className="text-[10px] text-muted-foreground uppercase tracking-wider">
+                            {contextMenu.target.type === 'file' ? t("common.itemType.file") : t("common.itemType.folder")}
+                        </p>
+                    </div>
+
+                    {contextMenu.target.type === 'folder' ? (
+                        <div className="py-1">
+                            <button
+                                onClick={() => {
+                                    const folder = folders.find((f) => f.id === contextMenu.target.id);
+                                    if (folder) navigateToFolder(folder);
+                                    setContextMenu(null);
+                                }}
+                                className="w-full text-left px-2.5 py-2 text-sm rounded-lg hover:bg-muted/40"
+                            >
+                                Abrir carpeta
+                            </button>
+                            <button
+                                onClick={() => {
+                                    if (!canRename) return notifyBlocked("No tienes permiso para renombrar carpetas.", "rename_files");
+                                    confirmRename(contextMenu.target.id, contextMenu.target.name, 'folder');
+                                    setContextMenu(null);
+                                }}
+                                className="w-full text-left px-2.5 py-2 text-sm rounded-lg hover:bg-muted/40"
+                            >
+                                Renombrar
+                            </button>
+                            <button
+                                onClick={() => {
+                                    if (!canDelete) return notifyBlocked("No tienes permiso para eliminar carpetas.", "delete_files");
+                                    confirmDelete(contextMenu.target.id, contextMenu.target.name, 'folder');
+                                    setContextMenu(null);
+                                }}
+                                className="w-full text-left px-2.5 py-2 text-sm rounded-lg text-red-500 hover:bg-red-50"
+                            >
+                                Eliminar
+                            </button>
+                        </div>
+                    ) : (
+                        <div className="py-1">
+                            <button
+                                onClick={() => {
+                                    const file = files.find((f) => f.id === contextMenu.target.id);
+                                    if (file) setPreviewFile(file);
+                                    setContextMenu(null);
+                                }}
+                                className="w-full text-left px-2.5 py-2 text-sm rounded-lg hover:bg-muted/40"
+                            >
+                                Abrir vista previa
+                            </button>
+                            <button
+                                onClick={() => {
+                                    handleDownload(contextMenu.target.id);
+                                    setContextMenu(null);
+                                }}
+                                className="w-full text-left px-2.5 py-2 text-sm rounded-lg hover:bg-muted/40"
+                            >
+                                Descargar
+                            </button>
+                            <button
+                                onClick={() => {
+                                    if (!canShareFiles) return notifyBlocked("No tienes permiso para compartir archivos.", "share_files");
+                                    confirmCreateLink(contextMenu.target.id);
+                                    setContextMenu(null);
+                                }}
+                                className="w-full text-left px-2.5 py-2 text-sm rounded-lg hover:bg-muted/40"
+                            >
+                                Compartir
+                            </button>
+                            <button
+                                onClick={() => {
+                                    if (!canRename) return notifyBlocked("No tienes permiso para renombrar archivos.", "rename_files");
+                                    confirmRename(contextMenu.target.id, contextMenu.target.name, 'file');
+                                    setContextMenu(null);
+                                }}
+                                className="w-full text-left px-2.5 py-2 text-sm rounded-lg hover:bg-muted/40"
+                            >
+                                Renombrar
+                            </button>
+                            <button
+                                onClick={() => {
+                                    if (!canDelete) return notifyBlocked("No tienes permiso para eliminar archivos.", "delete_files");
+                                    confirmDelete(contextMenu.target.id, contextMenu.target.name, 'file');
+                                    setContextMenu(null);
+                                }}
+                                className="w-full text-left px-2.5 py-2 text-sm rounded-lg text-red-500 hover:bg-red-50"
+                            >
+                                Eliminar
+                            </button>
+                        </div>
+                    )}
+                </div>,
+                document.body
+            )}
 
 
             {/* Bulk Actions Floating Bar */}

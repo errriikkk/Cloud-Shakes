@@ -11,6 +11,8 @@ import { useRouter } from "next/navigation";
 import { createPortal } from "react-dom";
 import { useTranslation } from "@/lib/i18n";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
+import { PermissionGuard } from "@/components/PermissionGuard";
+import { Button } from "@/components/ui/Button";
 
 interface ImageFile {
     id: string;
@@ -128,10 +130,11 @@ export default function GalleryPage() {
     }
 
     return (
-        <>
+        <PermissionGuard permission="view_gallery" redirectUrl="/dashboard/home">
             <div className="space-y-6">
                 {/* Header */}
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="rounded-2xl border border-border/60 bg-background p-5">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                     <div>
                         <h1 className="text-4xl font-extrabold text-foreground tracking-tightest">
                             {t('gallery.title')}
@@ -142,30 +145,25 @@ export default function GalleryPage() {
                     </div>
 
                     <div className="flex items-center gap-2">
-                        <button
+                        <Button
                             onClick={() => setViewMode("grid")}
-                            className={cn(
-                                "p-2 rounded-lg transition-colors",
-                                viewMode === "grid"
-                                    ? "bg-primary/10 text-primary"
-                                    : "bg-muted/30 text-muted-foreground hover:bg-muted/50"
-                            )}
+                            variant={viewMode === "grid" ? "default" : "outline"}
+                            size="icon"
+                            className="rounded-xl"
                             title={t('files.viewGrid')}
                         >
                             <Grid className="w-5 h-5" />
-                        </button>
-                        <button
+                        </Button>
+                        <Button
                             onClick={() => setViewMode("masonry")}
-                            className={cn(
-                                "p-2 rounded-lg transition-colors",
-                                viewMode === "masonry"
-                                    ? "bg-primary/10 text-primary"
-                                    : "bg-muted/30 text-muted-foreground hover:bg-muted/50"
-                            )}
+                            variant={viewMode === "masonry" ? "default" : "outline"}
+                            size="icon"
+                            className="rounded-xl"
                             title={t('files.viewList')}
                         >
                             <ImageIcon className="w-5 h-5" />
-                        </button>
+                        </Button>
+                    </div>
                     </div>
                 </div>
 
@@ -310,7 +308,7 @@ export default function GalleryPage() {
                 </AnimatePresence>,
                 document.body
             )}
-        </>
+        </PermissionGuard>
     );
 }
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { useTranslation } from "@/lib/i18n";
@@ -56,12 +56,14 @@ export function NotificationPanel({ className }: NotificationPanelProps) {
     const [seenMessageIds, setSeenMessageIds] = useState<Set<string>>(new Set());
     const [pollErrorCount, setPollErrorCount] = useState(0);
     const [isPollingPaused, setIsPollingPaused] = useState(false);
+    const initializedMessagesRef = useRef(false);
 
     const unreadCount = notifications.filter(n => !n.read).length;
 
     // Load seen messages from localStorage on mount
     useEffect(() => {
         if (user?.id) {
+            initializedMessagesRef.current = false;
             const stored = localStorage.getItem(`seen_messages_${user.id}`);
             if (stored) {
                 try {
@@ -73,6 +75,19 @@ export function NotificationPanel({ className }: NotificationPanelProps) {
             }
         }
     }, [user?.id]);
+
+    useEffect(() => {
+        if (typeof window === "undefined") return;
+        const savedMode = window.localStorage.getItem("notification_mode");
+        if (savedMode === "all" || savedMode === "mentions" || savedMode === "dnd" || savedMode === "away") {
+            setMode(savedMode);
+        }
+    }, []);
+
+    useEffect(() => {
+        if (typeof window === "undefined") return;
+        window.localStorage.setItem("notification_mode", mode);
+    }, [mode]);
 
     // Save seen messages to localStorage
     const saveSeenMessages = useCallback((ids: Set<string>) => {
@@ -138,16 +153,29 @@ export function NotificationPanel({ className }: NotificationPanelProps) {
             });
             
             const conversations = Array.isArray(res.data) ? res.data : (res.data?.data || []);
-            const newMessageIds: string[] = [];
+            const snapshotMessageIds: string[] = [];
             const newNotifications: Notification[] = [];
             
             for (const conv of conversations) {
                 if (conv.lastMessage) {
                     const msgId = conv.lastMessage.id;
+                    snapshotMessageIds.push(msgId);
                     
                     // Skip if already notified, already seen, or from current user
                     if (lastMessageIds.has(msgId) || seenMessageIds.has(msgId) || conv.lastMessage.senderId === user.id) {
                         continue;
+                    }
+
+                    if (mode === "mentions") {
+                        const text = String(conv.lastMessage.content || "").toLowerCase();
+                        const me = (user.displayName || user.username || "").toLowerCase();
+                        const username = (user.username || "").toLowerCase();
+                        const directMention =
+                            text.includes(`@${username}`) ||
+                            (me && text.includes(`@${me}`)) ||
+                            text.includes("@all") ||
+                            text.includes("@everyone");
+                        if (!directMention) continue;
                     }
                     
                     const senderName = conv.lastMessage.sender?.displayName || conv.lastMessage.sender?.username || 'Someone';
@@ -162,13 +190,27 @@ export function NotificationPanel({ className }: NotificationPanelProps) {
                         senderName,
                         conversationId: conv.id
                     });
-                    newMessageIds.push(msgId);
                 }
             }
-            
+
+            // Baseline the existing latest messages once to avoid late notifications
+            if (!initializedMessagesRef.current) {
+                setLastMessageIds(new Set(snapshotMessageIds));
+                initializedMessagesRef.current = true;
+                setPollErrorCount(0);
+                return;
+            }
+
+            if (snapshotMessageIds.length > 0) {
+                setLastMessageIds(prev => new Set([...prev, ...snapshotMessageIds].slice(-300)));
+            }
+
             if (newNotifications.length > 0) {
-                setLastMessageIds(prev => new Set([...prev, ...newMessageIds]));
-                setNotifications(prev => [...newNotifications, ...prev].slice(0, 4));
+                setNotifications(prev => {
+                    const merged = [...newNotifications, ...prev];
+                    const unique = merged.filter((item, idx, arr) => arr.findIndex(x => x.id === item.id) === idx);
+                    return unique.slice(0, 25);
+                });
             }
             
             setPollErrorCount(0);
@@ -204,9 +246,7 @@ export function NotificationPanel({ className }: NotificationPanelProps) {
     }, [mode]);
 
     const markAsRead = (id: string) => {
-        setNotifications(prev => 
-            prev.map(n => n.id === id ? { ...n, read: true } : n)
-        );
+        markAsSeen(id);
     };
 
     const markAllAsRead = () => {
@@ -378,7 +418,12 @@ export function NotificationPanel({ className }: NotificationPanelProps) {
                                             "p-4 border-b border-border/30 hover:bg-muted/30 transition-all duration-200 cursor-pointer group",
                                             !notification.read && "bg-primary/5 border-l-2 border-l-primary"
                                         )}
-                                        onClick={() => markAsRead(notification.id)}
+                                        onClick={() => {
+                                            markAsRead(notification.id);
+                                            if (notification.actionUrl) {
+                                                router.push(notification.actionUrl);
+                                            }
+                                        }}
                                     >
                                         <div className="flex gap-3">
                                             <div className={cn(

@@ -6,7 +6,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
     Link as LinkIcon, Trash2, Copy, Eye, Lock, Unlock,
     Clock, FileText, Image as ImageIcon, Video, Music,
-    ExternalLink, Zap, AlertTriangle, Check, Code, Folder, ChevronRight, HardDrive, ChevronDown, ChevronUp
+    ExternalLink, Zap, AlertTriangle, Check, Code, Folder,
+    ChevronRight, ChevronDown, ChevronUp, Shield, Globe
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -55,30 +56,91 @@ interface GroupedLinks {
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
 
+// ─── Subcomponents ────────────────────────────────────────────────────────────
+
+function StatusBadge({
+    icon: Icon,
+    label,
+    variant = "default",
+}: {
+    icon: React.ElementType;
+    label: string;
+    variant?: "default" | "active" | "warning" | "danger" | "info" | "embed";
+}) {
+    const variants = {
+        default: "bg-muted/60 text-muted-foreground border-border/40",
+        active: "bg-primary text-primary-foreground border-primary shadow-sm shadow-primary/20",
+        warning: "bg-amber-50 text-amber-600 border-amber-100 dark:bg-amber-500/10 dark:border-amber-500/20 dark:text-amber-400",
+        danger: "bg-red-50 text-red-600 border-red-100 dark:bg-red-500/10 dark:border-red-500/20 dark:text-red-400",
+        info: "bg-blue-50 text-blue-600 border-blue-100 dark:bg-blue-500/10 dark:border-blue-500/20 dark:text-blue-400",
+        embed: "bg-emerald-50 text-emerald-600 border-emerald-100 dark:bg-emerald-500/10 dark:border-emerald-500/20 dark:text-emerald-400",
+    };
+
+    return (
+        <span className={cn(
+            "inline-flex items-center gap-1 px-2 py-1 rounded-lg border text-[10px] font-bold leading-none tracking-wide",
+            variants[variant]
+        )}>
+            <Icon className="w-3 h-3" />
+            {label}
+        </span>
+    );
+}
+
+function ActionButton({
+    icon: Icon,
+    label,
+    onClick,
+    variant = "ghost",
+    disabled,
+}: {
+    icon: React.ElementType;
+    label: string;
+    onClick: () => void;
+    variant?: "ghost" | "danger";
+    disabled?: boolean;
+}) {
+    return (
+        <button
+            onClick={onClick}
+            disabled={disabled}
+            title={label}
+            className={cn(
+                "group/btn relative p-2 rounded-xl transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed",
+                variant === "ghost" && "bg-muted/50 hover:bg-muted text-muted-foreground hover:text-foreground",
+                variant === "danger" && "bg-red-50 hover:bg-red-100 text-red-400 hover:text-red-600 dark:bg-red-500/10 dark:hover:bg-red-500/20"
+            )}
+        >
+            <Icon className="w-4 h-4" />
+            {/* Tooltip */}
+            <span className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 px-2 py-1 rounded-lg bg-foreground text-background text-[10px] font-bold whitespace-nowrap opacity-0 group-hover/btn:opacity-100 transition-opacity z-10">
+                {label}
+            </span>
+        </button>
+    );
+}
+
+// ─── Main content ─────────────────────────────────────────────────────────────
+
 function SharedLinksContent() {
     const { t, locale } = useTranslation();
     const { canDeleteLinks } = usePermission();
     const searchParams = useSearchParams();
     const folderParam = searchParams.get("folder");
 
-    // Dynamic document title
     const linksTitle = useMemo(() => {
-        const lang = locale === 'es' ? 'es' : 'en';
-        return lang === 'es' ? 'Enlaces - Enlaces' : 'Links - Links';
+        const lang = locale === "es" ? "es" : "en";
+        return lang === "es" ? "Enlaces" : "Links";
     }, [locale]);
-    
+
     useDocumentTitle(linksTitle);
 
     const [links, setLinks] = useState<LinkItem[]>([]);
     const [folders, setFolders] = useState<FolderItem[]>([]);
-    const [trail, setTrail] = useState<{ id: string | null, name: string }[]>([]);
-
-    const router = useRouter();
-
-
-
+    const [trail, setTrail] = useState<{ id: string | null; name: string }[]>([]);
     const [loading, setLoading] = useState(true);
     const [copiedId, setCopiedId] = useState<string | null>(null);
+    const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
 
     // Modal states
     const [deleteModalOpen, setDeleteModalOpen] = useState(false);
@@ -91,68 +153,59 @@ function SharedLinksContent() {
     const [expiryMinutes, setExpiryMinutes] = useState("");
     const [copyModalOpen, setCopyModalOpen] = useState(false);
     const [copiedUrl, setCopiedUrl] = useState("");
-    const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+
+    const router = useRouter();
+
+    // ── Data fetching ──────────────────────────────────────────────────────────
 
     const fetchLinks = async () => {
         try {
             setLoading(true);
-            // Use the standard links endpoint
-            const res = await axios.get(`${API}/api/links`, {
-                withCredentials: true
-            });
-            
-            // Filter links by folder if folderParam is provided
-            const allLinks = res.data || [];
-            const filteredLinks = folderParam 
-                ? allLinks.filter((link: LinkItem) => link.file?.folderId === folderParam || link.folderId === folderParam)
-                : allLinks.filter((link: LinkItem) => !link.file?.folderId && !link.folderId);
-            
-            // Group links by fileId
+            const res = await axios.get(`${API}/api/links`, { withCredentials: true });
+            const allLinks: LinkItem[] = res.data || [];
+
+            const filteredLinks = folderParam
+                ? allLinks.filter(
+                    (l) => l.file?.folderId === folderParam || l.folderId === folderParam
+                )
+                : allLinks.filter((l) => !l.file?.folderId && !l.folderId);
+
             const linksByFile = new Map<string, LinkItem[]>();
             const ungroupedLinks: LinkItem[] = [];
-            
-            filteredLinks.forEach((link: LinkItem) => {
+
+            filteredLinks.forEach((link) => {
                 if (link.fileId) {
-                    if (!linksByFile.has(link.fileId)) {
-                        linksByFile.set(link.fileId, []);
-                    }
+                    if (!linksByFile.has(link.fileId)) linksByFile.set(link.fileId, []);
                     linksByFile.get(link.fileId)!.push(link);
                 } else {
                     ungroupedLinks.push(link);
                 }
             });
-            
-            // Flatten grouped links (file with multiple links will show as one item with expandable list)
+
             const processedLinks: (LinkItem | GroupedLinks)[] = [];
-            
             linksByFile.forEach((fileLinks, fileId) => {
                 if (fileLinks.length > 1) {
-                    // Multiple links for same file - group them
                     processedLinks.push({ fileId, links: fileLinks });
                 } else {
-                    // Single link - add directly
                     processedLinks.push(fileLinks[0]);
                 }
             });
-            
             processedLinks.push(...ungroupedLinks);
-            
             setLinks(processedLinks as any);
-            
-            // Extract unique folders from links
+
             const folderMap = new Map<string, FolderItem>();
-            allLinks.forEach((link: LinkItem) => {
+            allLinks.forEach((link) => {
                 if (link.file?.folder) {
                     const folder = link.file.folder;
-                    if (!folderMap.has(folder.id)) {
-                        folderMap.set(folder.id, folder);
-                    }
+                    if (!folderMap.has(folder.id)) folderMap.set(folder.id, folder);
                 }
             });
             setFolders(Array.from(folderMap.values()));
-            
-            // Build trail (simplified - you may want to enhance this)
-            setTrail(folderParam ? [{ id: folderParam, name: folderMap.get(folderParam)?.name || t('files.title') }] : []);
+            setTrail(
+                folderParam
+                    ? [{ id: folderParam, name: folderMap.get(folderParam)?.name || t("files.title") }]
+                    : []
+            );
         } catch (err) {
             console.error(err);
         } finally {
@@ -162,29 +215,24 @@ function SharedLinksContent() {
 
     useEffect(() => { fetchLinks(); }, [folderParam]);
 
+    // ── Clipboard ──────────────────────────────────────────────────────────────
+
     const copyToClipboard = async (text: string) => {
         try {
             if (navigator.clipboard && window.isSecureContext) {
                 await navigator.clipboard.writeText(text);
             } else {
-                // Fallback for non-secure contexts (HTTP)
-                const textArea = document.createElement("textarea");
-                textArea.value = text;
-                textArea.style.position = "fixed";
-                textArea.style.left = "-9999px";
-                textArea.style.top = "0";
-                document.body.appendChild(textArea);
-                textArea.focus();
-                textArea.select();
-                try {
-                    document.execCommand('copy');
-                } catch (err) {
-                    console.error('Fallback: Oops, unable to copy', err);
-                }
-                document.body.removeChild(textArea);
+                const ta = document.createElement("textarea");
+                ta.value = text;
+                ta.style.cssText = "position:fixed;left:-9999px;top:0";
+                document.body.appendChild(ta);
+                ta.focus();
+                ta.select();
+                document.execCommand("copy");
+                document.body.removeChild(ta);
             }
         } catch (err) {
-            console.error('Failed to copy!', err);
+            console.error("Copy failed", err);
         }
     };
 
@@ -206,6 +254,8 @@ function SharedLinksContent() {
         setTimeout(() => setCopiedId(null), 2000);
     };
 
+    // ── Actions ────────────────────────────────────────────────────────────────
+
     const confirmDelete = (id: string) => {
         setLinkToDelete(id);
         setDeleteModalOpen(true);
@@ -219,7 +269,7 @@ function SharedLinksContent() {
         if (!linkToDelete) return;
         try {
             await axios.delete(`${API}/api/links/${linkToDelete}`, { withCredentials: true });
-            setLinks(links.filter(l => l.id !== linkToDelete));
+            setLinks((prev) => prev.filter((l: any) => l.id !== linkToDelete));
         } catch (err) {
             console.error(err);
         } finally {
@@ -234,7 +284,6 @@ function SharedLinksContent() {
             return;
         }
         if (link.isPasswordProtected) {
-            // Direct remove
             handleTogglePassword(link, true);
         } else {
             setLinkToProtect(link);
@@ -257,40 +306,6 @@ function SharedLinksContent() {
         } finally {
             setPasswordModalOpen(false);
             setLinkToProtect(null);
-        }
-    };
-
-    const handleToggleDirectDownload = async (link: LinkItem) => {
-        if (!canDeleteLinks()) {
-            showPermissionDenied("No tienes permiso para modificar enlaces.", "delete_links");
-            return;
-        }
-        try {
-            await axios.put(`${API}/api/links/${link.id}`, {
-                directDownload: !link.directDownload,
-                isEmbed: false // Mutually exclusive
-            }, { withCredentials: true });
-            fetchLinks();
-        } catch (err) {
-            console.error(err);
-        }
-    };
-
-    const handleToggleEmbed = async (link: LinkItem) => {
-        if (!canDeleteLinks()) {
-            showPermissionDenied("No tienes permiso para modificar enlaces.", "delete_links");
-            return;
-        }
-        try {
-            await axios.put(`${API}/api/links/${link.id}`, {
-                isEmbed: !link.isEmbed,
-                directDownload: false, // Mutually exclusive
-                password: null, // Clear security as requested for embeds
-                expiresInMinutes: null
-            }, { withCredentials: true });
-            fetchLinks();
-        } catch (err) {
-            console.error(err);
         }
     };
 
@@ -323,27 +338,16 @@ function SharedLinksContent() {
         }
     };
 
-    const handleRemoveExpiry = async (id: string) => {
-        if (!canDeleteLinks()) {
-            showPermissionDenied("No tienes permiso para gestionar expiracion de enlaces.", "delete_links");
-            return;
-        }
-        try {
-            await axios.put(`${API}/api/links/${id}`, { expiresInMinutes: null }, { withCredentials: true });
-            setLinks(prev => prev.map(l => l.id === id ? { ...l, expiresAt: null, isExpired: false } : l));
-        } catch (err) {
-            console.error(err);
-        }
-    };
+    // ── Helpers ────────────────────────────────────────────────────────────────
 
     const getFileIcon = (mimeType?: string) => {
-        const iconClass = "w-5 h-5";
-        if (mimeType === 'folder') return <LinkIcon className={`${iconClass} text-primary`} />;
-        if (!mimeType) return <FileText className={`${iconClass} text-[#d4d4d4]`} />;
-        if (mimeType.startsWith("image/")) return <ImageIcon className={`${iconClass} text-[#d4d4d4]`} />;
-        if (mimeType.startsWith("video/")) return <Video className={`${iconClass} text-[#d4d4d4]`} />;
-        if (mimeType.startsWith("audio/")) return <Music className={`${iconClass} text-[#d4d4d4]`} />;
-        return <FileText className={`${iconClass} text-[#d4d4d4]`} />;
+        const cls = "w-5 h-5";
+        if (mimeType === "folder") return <LinkIcon className={`${cls} text-primary`} />;
+        if (!mimeType) return <FileText className={`${cls} text-muted-foreground`} />;
+        if (mimeType.startsWith("image/")) return <ImageIcon className={`${cls} text-muted-foreground`} />;
+        if (mimeType.startsWith("video/")) return <Video className={`${cls} text-muted-foreground`} />;
+        if (mimeType.startsWith("audio/")) return <Music className={`${cls} text-muted-foreground`} />;
+        return <FileText className={`${cls} text-muted-foreground`} />;
     };
 
     const formatSize = (bytes: number) => {
@@ -352,13 +356,9 @@ function SharedLinksContent() {
         return `${(bytes / 1024 / 1024).toFixed(2)} MB`;
     };
 
-    const formatDate = (date: string) => new Date(date).toLocaleDateString(undefined, {
-        month: "short", day: "numeric", year: "numeric",
-    });
-
     const timeUntilExpiry = (expiresAt: string) => {
         const diff = new Date(expiresAt).getTime() - Date.now();
-        if (diff <= 0) return t('links.expires');
+        if (diff <= 0) return t("links.expires");
         const hours = Math.floor(diff / 3600000);
         const mins = Math.floor((diff % 3600000) / 60000);
         if (hours > 24) return `${Math.floor(hours / 24)}d`;
@@ -366,454 +366,490 @@ function SharedLinksContent() {
         return `${mins}m`;
     };
 
+    const totalViews = links.reduce((sum, l: any) => {
+        if ("links" in l) return sum + l.links.reduce((s: number, lk: LinkItem) => s + lk.views, 0);
+        return sum + (l.views || 0);
+    }, 0);
+
+    // ── Loading state ──────────────────────────────────────────────────────────
+
     if (loading) {
         return (
-            <div className="py-20 text-center text-[#9b9b9b] text-sm font-medium">{t('common.loading')}</div>
+            <div className="flex flex-col items-center justify-center py-32 gap-4">
+                <div className="w-8 h-8 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+                <p className="text-sm text-muted-foreground font-medium">{t("common.loading")}</p>
+            </div>
         );
     }
 
+    // ── Render ─────────────────────────────────────────────────────────────────
+
     return (
-        <div className="space-y-6">
-            {/* Header */}
+        <div className="space-y-8 max-w-4xl">
+
+            {/* ── Header ── */}
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
-                <div>
-                    <div className="flex items-center gap-2 mb-2">
-                        {trail.map((item, index) => (
-                            <div key={item.id || 'root'} className="flex items-center gap-2">
-                                {index > 0 && <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/40" />}
-                                <button
-                                    onClick={() => {
-                                        if (item.id) router.push(`/dashboard/links?folder=${item.id}`);
-                                        else router.push('/dashboard/links');
-                                    }}
-                                    className={cn(
-                                        "text-sm font-bold transition-colors",
-                                        index === trail.length - 1
-                                            ? "text-foreground"
-                                            : "text-muted-foreground hover:text-foreground"
-                                    )}
-                                >
-                                    {item.name}
-                                </button>
-                            </div>
-                        ))}
-                    </div>
-                    <h1 className="text-4xl font-extrabold text-foreground tracking-tightest">
-                        {trail[trail.length - 1]?.name || t('links.title')}
+                <div className="space-y-2">
+                    {/* Breadcrumb */}
+                    {trail.length > 0 && (
+                        <nav className="flex items-center gap-1.5">
+                            <button
+                                onClick={() => router.push("/dashboard/links")}
+                                className="text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors"
+                            >
+                                {t("links.title")}
+                            </button>
+                            {trail.map((item) => (
+                                <span key={item.id} className="flex items-center gap-1.5">
+                                    <ChevronRight className="w-3 h-3 text-muted-foreground/40" />
+                                    <span className="text-xs font-semibold text-foreground">{item.name}</span>
+                                </span>
+                            ))}
+                        </nav>
+                    )}
+
+                    <h1 className="text-4xl font-extrabold text-foreground tracking-tight">
+                        {trail[trail.length - 1]?.name || t("links.title")}
                     </h1>
+                    <p className="text-sm text-muted-foreground">
+                        {links.length} {links.length === 1 ? "enlace" : "enlaces"} · {totalViews} vistas en total
+                    </p>
                 </div>
 
-                {/* Stats */}
-                <div className="flex items-center gap-2">
-                    <div className="flex items-center gap-2 bg-muted/50 border border-border/60 rounded-2xl p-1 shrink-0">
-                        <div className="px-4 py-2 flex items-center gap-2 bg-background rounded-xl shadow-sm border border-border/40">
-                            <Eye className="w-4 h-4 text-blue-500" />
-                            <span className="text-xs font-bold text-foreground">
-                                {links.reduce((sum, l) => sum + l.views, 0)} <span className="text-muted-foreground font-medium">{t('links.clicks')}</span>
-                            </span>
-                        </div>
+                {/* Stats pill */}
+                <div className="flex items-center gap-2 px-4 py-3 bg-muted/50 border border-border/60 rounded-2xl shrink-0">
+                    <div className="w-8 h-8 rounded-xl bg-blue-500/10 flex items-center justify-center">
+                        <Eye className="w-4 h-4 text-blue-500" />
                     </div>
-
+                    <div>
+                        <p className="text-xs text-muted-foreground font-medium leading-none mb-0.5">{t("links.clicks")}</p>
+                        <p className="text-sm font-extrabold text-foreground leading-none">{totalViews}</p>
+                    </div>
                 </div>
             </div>
 
+            {/* ── Empty state ── */}
+            {links.length === 0 && folders.length === 0 && (
+                <div className="flex flex-col items-center justify-center py-24 text-center gap-4 border border-dashed border-border/60 rounded-3xl">
+                    <div className="w-14 h-14 rounded-2xl bg-muted flex items-center justify-center">
+                        <LinkIcon className="w-6 h-6 text-muted-foreground" />
+                    </div>
+                    <div>
+                        <p className="text-sm font-bold text-foreground">No hay enlaces aún</p>
+                        <p className="text-xs text-muted-foreground mt-1">Comparte un archivo para generar tu primer enlace</p>
+                    </div>
+                </div>
+            )}
 
-            {/* Content Display */}
-            <div className="flex flex-col gap-4">
+            {/* ── List ── */}
+            <div className="flex flex-col gap-3">
                 <AnimatePresence mode="popLayout">
-                    {/* Folders (Mirrors) */}
+
+                    {/* Folders */}
                     {folders.map((folder, idx) => (
                         <motion.div
                             key={folder.id}
-                            initial={{ opacity: 0, y: 10 }}
+                            initial={{ opacity: 0, y: 8 }}
                             animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, x: -20 }}
-                            transition={{ delay: idx * 0.05 }}
+                            exit={{ opacity: 0, x: -16 }}
+                            transition={{ delay: idx * 0.04, duration: 0.2 }}
                             onClick={() => router.push(`/dashboard/links?folder=${folder.id}`)}
-                            className="group bg-background border border-border/60 rounded-3xl p-4 transition-all hover:border-border hover:shadow-xl hover:shadow-black/[0.03] active:scale-[0.995] cursor-pointer flex items-center gap-4"
+                            className="group flex items-center gap-4 bg-background border border-border/60 rounded-2xl p-4 cursor-pointer hover:border-border hover:shadow-lg hover:shadow-black/[0.04] active:scale-[0.998] transition-all duration-150"
                         >
-                            <div className="rounded-2xl bg-muted/60 flex items-center justify-center shrink-0 border border-border/40 w-12 h-12">
-                                <Folder className="text-primary w-6 h-6" />
+                            <div className="w-10 h-10 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0">
+                                <Folder className="w-5 h-5 text-primary" />
                             </div>
-                            <div className="min-w-0 flex-1">
-                                <h3 className="text-sm font-bold text-foreground truncate">{folder.name}</h3>
-                                <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-widest mt-0.5">{t('files.noFolders').replace('No hay ', '')}</p>
+                            <div className="flex-1 min-w-0">
+                                <p className="text-sm font-bold text-foreground truncate">{folder.name}</p>
+                                <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-semibold mt-0.5">Carpeta</p>
                             </div>
+                            <ChevronRight className="w-4 h-4 text-muted-foreground/50 group-hover:text-muted-foreground transition-colors shrink-0" />
                         </motion.div>
                     ))}
 
                     {/* Links */}
-                    {links.map((item, idx) => {
-                        // Check if this is a grouped item
-                        const isGrouped = 'fileId' in item && 'links' in item;
+                    {links.map((item: any, idx) => {
+                        const isGrouped = "fileId" in item && "links" in item;
+
+                        // ── Grouped links ──
                         if (isGrouped) {
                             const group = item as GroupedLinks;
                             const firstLink = group.links[0];
                             const isExpanded = expandedGroups.has(group.fileId);
-                            
+
                             return (
                                 <motion.div
                                     key={`group-${group.fileId}`}
-                                    initial={{ opacity: 0, y: 10 }}
+                                    initial={{ opacity: 0, y: 8 }}
                                     animate={{ opacity: 1, y: 0 }}
-                                    exit={{ opacity: 0, x: -20 }}
-                                    transition={{ delay: (folders.length + idx) * 0.05 }}
-                                    className="group bg-background border border-border/60 rounded-3xl transition-all hover:border-border hover:shadow-xl hover:shadow-black/[0.03] p-5"
+                                    exit={{ opacity: 0, x: -16 }}
+                                    transition={{ delay: (folders.length + idx) * 0.04, duration: 0.2 }}
+                                    className="bg-background border border-border/60 rounded-2xl overflow-hidden hover:border-border hover:shadow-lg hover:shadow-black/[0.04] transition-all duration-150"
                                 >
-                                    {/* Group Header */}
-                                    <div className="flex gap-6 flex-col lg:flex-row lg:items-center">
-                                        <div className="flex items-center gap-4 flex-1 min-w-0">
-                                            <div className="rounded-2xl bg-muted/60 flex items-center justify-center shrink-0 border border-border/40 w-12 h-12">
-                                                {getFileIcon(firstLink.file?.mimeType)}
-                                            </div>
-                                            <div className="min-w-0 flex-1">
-                                                <div className="flex items-center gap-2 mb-1">
-                                                    <h3 className="text-sm font-bold text-foreground truncate">
-                                                        {firstLink.file?.originalName || t('common.itemType.file')}
-                                                    </h3>
-                                                    <span className="text-[10px] font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-full">
-                                                        {group.links.length} {t('links.title')}
-                                                    </span>
-                                                </div>
-                                                <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-                                                    {firstLink.file && (
-                                                        <span className="text-[10px] text-muted-foreground font-medium">{formatSize(firstLink.file.size)}</span>
-                                                    )}
-                                                </div>
-                                            </div>
+                                    {/* Group header */}
+                                    <div
+                                        className="flex items-center gap-4 p-4 cursor-pointer"
+                                        onClick={() => {
+                                            const next = new Set(expandedGroups);
+                                            isExpanded ? next.delete(group.fileId) : next.add(group.fileId);
+                                            setExpandedGroups(next);
+                                        }}
+                                    >
+                                        <div className="w-10 h-10 rounded-xl bg-muted/60 border border-border/40 flex items-center justify-center shrink-0">
+                                            {getFileIcon(firstLink.file?.mimeType)}
                                         </div>
-                                        
-                                        <button
-                                            onClick={() => {
-                                                const newExpanded = new Set(expandedGroups);
-                                                if (isExpanded) {
-                                                    newExpanded.delete(group.fileId);
-                                                } else {
-                                                    newExpanded.add(group.fileId);
-                                                }
-                                                setExpandedGroups(newExpanded);
-                                            }}
-                                            className="p-2 rounded-xl hover:bg-muted/60 transition-colors"
-                                        >
-                                            {isExpanded ? (
-                                                <ChevronUp className="w-4 h-4 text-muted-foreground" />
-                                            ) : (
-                                                <ChevronDown className="w-4 h-4 text-muted-foreground" />
+
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex items-center gap-2 mb-0.5">
+                                                <p className="text-sm font-bold text-foreground truncate">
+                                                    {firstLink.file?.originalName || t("common.itemType.file")}
+                                                </p>
+                                                <span className="shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[10px] font-bold border border-primary/20">
+                                                    {group.links.length} {t("links.title")}
+                                                </span>
+                                            </div>
+                                            {firstLink.file && (
+                                                <p className="text-[11px] text-muted-foreground font-medium">{formatSize(firstLink.file.size)}</p>
                                             )}
-                                        </button>
+                                        </div>
+
+                                        <div className="p-1.5 rounded-lg hover:bg-muted/60 transition-colors shrink-0">
+                                            {isExpanded
+                                                ? <ChevronUp className="w-4 h-4 text-muted-foreground" />
+                                                : <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                                            }
+                                        </div>
                                     </div>
-                                    
-                                    {/* Expanded Links List */}
+
+                                    {/* Expanded rows */}
                                     <AnimatePresence>
                                         {isExpanded && (
                                             <motion.div
                                                 initial={{ height: 0, opacity: 0 }}
-                                                animate={{ height: 'auto', opacity: 1 }}
+                                                animate={{ height: "auto", opacity: 1 }}
                                                 exit={{ height: 0, opacity: 0 }}
                                                 transition={{ duration: 0.2 }}
-                                                className="mt-4 pt-4 border-t border-border/40 space-y-3 overflow-hidden"
+                                                className="overflow-hidden border-t border-border/40"
                                             >
-                                                {group.links.map((link, linkIdx) => (
-                                                    <div
-                                                        key={link.id}
-                                                        className="flex items-center justify-between p-3 bg-muted/30 rounded-xl"
-                                                    >
-                                                        <div className="flex flex-col sm:flex-row sm:items-center gap-2 flex-1 min-w-0">
-                                                            <div className="flex items-center gap-3 min-w-0">
-                                                                <span className="text-[10px] font-bold text-primary bg-primary/10 border border-primary/20 px-2 py-0.5 rounded-full">
-                                                                    /{link.id}
+                                                <div className="p-3 space-y-2 bg-muted/20">
+                                                    {group.links.map((link) => (
+                                                        <div
+                                                            key={link.id}
+                                                            className="flex items-center gap-3 px-3 py-2.5 bg-background border border-border/50 rounded-xl"
+                                                        >
+                                                            {/* ID */}
+                                                            <code className="text-[10px] font-bold text-primary bg-primary/10 px-2 py-1 rounded-lg border border-primary/20 shrink-0">
+                                                                /{link.id}
+                                                            </code>
+
+                                                            {/* Badges */}
+                                                            <div className="flex items-center gap-1.5 flex-1 flex-wrap">
+                                                                {link.isPasswordProtected && <StatusBadge icon={Lock} label={t("talk.password")} variant="active" />}
+                                                                {link.directDownload && <StatusBadge icon={Zap} label="Direct" variant="warning" />}
+                                                                {link.isEmbed && <StatusBadge icon={Code} label="Embed" variant="embed" />}
+                                                                {link.isExpired && <StatusBadge icon={AlertTriangle} label="Expirado" variant="danger" />}
+                                                                {!link.isExpired && link.expiresAt && (
+                                                                    <StatusBadge icon={Clock} label={timeUntilExpiry(link.expiresAt)} variant="info" />
+                                                                )}
+                                                                <span className="text-[10px] text-muted-foreground ml-1">
+                                                                    {link.views} vistas
                                                                 </span>
-                                                                <div className="flex items-center gap-2">
-                                                                    {link.isPasswordProtected && (
-                                                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[10px] font-bold">
-                                                                            <Lock className="w-3 h-3" /> {t('talk.password')}
-                                                                        </span>
-                                                                    )}
-                                                                    {link.directDownload && (
-                                                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-500 text-[10px] font-bold">
-                                                                            <Zap className="w-3 h-3" /> Direct
-                                                                        </span>
-                                                                    )}
-                                                                    {link.isEmbed && (
-                                                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 text-[10px] font-bold">
-                                                                            <Code className="w-3 h-3" /> Embed
-                                                                        </span>
-                                                                    )}
-                                                                    {link.isExpired && (
-                                                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-50 text-red-600 text-[10px] font-bold">
-                                                                            <AlertTriangle className="w-3 h-3" /> Expired
-                                                                        </span>
-                                                                    )}
-                                                                    {!link.isExpired && link.expiresAt && (
-                                                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 text-[10px] font-bold">
-                                                                            <Clock className="w-3 h-3" /> {timeUntilExpiry(link.expiresAt)}
-                                                                        </span>
-                                                                    )}
-                                                                </div>
                                                             </div>
-                                                            <span className="text-[10px] text-muted-foreground">
-                                                                {link.views} {t('links.clicks')}
-                                                            </span>
-                                                        </div>
-                                                        <div className="flex items-center gap-1">
-                                                            <button
-                                                                onClick={() => handleCopy(link.id)}
-                                                                className="p-1.5 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
-                                                                title={t('common.copy')}
-                                                            >
-                                                                <Copy className="w-3.5 h-3.5" />
-                                                            </button>
-                                                            {link.isEmbed && (
+
+                                                            {/* Actions */}
+                                                            <div className="flex items-center gap-1 shrink-0">
                                                                 <button
-                                                                    onClick={() => handleCopyEmbed(link.id)}
-                                                                className="p-1.5 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
-                                                                    title="Copy embed URL"
+                                                                    onClick={() => handleCopy(link.id)}
+                                                                    className="p-1.5 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+                                                                    title={t("common.copy")}
                                                                 >
-                                                                    <Code className="w-3.5 h-3.5" />
+                                                                    <Copy className="w-3.5 h-3.5" />
                                                                 </button>
-                                                            )}
-                                                            <button
-                                                                onClick={() => window.open(`/s/${link.id}`, '_blank')}
-                                                                className="p-1.5 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
-                                                                title={t('gallery.view')}
-                                                            >
-                                                                <ExternalLink className="w-3.5 h-3.5" />
-                                                            </button>
-                                                            <button
-                                                                onClick={() => confirmDelete(link.id)}
-                                                                disabled={!canDeleteLinks()}
-                                                                className="p-1.5 rounded-lg hover:bg-red-500/10 transition-colors text-muted-foreground hover:text-red-400"
-                                                                title={t('common.delete')}
-                                                            >
-                                                                <Trash2 className="w-3.5 h-3.5" />
-                                                            </button>
+                                                                {link.isEmbed && (
+                                                                    <button
+                                                                        onClick={() => handleCopyEmbed(link.id)}
+                                                                        className="p-1.5 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+                                                                        title="Copiar URL embed"
+                                                                    >
+                                                                        <Code className="w-3.5 h-3.5" />
+                                                                    </button>
+                                                                )}
+                                                                <button
+                                                                    onClick={() => window.open(`/s/${link.id}`, "_blank")}
+                                                                    className="p-1.5 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+                                                                    title={t("gallery.view")}
+                                                                >
+                                                                    <ExternalLink className="w-3.5 h-3.5" />
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => confirmDelete(link.id)}
+                                                                    disabled={!canDeleteLinks()}
+                                                                    className="p-1.5 rounded-lg hover:bg-red-500/10 transition-colors text-muted-foreground hover:text-red-400 disabled:opacity-40"
+                                                                    title={t("common.delete")}
+                                                                >
+                                                                    <Trash2 className="w-3.5 h-3.5" />
+                                                                </button>
+                                                            </div>
                                                         </div>
-                                                    </div>
-                                                ))}
+                                                    ))}
+                                                </div>
                                             </motion.div>
                                         )}
                                     </AnimatePresence>
                                 </motion.div>
                             );
                         }
-                        
-                        // Regular single link
+
+                        // ── Single link ──
                         const link = item as LinkItem;
+
                         return (
-                        <motion.div
-                            key={link.id}
-                            initial={{ opacity: 0, y: 10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, x: -20 }}
-                            transition={{ delay: (folders.length + idx) * 0.05 }}
-                            className={cn(
-                                "group bg-background border border-border/60 rounded-3xl transition-all hover:border-border hover:shadow-xl hover:shadow-black/[0.03] active:scale-[0.995] p-5",
-                                link.isExpired && "opacity-60 saturate-50"
-                            )}
-                        >
-                            <div className="flex gap-6 flex-col lg:flex-row lg:items-center">
-                                {/* File info */}
-                                <div className="flex items-center gap-4 flex-1 min-w-0">
-                                    <div className="rounded-2xl bg-muted/60 flex items-center justify-center shrink-0 border border-border/40 w-12 h-12">
+                            <motion.div
+                                key={link.id}
+                                initial={{ opacity: 0, y: 8 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, x: -16 }}
+                                transition={{ delay: (folders.length + idx) * 0.04, duration: 0.2 }}
+                                className={cn(
+                                    "group bg-background border border-border/60 rounded-2xl hover:border-border hover:shadow-lg hover:shadow-black/[0.04] transition-all duration-150 overflow-hidden",
+                                    link.isExpired && "opacity-60 saturate-0"
+                                )}
+                            >
+                                <div className="flex items-center gap-4 p-4">
+
+                                    {/* File icon */}
+                                    <div className="w-10 h-10 rounded-xl bg-muted/60 border border-border/40 flex items-center justify-center shrink-0">
                                         {getFileIcon(link.file?.mimeType)}
                                     </div>
-                                    <div className="min-w-0 flex-1">
-                                        <h3 className="text-sm font-bold text-foreground truncate mb-1">
-                                            {link.file?.originalName || t('common.itemType.file')}
-                                        </h3>
-                                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-                                            <span className="text-[10px] font-bold text-primary bg-primary/10 border border-primary/20 px-2 py-0.5 rounded-full">
-                                                /{link.id}
-                                            </span>
-                                            {link.file && (
-                                                <span className="text-[10px] text-muted-foreground font-medium">{formatSize(link.file.size)}</span>
+
+                                    {/* Info */}
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-2 mb-1 min-w-0">
+                                            <p className="text-sm font-bold text-foreground truncate">
+                                                {link.file?.originalName || link.folder?.name || t("common.itemType.file")}
+                                            </p>
+                                            {link.isExpired && (
+                                                <StatusBadge icon={AlertTriangle} label="Expirado" variant="danger" />
                                             )}
                                         </div>
-                                        {/* Small legend for statuses */}
-                                        <p className="mt-2 text-[11px] text-muted-foreground flex flex-wrap gap-2">
-                                            <span className="inline-flex items-center gap-1">
-                                                <Lock className="w-3 h-3" /> {t('talk.password')}
-                                            </span>
-                                            <span className="inline-flex items-center gap-1">
-                                                <Zap className="w-3 h-3" /> Direct
-                                            </span>
-                                            <span className="inline-flex items-center gap-1">
-                                                <Code className="w-3 h-3" /> Embed
-                                            </span>
-                                            <span className="inline-flex items-center gap-1">
-                                                <Clock className="w-3 h-3" /> Expiry
-                                            </span>
-                                        </p>
-                                    </div>
-                                </div>
 
-                                {/* Status badges / Controls */}
-                                <div className="flex items-center gap-2 flex-wrap">
-                                    {/* Views */}
-                                    <div className="flex items-center gap-2 px-2 py-1 rounded-xl bg-muted/60 text-muted-foreground border border-border/40">
-                                        <Eye className="w-3 h-3" />
-                                        <span className="text-[10px] font-bold leading-none">{link.views}</span>
-                                    </div>
+                                        <div className="flex items-center gap-3 flex-wrap">
+                                            {/* Link ID */}
+                                            <code className="text-[10px] font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-lg border border-primary/20">
+                                                /{link.id}
+                                            </code>
 
-                                    {/* Password status */}
-                                    <button
-                                        onClick={() => openPasswordModal(link)}
-                                        disabled={!canDeleteLinks()}
-                                        className={cn(
-                                            "flex items-center gap-1.5 px-2 py-1 rounded-xl border transition-all font-bold text-[10px] leading-none",
-                                            link.isPasswordProtected
-                                                ? "bg-primary text-white border-primary shadow-sm"
-                                                : "bg-transparent border-border/60 text-muted-foreground hover:bg-muted/60",
-                                            !canDeleteLinks() && "opacity-50 cursor-not-allowed"
-                                        )}
-                                    >
-                                        {link.isPasswordProtected ? <Lock className="w-3 h-3" /> : <Unlock className="w-3 h-3" />}
-                                        {link.isPasswordProtected ? t('talk.password') : "Public"}
-                                    </button>
+                                            {/* File size */}
+                                            {link.file && (
+                                                <span className="text-[11px] text-muted-foreground font-medium">
+                                                    {formatSize(link.file.size)}
+                                                </span>
+                                            )}
 
-                                    {/* Expiry */}
-                                    {link.isExpired ? (
-                                        <div className="flex items-center gap-1.5 px-2 py-1 rounded-xl bg-red-50 border border-red-100 text-red-600 font-bold text-[10px] leading-none">
-                                            <AlertTriangle className="w-3 h-3" />
-                                            Exp.
+                                            {/* Views */}
+                                            <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground font-medium">
+                                                <Eye className="w-3 h-3" />
+                                                {link.views}
+                                            </span>
                                         </div>
-                                    ) : link.expiresAt ? (
+                                    </div>
+
+                                    {/* Controls */}
+                                    <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
+
+                                        {/* Password toggle */}
+                                        <button
+                                            onClick={() => openPasswordModal(link)}
+                                            disabled={!canDeleteLinks()}
+                                            title={link.isPasswordProtected ? "Quitar contraseña" : "Añadir contraseña"}
+                                            className={cn(
+                                                "inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-[11px] font-bold transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed",
+                                                link.isPasswordProtected
+                                                    ? "bg-primary text-primary-foreground border-primary shadow-sm shadow-primary/20 hover:brightness-110"
+                                                    : "bg-transparent border-border/60 text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+                                            )}
+                                        >
+                                            {link.isPasswordProtected
+                                                ? <><Lock className="w-3 h-3" /> {t("talk.password")}</>
+                                                : <><Globe className="w-3 h-3" /> Público</>
+                                            }
+                                        </button>
+
+                                        {/* Expiry toggle */}
                                         <button
                                             onClick={() => openExpiryModal(link)}
                                             disabled={!canDeleteLinks()}
-                                            className="flex items-center gap-1.5 px-2 py-1 rounded-xl bg-blue-50 border border-blue-100 text-blue-600 font-bold text-[10px] leading-none hover:bg-blue-100 transition-colors"
+                                            title="Gestionar expiración"
+                                            className={cn(
+                                                "inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-[11px] font-bold transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed",
+                                                link.isExpired
+                                                    ? "bg-red-50 text-red-600 border-red-100 dark:bg-red-500/10 dark:border-red-500/20 dark:text-red-400"
+                                                    : link.expiresAt
+                                                    ? "bg-blue-50 text-blue-600 border-blue-100 dark:bg-blue-500/10 dark:border-blue-500/20 dark:text-blue-400 hover:brightness-95"
+                                                    : "bg-transparent border-border/60 text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+                                            )}
                                         >
                                             <Clock className="w-3 h-3" />
-                                            {timeUntilExpiry(link.expiresAt)}
+                                            {link.isExpired
+                                                ? "Expirado"
+                                                : link.expiresAt
+                                                ? timeUntilExpiry(link.expiresAt)
+                                                : t("links.never")}
                                         </button>
-                                    ) : (
-                                        <button
-                                            onClick={() => openExpiryModal(link)}
-                                            disabled={!canDeleteLinks()}
-                                            className="flex items-center gap-1.5 px-2 py-1 rounded-xl border border-border/60 text-muted-foreground font-bold text-[10px] leading-none hover:bg-muted/60 transition-colors"
-                                        >
-                                            <Clock className="w-3 h-3" />
-                                            {t('links.never')}
-                                        </button>
-                                    )}
+
+                                        {/* Separator */}
+                                        <div className="w-px h-6 bg-border/60 hidden sm:block" />
+
+                                        {/* Action buttons */}
+                                        <div className="flex items-center gap-1">
+                                            <ActionButton
+                                                icon={Copy}
+                                                label={t("common.copy")}
+                                                onClick={() => handleCopy(link.id)}
+                                            />
+                                            <ActionButton
+                                                icon={ExternalLink}
+                                                label={t("gallery.view")}
+                                                onClick={() => window.open(`/s/${link.id}`, "_blank")}
+                                            />
+                                            <ActionButton
+                                                icon={Trash2}
+                                                label={t("common.delete")}
+                                                onClick={() => confirmDelete(link.id)}
+                                                variant="danger"
+                                                disabled={!canDeleteLinks()}
+                                            />
+                                        </div>
+                                    </div>
                                 </div>
 
-                                {/* Actions */}
-                                <div className="flex items-center gap-1 justify-end lg:ml-auto">
-                                    <button
-                                        onClick={() => handleCopy(link.id)}
-                                        className="p-2 rounded-xl bg-muted/50 hover:bg-muted text-muted-foreground hover:text-foreground transition-all"
-                                        title={t('common.copy')}
-                                    >
-                                        <Copy className="w-4 h-4" />
-                                    </button>
-                                    <button
-                                        onClick={() => window.open(`/s/${link.id}`, '_blank')}
-                                        className="p-2 rounded-xl bg-muted/50 hover:bg-muted text-muted-foreground hover:text-foreground transition-all"
-                                        title={t('gallery.view')}
-                                    >
-                                        <ExternalLink className="w-4 h-4" />
-                                    </button>
-                                    <button
-                                        onClick={() => confirmDelete(link.id)}
-                                        disabled={!canDeleteLinks()}
-                                        className="p-2 rounded-xl bg-red-50 hover:bg-red-100 text-red-500 transition-all"
-                                        title={t('common.delete')}
-                                    >
-                                        <Trash2 className="w-4 h-4" />
-                                    </button>
-                                </div>
-                            </div>
-                        </motion.div>
+                                {/* Bottom badges strip */}
+                                {(link.directDownload || link.isEmbed) && (
+                                    <div className="flex items-center gap-2 px-4 pb-3">
+                                        {link.directDownload && (
+                                            <StatusBadge icon={Zap} label="Descarga directa" variant="warning" />
+                                        )}
+                                        {link.isEmbed && (
+                                            <>
+                                                <StatusBadge icon={Code} label="Embed" variant="embed" />
+                                                <button
+                                                    onClick={() => handleCopyEmbed(link.id)}
+                                                    className="text-[10px] font-bold text-muted-foreground hover:text-foreground transition-colors underline underline-offset-2 decoration-dotted"
+                                                >
+                                                    Copiar URL embed
+                                                </button>
+                                            </>
+                                        )}
+                                    </div>
+                                )}
+                            </motion.div>
                         );
                     })}
                 </AnimatePresence>
             </div>
 
-            {/* Pagination/Scroll spacing */}
-            <div className="h-20" />
+            <div className="h-16" />
 
-            {/* Modals */}
-            <Modal
-                isOpen={deleteModalOpen}
-                onClose={() => setDeleteModalOpen(false)}
-                title={t('links.delete')}
-            >
-                <div className="space-y-4">
-                    <p className="text-sm text-muted-foreground">
-                        {t('links.confirmDelete')}
-                    </p>
+            {/* ── Modals ── */}
+
+            {/* Delete confirm */}
+            <Modal isOpen={deleteModalOpen} onClose={() => setDeleteModalOpen(false)} title={t("links.delete")}>
+                <div className="space-y-5">
+                    <div className="flex items-start gap-3 p-4 bg-red-50 dark:bg-red-500/10 rounded-xl border border-red-100 dark:border-red-500/20">
+                        <AlertTriangle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
+                        <p className="text-sm text-red-700 dark:text-red-400">{t("links.confirmDelete")}</p>
+                    </div>
                     <ModalFooter>
-                        <Button variant="ghost" onClick={() => setDeleteModalOpen(false)}>
-                            {t('common.cancel')}
-                        </Button>
-                        <Button variant="destructive" onClick={handleDelete}>
-                            {t('common.delete')}
-                        </Button>
+                        <Button variant="ghost" onClick={() => setDeleteModalOpen(false)}>{t("common.cancel")}</Button>
+                        <Button variant="destructive" onClick={handleDelete}>{t("common.delete")}</Button>
                     </ModalFooter>
                 </div>
             </Modal>
 
-            <Modal
-                isOpen={passwordModalOpen}
-                onClose={() => setPasswordModalOpen(false)}
-                title={t('talk.password')}
-            >
-                <div className="space-y-4">
-                    <div className="space-y-2">
-                        <label className="text-sm font-medium">{t('talk.password')}</label>
+            {/* Password */}
+            <Modal isOpen={passwordModalOpen} onClose={() => setPasswordModalOpen(false)} title="Proteger con contraseña">
+                <div className="space-y-5">
+                    <div className="flex items-center gap-3 p-4 bg-muted/50 rounded-xl border border-border/40">
+                        <Shield className="w-5 h-5 text-primary shrink-0" />
+                        <p className="text-sm text-muted-foreground">Solo quienes tengan la contraseña podrán acceder a este enlace.</p>
+                    </div>
+                    <div className="space-y-1.5">
+                        <label className="text-sm font-semibold">{t("talk.password")}</label>
                         <Input
                             type="password"
                             value={newPassword}
                             onChange={(e) => setNewPassword(e.target.value)}
-                            placeholder={t('talk.passwordPlaceholder')}
+                            placeholder={t("talk.passwordPlaceholder")}
                             autoFocus
+                            onKeyDown={(e) => e.key === "Enter" && linkToProtect && handleTogglePassword(linkToProtect)}
                         />
                     </div>
                     <ModalFooter>
-                        <Button variant="ghost" onClick={() => setPasswordModalOpen(false)}>
-                            {t('common.cancel')}
-                        </Button>
-                        <Button onClick={() => linkToProtect && handleTogglePassword(linkToProtect)}>
-                            {t('common.save')}
+                        <Button variant="ghost" onClick={() => setPasswordModalOpen(false)}>{t("common.cancel")}</Button>
+                        <Button onClick={() => linkToProtect && handleTogglePassword(linkToProtect)} disabled={!newPassword}>
+                            {t("common.save")}
                         </Button>
                     </ModalFooter>
                 </div>
             </Modal>
 
-            <Modal
-                isOpen={copyModalOpen}
-                onClose={() => setCopyModalOpen(false)}
-                title={t('common.copied')}
-            >
-                <div className="space-y-4">
-                    <div className="p-3 rounded-2xl border border-primary/20 bg-primary/5">
-                        <p className="text-[11px] font-bold uppercase tracking-widest text-primary mb-2">
-                            Share Link
-                        </p>
+            {/* Expiry */}
+            <Modal isOpen={expiryModalOpen} onClose={() => setExpiryModalOpen(false)} title="Configurar expiración">
+                <div className="space-y-5">
+                    <div className="space-y-1.5">
+                        <label className="text-sm font-semibold">Expira en (minutos)</label>
+                        <Input
+                            type="number"
+                            value={expiryMinutes}
+                            onChange={(e) => setExpiryMinutes(e.target.value)}
+                            placeholder="ej. 60 = 1 hora, 1440 = 1 día"
+                            autoFocus
+                            min="1"
+                            onKeyDown={(e) => e.key === "Enter" && handleSetExpiry()}
+                        />
+                        <p className="text-[11px] text-muted-foreground">Deja vacío o pon 0 para no limitar.</p>
+                    </div>
+                    <ModalFooter>
+                        <Button variant="ghost" onClick={() => setExpiryModalOpen(false)}>{t("common.cancel")}</Button>
+                        <Button onClick={handleSetExpiry} disabled={!expiryMinutes || parseInt(expiryMinutes) <= 0}>
+                            {t("common.save")}
+                        </Button>
+                    </ModalFooter>
+                </div>
+            </Modal>
+
+            {/* Copy success */}
+            <Modal isOpen={copyModalOpen} onClose={() => setCopyModalOpen(false)} title="Enlace copiado">
+                <div className="space-y-5">
+                    <div className="flex items-center justify-center">
+                        <div className="w-14 h-14 rounded-2xl bg-green-500/10 border border-green-500/20 flex items-center justify-center">
+                            <Check className="w-7 h-7 text-green-500" />
+                        </div>
+                    </div>
+
+                    <div className="space-y-2">
+                        <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">URL del enlace</label>
                         <div className="flex items-center gap-2">
                             <input
                                 readOnly
                                 value={copiedUrl}
-                                className="flex-1 bg-background border border-border/40 rounded-xl px-4 py-3 text-sm text-foreground font-mono select-all focus:outline-none focus:border-primary/40 transition-all"
                                 onClick={(e) => (e.target as HTMLInputElement).select()}
+                                className="flex-1 bg-muted/50 border border-border/40 rounded-xl px-3 py-2.5 text-sm font-mono text-foreground select-all focus:outline-none focus:border-primary/40 transition-all"
                             />
                             <button
                                 onClick={() => copyToClipboard(copiedUrl)}
-                                className="p-3 rounded-xl bg-primary text-white hover:brightness-110 transition-all shrink-0 shadow-sm shadow-primary/20"
-                                title={t('common.copy')}
+                                className="p-2.5 rounded-xl bg-primary text-primary-foreground hover:brightness-110 transition-all shrink-0"
+                                title={t("common.copy")}
                             >
-                                <Copy className="w-5 h-5" />
+                                <Copy className="w-4 h-4" />
                             </button>
                         </div>
                     </div>
-                    <div className="flex justify-center">
-                        <div className="w-12 h-12 rounded-full bg-green-500/10 flex items-center justify-center text-green-500">
-                            <Check className="w-6 h-6" />
-                        </div>
-                    </div>
+
                     <ModalFooter>
-                        <Button className="rounded-xl w-full h-11 font-bold" onClick={() => setCopyModalOpen(false)}>{t('common.close')}</Button>
+                        <Button className="w-full h-11 font-bold rounded-xl" onClick={() => setCopyModalOpen(false)}>
+                            {t("common.close")}
+                        </Button>
                     </ModalFooter>
                 </div>
             </Modal>
@@ -821,10 +857,19 @@ function SharedLinksContent() {
     );
 }
 
+// ─── Page wrapper ─────────────────────────────────────────────────────────────
+
 export default function SharedLinksPage() {
     const { t } = useTranslation();
     return (
-        <Suspense fallback={<div className="py-20 text-center text-muted-foreground text-sm font-medium">{t('common.loading')}</div>}>
+        <Suspense
+            fallback={
+                <div className="flex flex-col items-center justify-center py-32 gap-4">
+                    <div className="w-8 h-8 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+                    <p className="text-sm text-muted-foreground font-medium">{t("common.loading")}</p>
+                </div>
+            }
+        >
             <SharedLinksContent />
         </Suspense>
     );

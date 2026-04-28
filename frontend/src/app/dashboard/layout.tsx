@@ -656,13 +656,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 </header>
                 <div
                     className={cn(
-                        "flex-1 overflow-y-auto",
-                        isOfficeEditor || isFullBleedRoute ? "p-0 overflow-hidden" : "content-with-nav p-4 md:p-8"
+                        "flex-1 min-h-0",
+                        isOfficeEditor || isFullBleedRoute ? "p-0 overflow-hidden" : "content-with-nav p-4 md:p-8 overflow-y-auto"
                     )}
                 >
                     <Suspense fallback={<div className="py-20 text-center text-muted-foreground text-sm font-medium">{t("common.loadingContent")}</div>}>
-                        <div className={cn(!(isOfficeEditor || isFullBleedRoute) && "mx-auto w-full max-w-[1400px]")}>
-                            <DashboardContent>{children}</DashboardContent>
+                        <div className={cn(isFullBleedRoute && "h-full min-h-0", !(isOfficeEditor || isFullBleedRoute) && "mx-auto w-full max-w-[1400px]")}>
+                            <DashboardContent isFullBleedRoute={isFullBleedRoute}>{children}</DashboardContent>
                         </div>
                     </Suspense>
                 </div>
@@ -750,14 +750,16 @@ function ContentWrapper({ children, pathname }: { children: React.ReactNode; pat
     );
 }
 
-function DashboardContent({ children }: { children: React.ReactNode }) {
+function DashboardContent({ children, isFullBleedRoute }: { children: React.ReactNode; isFullBleedRoute: boolean }) {
     return (
-        <div className="relative">
-            <div className="mb-3">
-                <SectionAccessPanel embedded />
-            </div>
+        <div className={cn("relative", isFullBleedRoute && "h-full min-h-0")}>
+            {!isFullBleedRoute && (
+                <div className="mb-3">
+                    <SectionAccessPanel embedded />
+                </div>
+            )}
             {children}
-            <NotificationPanel />
+            {!isFullBleedRoute && <NotificationPanel />}
             <UploadProgress />
             <GlobalAccessDeniedModal />
         </div>

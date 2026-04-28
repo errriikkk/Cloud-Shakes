@@ -56,6 +56,7 @@ import { showPermissionDenied } from "@/lib/permissionFeedback";
 
 type EventColor = "green" | "blue" | "red" | "purple" | "orange" | "pink" | "teal";
 type View = "month" | "week" | "day" | "agenda";
+type EventKind = "all" | "meeting" | "deadline" | "personal" | "allDay";
 
 interface CalendarEvent {
     id: string;
@@ -96,6 +97,14 @@ const DOT_COLORS: Record<EventColor, string> = {
 
 function evColor(color: string) {
     return BACKEND_COLOR_MAP[color] || "purple";
+}
+
+function classifyEvent(event: CalendarEvent): Exclude<EventKind, "all"> {
+    if (event.allDay) return "allDay";
+    const hay = `${event.title} ${event.description || ""}`.toLowerCase();
+    if (/(meeting|reunion|call|standup)/.test(hay)) return "meeting";
+    if (/(deadline|entrega|due|limit|venc)/.test(hay)) return "deadline";
+    return "personal";
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -169,6 +178,7 @@ export default function CalendarPage() {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [q, setQ] = useState("");
     const [activeFilter, setActiveFilter] = useState<"all" | "mine" | "team" | "external">("all");
+    const [eventKind, setEventKind] = useState<EventKind>("all");
     const [showNotificationBanner, setShowNotificationBanner] = useState(false);
     const [scrolled, setScrolled] = useState(false);
 
@@ -229,12 +239,16 @@ export default function CalendarPage() {
             return true;
         });
         const s = q.trim().toLowerCase();
-        if (!s) return scoped;
-        return scoped.filter((e) => {
+        const kindScoped =
+            eventKind === "all"
+                ? scoped
+                : scoped.filter((e) => classifyEvent(e) === eventKind);
+        if (!s) return kindScoped;
+        return kindScoped.filter((e) => {
             const hay = `${e.title} ${e.description || ""}`.toLowerCase();
             return hay.includes(s);
         });
-    }, [events, q, activeFilter, user]);
+    }, [events, q, activeFilter, user, eventKind]);
 
     const sortedEvents = useMemo(
         () => [...filteredEvents].sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime()),
@@ -591,6 +605,22 @@ export default function CalendarPage() {
                                 />
                             ))}
                         </div>
+                        <div className="flex items-center gap-1.5">
+                            {([
+                                { id: "all", label: "All types" },
+                                { id: "meeting", label: "Meetings" },
+                                { id: "deadline", label: "Deadlines" },
+                                { id: "personal", label: "Personal" },
+                                { id: "allDay", label: "All-day" },
+                            ] as { id: EventKind; label: string }[]).map((f) => (
+                                <FilterChip
+                                    key={f.id}
+                                    active={eventKind === f.id}
+                                    onClick={() => setEventKind(f.id)}
+                                    label={f.label}
+                                />
+                            ))}
+                        </div>
                         {q.trim() && (
                             <span className="text-[11px] text-gray-400 ml-1">
                                 {filteredEvents.length} results
@@ -924,6 +954,8 @@ export default function CalendarPage() {
                                             const color = evColor(ev.color);
                                             const start = parseISO(ev.startDate);
                                             const end = ev.endDate ? parseISO(ev.endDate) : null;
+                                            const durationMinutes =
+                                                end ? Math.max(0, Math.round((end.getTime() - start.getTime()) / 60000)) : null;
                                             return (
                                                 <button
                                                     key={ev.id}
@@ -950,6 +982,17 @@ export default function CalendarPage() {
                                                                     : `${format(start, "HH:mm")}${end ? ` - ${format(end, "HH:mm")}` : ""}`}
                                                                 {ev.owner?.displayName ? ` · ${ev.owner.displayName}` : ""}
                                                             </p>
+                                                            <div className="mt-1 flex items-center gap-2 text-[10px] text-gray-400">
+                                                                <span className="px-1.5 py-0.5 rounded-full bg-gray-100 border border-gray-200">
+                                                                    {classifyEvent(ev)}
+                                                                </span>
+                                                                {durationMinutes !== null ? (
+                                                                    <span>{durationMinutes} min</span>
+                                                                ) : null}
+                                                                {typeof ev.reminderMinutes === "number" ? (
+                                                                    <span>Reminder {ev.reminderMinutes}m</span>
+                                                                ) : null}
+                                                            </div>
                                                             {ev.description ? (
                                                                 <p className="text-xs text-gray-400 mt-1 line-clamp-2">{ev.description}</p>
                                                             ) : null}
@@ -1060,6 +1103,16 @@ export default function CalendarPage() {
                                                         ? "All day"
                                                         : `${format(parseISO(selectedEvent.startDate), "HH:mm")}${selectedEvent.endDate ? ` – ${format(parseISO(selectedEvent.endDate), "HH:mm")}` : ""}`}
                                                 </span>
+                                            </div>
+                                            <div className="flex items-center gap-2 text-[11px] text-gray-500">
+                                                <span className="inline-flex px-1.5 py-0.5 rounded-md bg-gray-100 border border-gray-200">
+                                                    {classifyEvent(selectedEvent)}
+                                                </span>
+                                                {typeof selectedEvent.reminderMinutes === "number" ? (
+                                                    <span>Reminder {selectedEvent.reminderMinutes}m</span>
+                                                ) : (
+                                                    <span>No reminder</span>
+                                                )}
                                             </div>
                                             {selectedEvent.owner && (
                                                 <div className="flex items-center gap-2 text-[11px] text-gray-500">
